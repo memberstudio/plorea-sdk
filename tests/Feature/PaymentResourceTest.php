@@ -87,6 +87,8 @@ class PaymentResourceTest extends TestCase
 
         $this->assertTrue($status->isAuthorised());
         $this->assertTrue($status->is('AUTHORISED'));
+        $this->assertTrue($status->isPaid());
+        $this->assertFalse($status->isOpen());
         $this->assertSame(450000, $status->amount?->value);
         $this->assertSame(4500.0, $status->amount->inMajorUnits());
         $this->assertTrue($status->webhookSuccess);
@@ -164,6 +166,20 @@ class PaymentResourceTest extends TestCase
                 $this->assertSame('Something failed', $caught->getMessage());
                 $this->assertSame($statusCode, $caught->status);
             }
+        }
+    }
+
+    public function test_it_falls_back_when_the_error_body_has_an_unexpected_shape(): void
+    {
+        Http::fake(['*' => Http::response('upstream exploded', 500)]);
+
+        try {
+            Plorea::payments()->status('ref');
+            $this->fail('Expected ServerException.');
+        } catch (ServerException $caught) {
+            $this->assertStringContainsString('status 500', $caught->getMessage());
+            $this->assertStringContainsString('upstream exploded', $caught->getMessage());
+            $this->assertSame('upstream exploded', $caught->response?->body());
         }
     }
 

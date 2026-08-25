@@ -55,7 +55,7 @@ PLOREA_WEBHOOK_SECRET=         # optional, enables signature verification
 | `PLOREA_ENVIRONMENT` | `test` | Sent as the `X-Environment` header on every request |
 | `PLOREA_BASE_URL` | `https://payments.plorea.no` | API base URL |
 | `PLOREA_TENANT_ID` | — | Your tenant, injected into every request that needs one |
-| `PLOREA_WEBHOOK_SECRET` | — | HMAC secret for verifying incoming webhooks |
+| `PLOREA_WEBHOOK_SECRET` | — | Shared secret for authenticating incoming webhooks (required for the webhook route to accept requests) |
 
 All amounts are in **minor units** (øre): `Amount::nok(450000)` is 4 500,00 kr.
 
@@ -84,16 +84,57 @@ $link->id;        // pl_...
 $link->expiresAt; // CarbonImmutable|null
 ```
 
+KYC is implicit: the first link for a new `merchantOrgNr` starts merchant
+onboarding, and `merchantEmail` receives the KYC mail. The link works while
+KYC is pending — the payout is simply held in escrow until onboarding
+completes (typically 1–5 days).
+
+### Reuse or create (`firstOrCreate`)
+
+Plorea has no idempotency on duplicate references — creating twice gives you
+two live links. `firstOrCreate()` checks the stored payment state first:
+
+```php
+$link = Plorea::payments()
+    ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
+    ->firstOrCreate();
+```
+
+- An **open** link with the same amount and environment is returned as-is.
+  Because the status endpoint exposes no expiry (and the status string has
+  not been observed to flip to `expired`), the candidate link is verified
+  against the pay-page endpoint, which reports a computed `expired` flag —
+  an open-but-expired link is superseded instead of handed out again.
+- A **dead** link (expired, cancelled, refunded) or an open link with a
+  different amount is superseded by a new link with a suffixed reference
+  (`FIN-2026-00123-1`, `-2`, ...).
+- An already **paid** reference throws `PaymentAlreadyPaidException` — a
+  fresh link for a settled invoice would be payable again, so this fails
+  loudly instead. The exception carries the `PaymentStatus`.
+
 ### Check payment status
 
 ```php
 $status = Plorea::payments()->status('FIN-2026-00123');
 
-$status->isAuthorised(); // bool
-$status->status;         // authorised, refused, refund_requested, ...
-$status->amount;         // Amount|null
+$status->isPaid();  // authorised or paid — money moved
+$status->isOpen();  // created, pending or active — still payable
+$status->status;    // the raw status string
+$status->amount;    // Amount|null
 $status->pspReference;
 ```
+
+Observed statuses: `created`, `pending`, `active` (open), `authorised`,
+`paid` (paid — test payments settle on `authorised`), `cancelled`,
+`refunded`. `expired` is handled defensively but has not been observed live —
+links past their expiry keep reporting an open status, so judge expiry from
+the `expiresAt` you stored when creating the link (or the pay-page endpoint),
+not the status string. The model is deliberately open: unknown strings pass
+through on `status` and can be checked with `is('...')`.
+
+The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe
+the inbound Adyen webhook Plorea received for the payment — not the webhook
+Plorea sends to your application.
 
 ### Refund or cancel
 
@@ -198,27 +239,54 @@ $charges = Plorea::subscriptions()->charges($subscription->id);
 
 ## Webhooks
 
-The package registers `POST /plorea/webhook` automatically. Point your Plorea
-webhook there and listen for the events:
+Webhook registration with Plorea is **manual, per tenant**: generate a secret
+yourself, then hand Plorea your webhook URL together with the secret via a
+secure channel. Plorea sends the secret back verbatim in the `Authorization`
+header on every webhook call (sometimes prefixed with `Bearer `) — there is no
+HMAC signature scheme.
+
+The package registers `POST /plorea/webhook` automatically and rejects every
+request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed). With
+the secret in place, listen for the events:
+
+> [!NOTE]
+> Plorea's outbound webhook payload shape is undocumented and, as of writing,
+> unverified in production. The package extracts the payment reference
+> defensively (`reference`, `data.reference`, `merchantReference`) and treats
+> everything else in the payload as untrusted — which is exactly why the
+> listener below re-fetches the authoritative state instead of reading it
+> from the payload. Confirm the real shape with Plorea when you register.
 
 ```php
 use MemberFlow\Plorea\Events\{PaymentStatusUpdated, WebhookReceived};
 
 Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) {
-    $event->reference; // your payment reference
-    $event->status;    // e.g. authorised
-    $event->payload;   // the full webhook payload
+    // Treat the webhook as a ping: fetch the authoritative state instead of
+    // trusting status or amount from the payload.
+    $status = Plorea::payments()->status($event->reference);
+
+    if ($status->isPaid()) {
+        // mark the invoice paid — idempotently: the webhook, a status poll,
+        // and the customer's return page can all race on the same reference.
+    }
 });
 
 // Or the raw payload for every webhook:
 Event::listen(WebhookReceived::class, fn (WebhookReceived $event) => $event->payload);
 ```
 
-Configure the path, middleware, or disable the route entirely in
-`config/plorea.php`. When `PLOREA_WEBHOOK_SECRET` is set, the
-`X-Plorea-Signature` header is verified as a hex-encoded HMAC-SHA256 digest of
-the raw request body, and requests with a missing or invalid signature are
-rejected with a 403.
+Two practices worth copying from production integrations:
+
+- **Verify amounts before booking.** Compare `$status->amount` against what
+  you expected locally; on mismatch, flag for manual handling instead of
+  auto-booking.
+- **Poll as backup.** Webhook delivery is best-effort — run a scheduled job
+  that calls `status()` for your open payment links.
+
+Configure the path, extra middleware, or disable the route entirely in
+`config/plorea.php`. Unparseable payloads are acknowledged with a 200 (there
+is nothing to retry); return a 500 from your listener only for transient
+failures where you want Plorea to redeliver.
 
 Remember to exclude the webhook path from CSRF verification if your
 application applies it globally:
@@ -276,8 +344,11 @@ All exceptions extend `MemberFlow\Plorea\Exceptions\PloreaException`:
 | `NotFoundException` | 404 — unknown reference or ID |
 | `ServerException` | 5xx — Plorea-side error |
 | `ConnectionException` | The API could not be reached |
+| `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |
 
-`RequestException` (the parent of the HTTP errors above) exposes the response:
+Plorea's error bodies are not consistently shaped, so the exception message
+falls back through `error`, `message`, and the raw body. `RequestException`
+(the parent of the HTTP errors above) always exposes the full response:
 
 ```php
 try {

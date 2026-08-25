@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
 use MemberFlow\Plorea\Http\Controllers\WebhookController;
-use MemberFlow\Plorea\Http\Middleware\VerifyWebhookSignature;
+use MemberFlow\Plorea\Http\Middleware\AuthenticateWebhook;
 
 Route::post((string) config('plorea.webhooks.path', 'plorea/webhook'), WebhookController::class)
     ->middleware([
         ...(array) config('plorea.webhooks.middleware', []),
-        VerifyWebhookSignature::class,
+        AuthenticateWebhook::class,
     ])
     ->name('plorea.webhook');

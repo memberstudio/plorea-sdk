@@ -36,6 +36,8 @@ final readonly class PaymentStatus
         public ?bool $splitsEnabled,
         public ?CarbonImmutable $createdAt,
         public ?CarbonImmutable $updatedAt,
+        // The webhook* fields describe the inbound Adyen webhook Plorea
+        // received for this payment, not the webhook Plorea sends to you.
         public ?string $webhookEventCode,
         public ?bool $webhookSuccess,
         public ?CarbonImmutable $lastWebhookAt,
@@ -105,5 +107,22 @@ final readonly class PaymentStatus
     public function isAuthorised(): bool
     {
         return $this->is('authorised');
+    }
+
+    /**
+     * Whether the payment has been completed. Test payments settle on
+     * "authorised" while others report "paid" — both mean money moved.
+     */
+    public function isPaid(): bool
+    {
+        return $this->is('authorised') || $this->is('paid');
+    }
+
+    /**
+     * Whether the payment link is still open and payable.
+     */
+    public function isOpen(): bool
+    {
+        return $this->is('created') || $this->is('pending') || $this->is('active');
     }
 }

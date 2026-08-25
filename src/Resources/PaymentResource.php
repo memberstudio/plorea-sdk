@@ -25,6 +25,8 @@ class PaymentResource extends Resource
      */
     public function link(string $reference, string $product, Amount $amount, string $returnUrl): PendingPaymentLink
     {
+        $environment = $this->config['environment'] ?? null;
+
         return new PendingPaymentLink(
             $this->client,
             $this->tenantId(),
@@ -33,6 +35,7 @@ class PaymentResource extends Resource
             $product,
             $amount,
             $returnUrl,
+            is_string($environment) && $environment !== '' ? $environment : null,
         );
     }
 
