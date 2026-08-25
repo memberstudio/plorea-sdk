@@ -1,0 +1,14 @@
+parameters:
+    level: 8
+    paths:
+        - config
+        - routes
+        - src
+    reportUnmatchedIgnoredErrors: true
+
+    ignoreErrors:
+        # This is a config file — it just lives in the package, not in the
+        # application's config directory, which is all the rule looks at.
+        -
+            identifier: larastan.noEnvCallsOutsideOfConfig
+            path: config/plorea.php
