@@ -1,0 +1,3 @@
+providers:
+  - MemberFlow\Plorea\PloreaServiceProvider
+  - Laravel\Boost\BoostServiceProvider

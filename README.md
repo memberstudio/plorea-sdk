@@ -1,5 +1,10 @@
 # Plorea SDK for Laravel
 
+[![Tests](https://github.com/memberflow/plorea/actions/workflows/tests.yml/badge.svg)](https://github.com/memberflow/plorea/actions/workflows/tests.yml)
+[![Static Analysis](https://github.com/memberflow/plorea/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/memberflow/plorea/actions/workflows/static-analysis.yml)
+[![Latest Stable Version](https://img.shields.io/packagist/v/memberflow/plorea)](https://packagist.org/packages/memberflow/plorea)
+[![License](https://img.shields.io/packagist/l/memberflow/plorea)](LICENSE.md)
+
 A Laravel SDK for the [Plorea Payments API](https://docs.plorea.no) — payment
 links, refunds, stored payment methods, subscriptions and webhooks, with an
 expressive, fluent API and first-class testing support.
@@ -19,6 +24,15 @@ $link = Plorea::payments()
 
 return redirect($link->url);
 ```
+
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Payments](#payments) — [create](#create-a-payment-link) · [firstOrCreate](#reuse-or-create-firstorcreate) · [status](#check-payment-status) · [refund / cancel](#refund-or-cancel)
+- [Payment methods](#payment-methods)
+- [Subscriptions](#subscriptions)
+- [Webhooks](#webhooks)
+- [Testing](#testing)
+- [Error handling](#error-handling)
 
 ## Requirements
 
@@ -358,6 +372,16 @@ try {
     $e->response?->json();   // the raw error body
 }
 ```
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development setup and the checks your pull request must pass.
+
+## Security
+
+If you discover a security vulnerability, please follow the process in
+[SECURITY.md](SECURITY.md) instead of opening a public issue.
 
 ## License
 
