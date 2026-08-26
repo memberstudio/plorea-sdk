@@ -30,6 +30,7 @@ class PaymentResourceTest extends TestCase
                 'tenantId' => 'test-tenant',
                 'provider' => 'plorea',
                 'splitsEnabled' => true,
+                'partnerSplitsApplied' => true,
                 'expiresAt' => '2026-10-21T10:00:00Z',
             ]),
         ]);
@@ -45,6 +46,7 @@ class PaymentResourceTest extends TestCase
         $this->assertSame('pl_123', $link->id);
         $this->assertSame('FIN-2026-00123', $link->reference);
         $this->assertTrue($link->splitsEnabled);
+        $this->assertTrue($link->partnerSplitsApplied);
         $this->assertSame('2026-10-21 10:00:00', $link->expiresAt?->format('Y-m-d H:i:s'));
 
         Http::assertSent(function (Request $request): bool {
@@ -87,6 +89,8 @@ class PaymentResourceTest extends TestCase
 
         $this->assertTrue($status->isAuthorised());
         $this->assertTrue($status->is('AUTHORISED'));
+        $this->assertTrue($status->isPaid());
+        $this->assertFalse($status->isOpen());
         $this->assertSame(450000, $status->amount?->value);
         $this->assertSame(4500.0, $status->amount->inMajorUnits());
         $this->assertTrue($status->webhookSuccess);
@@ -164,6 +168,56 @@ class PaymentResourceTest extends TestCase
                 $this->assertSame('Something failed', $caught->getMessage());
                 $this->assertSame($statusCode, $caught->status);
             }
+        }
+    }
+
+    public function test_it_falls_back_when_the_error_body_has_an_unexpected_shape(): void
+    {
+        Http::fake(['*' => Http::response('upstream exploded', 500)]);
+
+        try {
+            Plorea::payments()->status('ref');
+            $this->fail('Expected ServerException.');
+        } catch (ServerException $caught) {
+            $this->assertStringContainsString('status 500', $caught->getMessage());
+            $this->assertStringContainsString('upstream exploded', $caught->getMessage());
+            $this->assertSame('upstream exploded', $caught->response?->body());
+        }
+    }
+
+    public function test_it_falls_back_to_the_message_key_when_error_is_absent(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'Something else failed'], 500)]);
+
+        try {
+            Plorea::payments()->status('ref');
+            $this->fail('Expected ServerException.');
+        } catch (ServerException $caught) {
+            $this->assertSame('Something else failed', $caught->getMessage());
+        }
+    }
+
+    public function test_it_falls_back_to_a_generic_message_for_an_empty_body(): void
+    {
+        Http::fake(['*' => Http::response('', 500)]);
+
+        try {
+            Plorea::payments()->status('ref-empty');
+            $this->fail('Expected ServerException.');
+        } catch (ServerException $caught) {
+            $this->assertSame('Plorea request failed with status 500.', $caught->getMessage());
+        }
+    }
+
+    public function test_it_falls_back_to_a_generic_message_for_an_html_body(): void
+    {
+        Http::fake(['*' => Http::response('<html><body>Bad Gateway</body></html>', 502)]);
+
+        try {
+            Plorea::payments()->status('ref-html');
+            $this->fail('Expected RequestException.');
+        } catch (RequestException $caught) {
+            $this->assertSame('Plorea request failed with status 502.', $caught->getMessage());
         }
     }
 

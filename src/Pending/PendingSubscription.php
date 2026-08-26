@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MemberFlow\Plorea\Pending;
 
 use DateTimeInterface;
+use MemberFlow\Plorea\Concerns\FiltersNullValues;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
@@ -17,6 +18,8 @@ use MemberFlow\Plorea\Enums\RecurringType;
  */
 class PendingSubscription
 {
+    use FiltersNullValues;
+
     protected ?string $customerId = null;
 
     protected ?string $doneId = null;
@@ -176,7 +179,7 @@ class PendingSubscription
      */
     public function toPayload(): array
     {
-        return array_filter([
+        return $this->withoutNulls([
             'tenantId' => $this->tenantId,
             'customerId' => $this->customerId,
             'doneId' => $this->doneId,
@@ -193,6 +196,6 @@ class PendingSubscription
             'vatRate' => $this->vatRate,
             'vatAmount' => $this->vatAmount,
             'metadata' => $this->metadata === [] ? null : $this->metadata,
-        ], fn (mixed $value): bool => $value !== null);
+        ]);
     }
 }

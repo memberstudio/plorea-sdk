@@ -6,13 +6,33 @@ namespace MemberFlow\Plorea\Tests\Feature;
 
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Testing\TestResponse;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
 use MemberFlow\Plorea\Events\WebhookReceived;
 use MemberFlow\Plorea\Tests\TestCase;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
+use Symfony\Component\HttpFoundation\Response;
 
 class WebhookTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('plorea.webhooks.secret', 'whsec_test');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return TestResponse<Response>
+     */
+    protected function postWebhook(array $payload, ?string $authorization = 'whsec_test')
+    {
+        $headers = $authorization === null ? [] : ['Authorization' => $authorization];
+
+        return $this->postJson('/plorea/webhook', $payload, $headers);
+    }
+
     public function test_it_handles_a_webhook_and_dispatches_events(): void
     {
         Event::fake([WebhookReceived::class, PaymentStatusUpdated::class]);
@@ -23,7 +43,7 @@ class WebhookTest extends TestCase
             'pspReference' => 'KZN8ZJVSMQR3JM65',
         ];
 
-        $this->postJson('/plorea/webhook', $payload)
+        $this->postWebhook($payload)
             ->assertOk()
             ->assertSee('[accepted]');
 
@@ -32,49 +52,63 @@ class WebhookTest extends TestCase
             && $event->status === 'authorised');
     }
 
-    public function test_it_skips_the_status_event_without_a_reference(): void
+    public function test_it_reads_the_reference_from_nested_and_alternative_keys(): void
+    {
+        Event::fake([PaymentStatusUpdated::class]);
+
+        $this->postWebhook(['data' => ['reference' => 'ref-nested']])->assertOk();
+        $this->postWebhook(['merchantReference' => 'ref-merchant'])->assertOk();
+
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->reference === 'ref-nested');
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->reference === 'ref-merchant');
+    }
+
+    public function test_it_acknowledges_payloads_without_a_reference(): void
     {
         Event::fake([WebhookReceived::class, PaymentStatusUpdated::class]);
 
-        $this->postJson('/plorea/webhook', ['eventCode' => 'AUTHORISATION'])->assertOk();
+        $this->postWebhook(['eventCode' => 'AUTHORISATION'])->assertOk();
 
         Event::assertDispatched(WebhookReceived::class);
         Event::assertNotDispatched(PaymentStatusUpdated::class);
     }
 
-    public function test_it_accepts_a_valid_signature(): void
+    public function test_it_accepts_the_secret_with_a_bearer_prefix(): void
     {
-        config()->set('plorea.webhooks.secret', 'whsec_test');
-
         Event::fake([WebhookReceived::class]);
 
-        $body = json_encode(['reference' => 'ref-1', 'status' => 'authorised']);
-        $signature = hash_hmac('sha256', (string) $body, 'whsec_test');
-
-        $this->call('POST', '/plorea/webhook', server: [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_PLOREA_SIGNATURE' => $signature,
-        ], content: (string) $body)->assertOk();
+        $this->postWebhook(['reference' => 'ref-1'], 'Bearer whsec_test')->assertOk();
 
         Event::assertDispatched(WebhookReceived::class);
     }
 
-    public function test_it_rejects_an_invalid_signature(): void
+    public function test_it_accepts_the_secret_with_a_lowercase_bearer_prefix(): void
     {
-        config()->set('plorea.webhooks.secret', 'whsec_test');
+        Event::fake([WebhookReceived::class]);
+
+        $this->postWebhook(['reference' => 'ref-1'], 'bearer whsec_test')->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class);
+    }
+
+    public function test_it_rejects_a_wrong_or_missing_secret(): void
+    {
+        Event::fake([WebhookReceived::class]);
+
+        $this->postWebhook(['reference' => 'ref-1'], 'wrong-secret')->assertForbidden();
+        $this->postWebhook(['reference' => 'ref-1'], 'Bearer wrong-secret')->assertForbidden();
+        $this->postWebhook(['reference' => 'ref-1'], authorization: null)->assertForbidden();
+
+        Event::assertNotDispatched(WebhookReceived::class);
+    }
+
+    public function test_it_fails_closed_when_no_secret_is_configured(): void
+    {
+        config()->set('plorea.webhooks.secret');
 
         Event::fake([WebhookReceived::class]);
 
-        $body = (string) json_encode(['reference' => 'ref-1']);
-
-        $this->call('POST', '/plorea/webhook', server: [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_PLOREA_SIGNATURE' => 'not-the-signature',
-        ], content: $body)->assertForbidden();
-
-        $this->call('POST', '/plorea/webhook', server: [
-            'CONTENT_TYPE' => 'application/json',
-        ], content: $body)->assertForbidden();
+        $this->postWebhook(['reference' => 'ref-1'], 'anything')->assertForbidden();
 
         Event::assertNotDispatched(WebhookReceived::class);
     }

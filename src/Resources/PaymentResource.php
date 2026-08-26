@@ -8,6 +8,7 @@ use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\PaymentCancellation;
 use MemberFlow\Plorea\Data\PaymentStatus;
 use MemberFlow\Plorea\Data\Refund;
+use MemberFlow\Plorea\Enums\Environment;
 use MemberFlow\Plorea\Pending\PendingPaymentLink;
 
 class PaymentResource extends Resource
@@ -25,6 +26,12 @@ class PaymentResource extends Resource
      */
     public function link(string $reference, string $product, Amount $amount, string $returnUrl): PendingPaymentLink
     {
+        $environment = $this->config['environment'] ?? null;
+
+        if ($environment instanceof Environment) {
+            $environment = $environment->value;
+        }
+
         return new PendingPaymentLink(
             $this->client,
             $this->tenantId(),
@@ -33,6 +40,7 @@ class PaymentResource extends Resource
             $product,
             $amount,
             $returnUrl,
+            is_string($environment) && $environment !== '' ? $environment : null,
         );
     }
 
@@ -58,12 +66,12 @@ class PaymentResource extends Resource
         Amount|int|null $amount = null,
         ?string $reason = null,
     ): Refund {
-        return Refund::fromArray($this->client->post('payments/refund', array_filter([
+        return Refund::fromArray($this->client->post('payments/refund', $this->withoutNulls([
             'reference' => $reference,
             'modificationReference' => $modificationReference,
             'amount' => $amount instanceof Amount ? $amount->value : $amount,
             'reason' => $reason,
-        ], fn (mixed $value): bool => $value !== null)));
+        ])));
     }
 
     /**

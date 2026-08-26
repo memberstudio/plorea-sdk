@@ -10,6 +10,13 @@ use Illuminate\Http\Response;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
 use MemberFlow\Plorea\Events\WebhookReceived;
 
+/**
+ * Receives webhook calls from Plorea and dispatches events.
+ *
+ * Treat webhooks as a ping: the payload shape is not firmly documented, so
+ * listeners should use the reference to fetch the authoritative state from
+ * the status endpoint rather than trusting status or amount from the payload.
+ */
 class WebhookController
 {
     public function __construct(protected Dispatcher $events) {}
@@ -21,9 +28,9 @@ class WebhookController
 
         $this->events->dispatch(new WebhookReceived($payload));
 
-        $reference = $payload['reference'] ?? $payload['merchantReference'] ?? null;
+        $reference = $this->reference($payload);
 
-        if (is_string($reference) && $reference !== '') {
+        if ($reference !== null) {
             $status = $payload['status'] ?? $payload['eventCode'] ?? null;
 
             $this->events->dispatch(new PaymentStatusUpdated(
@@ -33,6 +40,26 @@ class WebhookController
             ));
         }
 
+        // Always acknowledge — an unparseable payload has nothing to retry.
         return new Response('[accepted]');
+    }
+
+    /**
+     * The payment reference. Plorea's outbound payload shape is undocumented
+     * and unverified, so this defensively checks the likely keys:
+     * "reference", "data.reference", and "merchantReference".
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function reference(array $payload): ?string
+    {
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+
+        $reference = $payload['reference']
+            ?? $data['reference']
+            ?? $payload['merchantReference']
+            ?? null;
+
+        return is_string($reference) && $reference !== '' ? $reference : null;
     }
 }

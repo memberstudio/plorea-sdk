@@ -19,6 +19,7 @@
     },
     "require-dev": {
         "larastan/larastan": "^3.7",
+        "laravel/boost": "^2.6",
         "laravel/pint": "^1.25",
         "nunomaduro/collision": "^8.8",
         "orchestra/testbench": "^10.0|^11.0",
@@ -44,11 +45,13 @@
             "@rector",
             "@pint"
         ],
+        "boost": "vendor/bin/testbench boost:install --guidelines --skills --no-interaction",
         "pint": "vendor/bin/pint --ansi",
         "rector": "vendor/bin/rector process",
         "test": "vendor/bin/phpunit",
         "check": [
             "@pint",
+            "vendor/bin/rector process --dry-run",
             "@analyse",
             "@test"
         ]

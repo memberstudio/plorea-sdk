@@ -1,0 +1,54 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '30 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # The gitleaks GitHub Action requires a paid license for organization
+      # repositories; the CLI itself is free (MIT), so run it directly.
+      - name: Scan for leaked secrets
+        env:
+          GITLEAKS_VERSION: 8.28.0
+          GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+        run: |
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --quiet
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git --no-banner --redact --log-opts="--all"
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Audit dependencies
+        run: composer audit
