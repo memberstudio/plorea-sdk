@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Pending;
 
+use MemberFlow\Plorea\Concerns\FiltersNullValues;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\PaymentMethod;
 use MemberFlow\Plorea\Data\PaymentMethodSession;
@@ -14,6 +15,8 @@ use MemberFlow\Plorea\Enums\RecurringType;
  */
 class PendingPaymentMethodSetup
 {
+    use FiltersNullValues;
+
     protected ?string $customerId = null;
 
     protected ?string $doneId = null;
@@ -107,7 +110,7 @@ class PendingPaymentMethodSetup
      */
     protected function toPayload(bool $includeDescription = false, bool $includeDoneId = false): array
     {
-        return array_filter([
+        return $this->withoutNulls([
             'tenantId' => $this->tenantId,
             'customerId' => $this->customerId,
             'doneId' => $includeDoneId ? $this->doneId : null,
@@ -116,6 +119,6 @@ class PendingPaymentMethodSetup
             'returnUrl' => $this->returnUrl,
             'description' => $includeDescription ? $this->description : null,
             'metadata' => $this->metadata === [] ? null : $this->metadata,
-        ], fn (mixed $value): bool => $value !== null);
+        ]);
     }
 }

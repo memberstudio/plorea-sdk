@@ -31,6 +31,7 @@ final readonly class PaymentLinkCreated
         public ?bool $splitsEnabled,
         public ?string $provider,
         public ?CarbonImmutable $expiresAt,
+        public ?bool $partnerSplitsApplied = null,
         public array $raw = [],
     ) {}
 
@@ -53,6 +54,7 @@ final readonly class PaymentLinkCreated
             splitsEnabled: self::bool($data['splitsEnabled'] ?? null),
             provider: self::string($data['provider'] ?? null),
             expiresAt: self::date($data['expiresAt'] ?? null),
+            partnerSplitsApplied: self::bool($data['partnerSplitsApplied'] ?? null),
             raw: $data,
         );
     }

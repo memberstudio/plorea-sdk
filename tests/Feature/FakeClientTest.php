@@ -7,6 +7,7 @@ namespace MemberFlow\Plorea\Tests\Feature;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+use MemberFlow\Plorea\Exceptions\NotFoundException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Testing\RecordedRequest;
@@ -27,7 +28,8 @@ class FakeClientTest extends TestCase
         $this->assertSame('test-tenant', $link->tenantId);
 
         $status = Plorea::payments()->status('ref-1');
-        $this->assertTrue($status->isAuthorised());
+        $this->assertTrue($status->isOpen());
+        $this->assertSame(50000, $status->amount?->value);
 
         $method = Plorea::paymentMethods()->find('pm_1');
         $this->assertTrue($method->isActive());
@@ -41,6 +43,35 @@ class FakeClientTest extends TestCase
         $this->assertSame('chg_fake_charge', $charge->id);
 
         Plorea::assertSentCount(5);
+    }
+
+    public function test_status_for_an_unknown_reference_is_a_404(): void
+    {
+        Plorea::fake();
+
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('No payment found for reference [ref-unknown]');
+
+        Plorea::payments()->status('ref-unknown');
+    }
+
+    public function test_first_or_create_works_without_stubs(): void
+    {
+        Plorea::fake();
+
+        $created = Plorea::payments()
+            ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
+            ->firstOrCreate();
+
+        $this->assertSame('pl_fake_link', $created->id);
+
+        $reused = Plorea::payments()
+            ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
+            ->firstOrCreate();
+
+        $this->assertSame('pl_fake_link', $reused->id);
+
+        Plorea::assertSent('POST payments/link');
     }
 
     public function test_it_uses_stubbed_responses(): void

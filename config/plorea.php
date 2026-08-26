@@ -84,10 +84,12 @@ return [
     |
     | When enabled, the package registers a POST route that receives webhook
     | calls from Plorea and dispatches events your application can listen to.
-    | Give the resulting URL (e.g. https://your-app.test/plorea/webhook) to
-    | Plorea as your webhook endpoint.
     |
-    | Signature verification is only performed when a secret is configured.
+    | Webhook registration with Plorea is manual: hand them the resulting URL
+    | (e.g. https://your-app.test/plorea/webhook) together with a secret you
+    | generate yourself, via a secure channel. Plorea sends that secret back
+    | verbatim in the Authorization header on every webhook call. Incoming
+    | webhooks are rejected until the secret is configured here.
     |
     */
 
@@ -95,7 +97,6 @@ return [
         'enabled' => env('PLOREA_WEBHOOKS_ENABLED', true),
         'path' => env('PLOREA_WEBHOOK_PATH', 'plorea/webhook'),
         'secret' => env('PLOREA_WEBHOOK_SECRET'),
-        'signature_header' => env('PLOREA_WEBHOOK_SIGNATURE_HEADER', 'X-Plorea-Signature'),
         'middleware' => [],
     ],
 

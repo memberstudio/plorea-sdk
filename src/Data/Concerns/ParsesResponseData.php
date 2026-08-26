@@ -5,12 +5,23 @@ declare(strict_types=1);
 namespace MemberFlow\Plorea\Data\Concerns;
 
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 
 trait ParsesResponseData
 {
     protected static function date(mixed $value): ?CarbonImmutable
     {
-        return is_string($value) && $value !== '' ? CarbonImmutable::parse($value) : null;
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value);
+        } catch (InvalidFormatException) {
+            // Response shapes are not fully documented; treat an unparsable
+            // date like any other unexpected value instead of throwing.
+            return null;
+        }
     }
 
     protected static function string(mixed $value): ?string
