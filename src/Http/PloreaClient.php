@@ -7,6 +7,7 @@ namespace MemberFlow\Plorea\Http;
 use Illuminate\Http\Client\ConnectionException as IlluminateConnectionException;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException as IlluminateRequestException;
 use Illuminate\Http\Client\Response;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Enums\Environment;
@@ -89,7 +90,7 @@ final readonly class PloreaClient implements Client
                 $retryTimes,
                 (int) ($http['retry']['sleep'] ?? 100),
                 fn ($exception): bool => $exception instanceof IlluminateConnectionException
-                    || ($exception instanceof \Illuminate\Http\Client\RequestException && $exception->response->serverError()),
+                    || ($exception instanceof IlluminateRequestException && $exception->response->serverError()),
                 throw: false,
             );
         }

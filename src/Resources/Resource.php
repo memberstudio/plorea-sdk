@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Resources;
 
+use MemberFlow\Plorea\Concerns\FiltersNullValues;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Exceptions\PloreaException;
 
 abstract class Resource
 {
+    use FiltersNullValues;
+
     /**
      * @param  array<string, mixed>  $config  The "plorea" configuration array.
      */

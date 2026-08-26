@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Pending;
 
+use MemberFlow\Plorea\Concerns\FiltersNullValues;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\PaymentLink;
@@ -19,6 +20,8 @@ use MemberFlow\Plorea\Exceptions\RequestException;
  */
 class PendingPaymentLink
 {
+    use FiltersNullValues;
+
     protected ?string $orderId = null;
 
     protected ?string $doneId = null;
@@ -253,7 +256,7 @@ class PendingPaymentLink
      */
     public function toPayload(): array
     {
-        return array_filter([
+        return $this->withoutNulls([
             'platform' => $this->platform,
             'tenantId' => $this->tenantId,
             'doneId' => $this->doneId,
@@ -272,6 +275,6 @@ class PendingPaymentLink
             'merchantCountry' => $this->merchantCountry,
             'merchantEmail' => $this->merchantEmail,
             'merchantPhone' => $this->merchantPhone,
-        ], fn (mixed $value): bool => $value !== null);
+        ]);
     }
 }

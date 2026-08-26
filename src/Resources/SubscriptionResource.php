@@ -77,11 +77,11 @@ class SubscriptionResource extends Resource
      */
     public function forExternalId(string $externalId, ?string $tenantId = null, ?string $status = null): Collection
     {
-        $response = $this->client->get('subscriptions', array_filter([
+        $response = $this->client->get('subscriptions', $this->withoutNulls([
             'externalId' => $externalId,
             'tenantId' => $tenantId,
             'status' => $status,
-        ], fn (mixed $value): bool => $value !== null));
+        ]));
 
         $items = is_array($response['items'] ?? null) ? $response['items'] : [];
 
@@ -107,12 +107,12 @@ class SubscriptionResource extends Resource
     ): SubscriptionCharge {
         return SubscriptionCharge::fromArray($this->client->post(
             'subscriptions/'.rawurlencode($subscriptionId).'/charge',
-            array_filter([
+            $this->withoutNulls([
                 'reason' => $reason,
                 'amount' => $amount?->toArray(),
                 'vatRate' => $vatRate,
                 'vatAmount' => $vatAmount,
-            ], fn (mixed $value): bool => $value !== null),
+            ]),
         ));
     }
 
@@ -140,7 +140,7 @@ class SubscriptionResource extends Resource
     {
         return SubscriptionCancellation::fromArray($this->client->post(
             'subscriptions/'.rawurlencode($subscriptionId).'/cancel',
-            array_filter(['reason' => $reason], fn (mixed $value): bool => $value !== null),
+            $this->withoutNulls(['reason' => $reason]),
         ));
     }
 

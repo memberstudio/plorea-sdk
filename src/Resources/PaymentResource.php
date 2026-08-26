@@ -61,12 +61,12 @@ class PaymentResource extends Resource
         Amount|int|null $amount = null,
         ?string $reason = null,
     ): Refund {
-        return Refund::fromArray($this->client->post('payments/refund', array_filter([
+        return Refund::fromArray($this->client->post('payments/refund', $this->withoutNulls([
             'reference' => $reference,
             'modificationReference' => $modificationReference,
             'amount' => $amount instanceof Amount ? $amount->value : $amount,
             'reason' => $reason,
-        ], fn (mixed $value): bool => $value !== null)));
+        ])));
     }
 
     /**

@@ -31,10 +31,10 @@ class PayByLinkResource extends Resource
     {
         return PaymentSession::fromArray($this->client->post(
             'payments/session',
-            array_filter([
+            $this->withoutNulls([
                 'paymentLinkId' => $paymentLinkId,
                 'returnUrl' => $returnUrl,
-            ], fn (mixed $value): bool => $value !== null),
+            ]),
         ));
     }
 }
