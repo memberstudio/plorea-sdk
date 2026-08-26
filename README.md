@@ -285,6 +285,14 @@ The package registers `POST /plorea/webhook` automatically and rejects every
 request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed). With
 the secret in place, listen for the events:
 
+> [!TIP]
+> Waiting on the signing secret from Plorea? Set
+> `PLOREA_WEBHOOK_VERIFY=false` on staging/test to accept deliveries without
+> authentication so the rest of the flow can be exercised. Keep verification
+> on in production — without it anyone who knows the URL can post fake
+> webhooks, so your listeners must re-fetch the payment status from the API
+> (as the listener below already does) rather than trust payloads.
+
 > [!NOTE]
 > Captured deliveries look like `{eventId, createdAt, tenantId, type,
 > data: {reference, status, eventCode, success, …}}` — see
