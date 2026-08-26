@@ -262,9 +262,9 @@ $charges = Plorea::subscriptions()->charges($subscription->id);
 
 Webhook registration with Plorea is **manual, per tenant**: generate a secret
 yourself, then hand Plorea your webhook URL together with the secret via a
-secure channel. Plorea sends the secret back verbatim in the `Authorization`
-header on every webhook call (sometimes prefixed with `Bearer `) — there is no
-HMAC signature scheme.
+secure channel. Authentication is a shared secret rather than a signature
+scheme: Plorea sends the secret back verbatim in the `Authorization` header
+on every webhook call (sometimes prefixed with `Bearer `).
 
 The package registers `POST /plorea/webhook` automatically and rejects every
 request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed). With
@@ -306,8 +306,8 @@ Two practices worth copying from production integrations:
 
 Configure the path, extra middleware, or disable the route entirely in
 `config/plorea.php`. Adding a throttle to the extra middleware (e.g.
-`'throttle:60,1'`) is cheap protection against someone brute-forcing the
-shared secret. Unparseable payloads are acknowledged with a 200 (there
+`'throttle:60,1'`) rate-limits the endpoint against secret-guessing.
+Unparseable payloads are acknowledged with a 200 (there
 is nothing to retry); return a 500 from your listener only for transient
 failures where you want Plorea to redeliver.
 
