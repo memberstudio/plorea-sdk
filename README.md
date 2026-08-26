@@ -138,15 +138,19 @@ in your numbering.
 ```php
 $status = Plorea::payments()->status('FIN-2026-00123');
 
-$status->isPaid();  // authorised or paid — money moved
-$status->isOpen();  // created, pending or active — still payable
-$status->status;    // the raw status string
-$status->amount;    // Amount|null
+$status->isPaid();             // authorised or paid — money moved
+$status->isOpen();             // created, pending or active — still payable
+$status->isRefundRequested();  // a refund request was accepted, provider settling
+$status->isCancelRequested();  // a cancel request was accepted, provider settling
+$status->status;               // the raw status string
+$status->amount;               // Amount|null
 $status->pspReference;
 ```
 
 Observed statuses: `created`, `pending`, `active` (open), `authorised`,
-`paid` (paid — test payments settle on `authorised`), `cancelled`,
+`paid` (paid — test payments settle on `authorised`), `refund_requested`,
+`cancel_requested` (a modification was accepted and awaits the provider),
+`cancelled`,
 `refunded`. `expired` is handled defensively but has not been observed live —
 links past their expiry keep reporting an open status, so judge expiry from
 the `expiresAt` you stored when creating the link (or the pay-page endpoint),
@@ -169,6 +173,11 @@ Plorea::payments()->refund(
 
 Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
+
+Both requests return immediately with a `refund_requested` /
+`cancel_requested` status — the provider settles the modification
+asynchronously, so poll `status()` (or wait for a webhook) to observe the
+final state.
 
 ## Payment methods
 
@@ -260,23 +269,30 @@ $charges = Plorea::subscriptions()->charges($subscription->id);
 
 ## Webhooks
 
-Webhook registration with Plorea is **manual, per tenant**: generate a secret
-yourself, then hand Plorea your webhook URL together with the secret via a
-secure channel. Authentication is a shared secret rather than a signature
-scheme: Plorea sends the secret back verbatim in the `Authorization` header
-on every webhook call (sometimes prefixed with `Bearer `).
+Webhook registration with Plorea is **manual, per tenant**: hand Plorea your
+webhook URL via a secure channel and obtain the signing secret from them.
+Real deliveries (captured from Plorea's test environment) are **signed, not
+authenticated with an echoed header**: each request carries an
+`X-Plorea-Signature` header holding a base64-encoded HMAC-SHA256 of the raw
+request body, plus `x-plorea-event-id` (`evt_…`) and `x-plorea-event`
+(e.g. `payment.authorised`) headers. The middleware verifies the signature
+with `PLOREA_WEBHOOK_SECRET`; requests without a signature header fall back
+to comparing the `Authorization` header against the secret verbatim
+(optionally `Bearer `-prefixed), for registrations that use an echoed
+shared secret instead.
 
 The package registers `POST /plorea/webhook` automatically and rejects every
 request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed). With
 the secret in place, listen for the events:
 
 > [!NOTE]
-> Plorea's outbound webhook payload shape is undocumented and, as of writing,
-> unverified in production. The package extracts the payment reference
-> defensively (`reference`, `data.reference`, `merchantReference`) and treats
-> everything else in the payload as untrusted — which is exactly why the
-> listener below re-fetches the authoritative state instead of reading it
-> from the payload. Confirm the real shape with Plorea when you register.
+> Captured deliveries look like `{eventId, createdAt, tenantId, type,
+> data: {reference, status, eventCode, success, …}}` — see
+> `tests/Fixtures/webhook-payment-authorised.json` for a full example. The
+> package extracts the reference and status defensively (nested `data.*`
+> first-party keys plus flat fallbacks) but still treats the payload as
+> untrusted — which is exactly why the listener below re-fetches the
+> authoritative state instead of reading it from the payload.
 
 ```php
 use MemberFlow\Plorea\Events\{PaymentStatusUpdated, WebhookReceived};

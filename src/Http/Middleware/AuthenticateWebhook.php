@@ -13,11 +13,17 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 /**
  * Authenticates incoming Plorea webhooks.
  *
- * Plorea does not sign webhooks. Instead, the shared secret you registered
- * alongside your webhook URL is sent back verbatim in the Authorization
- * header, sometimes prefixed with "Bearer ". Requests are rejected when the
- * secret does not match — or when no secret is configured at all, so the
- * endpoint fails closed until webhooks are fully set up.
+ * Real deliveries (captured from Plorea's test environment) carry no
+ * Authorization header. Instead they are signed: the X-Plorea-Signature
+ * header holds a base64-encoded HMAC-SHA256 of the raw request body. When
+ * that header is present it is verified against the configured secret.
+ *
+ * As a fallback — for registrations where a shared secret was handed to
+ * Plorea to echo back — a request without a signature header is accepted
+ * when the Authorization header matches the secret verbatim (optionally
+ * "Bearer "-prefixed). Requests are rejected when neither check passes, or
+ * when no secret is configured at all, so the endpoint fails closed until
+ * webhooks are fully set up.
  */
 class AuthenticateWebhook
 {
@@ -33,15 +39,44 @@ class AuthenticateWebhook
             );
         }
 
+        $signature = (string) $request->header('X-Plorea-Signature', '');
+
+        if ($signature !== '') {
+            if (! $this->signatureIsValid($request, $secret, $signature)) {
+                throw new AccessDeniedHttpException('Invalid Plorea webhook signature.');
+            }
+
+            return $next($request);
+        }
+
+        if (! $this->sharedSecretIsValid($request, $secret)) {
+            throw new AccessDeniedHttpException('Invalid Plorea webhook secret.');
+        }
+
+        return $next($request);
+    }
+
+    /**
+     * Whether the X-Plorea-Signature header matches a base64-encoded
+     * HMAC-SHA256 of the raw request body, keyed with the webhook secret.
+     */
+    protected function signatureIsValid(Request $request, string $secret, string $signature): bool
+    {
+        $expected = base64_encode(hash_hmac('sha256', (string) $request->getContent(), $secret, true));
+
+        return hash_equals($expected, $signature);
+    }
+
+    /**
+     * Whether the Authorization header echoes the shared secret verbatim.
+     */
+    protected function sharedSecretIsValid(Request $request, string $secret): bool
+    {
         $provided = (string) $request->header('Authorization', '');
 
         // The exact prefix casing is unverified, so strip it case-insensitively.
         $provided = preg_replace('/^Bearer\s+/i', '', $provided) ?? $provided;
 
-        if ($provided === '' || ! hash_equals($secret, $provided)) {
-            throw new AccessDeniedHttpException('Invalid Plorea webhook secret.');
-        }
-
-        return $next($request);
+        return $provided !== '' && hash_equals($secret, $provided);
     }
 }
