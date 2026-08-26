@@ -5,8 +5,8 @@ Thank you for considering contributing to the Plorea SDK for Laravel!
 ## Development setup
 
 ```bash
-git clone https://github.com/memberflow/plorea.git
-cd plorea
+git clone https://github.com/memberstudio/plorea-sdk.git
+cd plorea-sdk
 composer install
 ```
 

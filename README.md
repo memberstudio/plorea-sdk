@@ -1,7 +1,7 @@
 # Plorea SDK for Laravel
 
-[![Tests](https://github.com/memberflow/plorea/actions/workflows/tests.yml/badge.svg)](https://github.com/memberflow/plorea/actions/workflows/tests.yml)
-[![Static Analysis](https://github.com/memberflow/plorea/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/memberflow/plorea/actions/workflows/static-analysis.yml)
+[![Tests](https://github.com/memberstudio/plorea-sdk/actions/workflows/tests.yml/badge.svg)](https://github.com/memberstudio/plorea-sdk/actions/workflows/tests.yml)
+[![Static Analysis](https://github.com/memberstudio/plorea-sdk/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/memberstudio/plorea-sdk/actions/workflows/static-analysis.yml)
 [![Latest Stable Version](https://img.shields.io/packagist/v/memberflow/plorea)](https://packagist.org/packages/memberflow/plorea)
 [![License](https://img.shields.io/packagist/l/memberflow/plorea)](LICENSE.md)
 
