@@ -79,6 +79,28 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($status->lastCancelReference);
     }
 
+    public function test_it_parses_a_real_paid_payment_status_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/GOLDEN-2026-001' => Http::response($this->fixture('payment-status-paid')),
+        ]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-001');
+
+        $this->assertSame('authorised', $status->status);
+        $this->assertTrue($status->isAuthorised());
+        $this->assertTrue($status->isPaid());
+        $this->assertFalse($status->isOpen());
+        $this->assertSame('TESTPSPREF000001', $status->pspReference);
+        $this->assertSame(1000, $status->amount?->value);
+        $this->assertSame('AUTHORISATION', $status->webhookEventCode);
+        $this->assertTrue($status->webhookSuccess);
+        $this->assertSame('2026-08-26 12:05:00', $status->lastWebhookAt?->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-08-26 12:05:00', $status->updatedAt?->format('Y-m-d H:i:s'));
+        $this->assertNull($status->lastRefundReference);
+        $this->assertNull($status->lastCancelReference);
+    }
+
     public function test_it_parses_a_real_pay_page_response(): void
     {
         Http::fake([
