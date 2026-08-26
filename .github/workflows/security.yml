@@ -21,10 +21,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The gitleaks GitHub Action requires a paid license for organization
+      # repositories; the CLI itself is free (MIT), so run it directly.
       - name: Scan for leaked secrets
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.28.0
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact --log-opts="--all"
 
   audit:
     name: dependency audit
