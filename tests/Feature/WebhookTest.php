@@ -154,6 +154,33 @@ class WebhookTest extends TestCase
         Event::assertNotDispatched(WebhookReceived::class);
     }
 
+    public function test_it_skips_authentication_when_verification_is_disabled(): void
+    {
+        config()->set('plorea.webhooks.verify', false);
+        config()->set('plorea.webhooks.secret');
+
+        Event::fake([WebhookReceived::class, PaymentStatusUpdated::class]);
+
+        $payload = $this->fixture('webhook-payment-authorised');
+
+        // No secret configured, no signature, no Authorization — still accepted.
+        $this->postJson('/plorea/webhook', $payload)->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->reference === 'GOLDEN-2026-001');
+    }
+
+    public function test_it_still_verifies_by_default_when_the_verify_option_is_absent(): void
+    {
+        config()->offsetUnset('plorea.webhooks.verify');
+
+        Event::fake([WebhookReceived::class]);
+
+        $this->postJson('/plorea/webhook', ['reference' => 'ref-1'])->assertForbidden();
+
+        Event::assertNotDispatched(WebhookReceived::class);
+    }
+
     public function test_it_fails_closed_when_no_secret_is_configured(): void
     {
         config()->set('plorea.webhooks.secret');

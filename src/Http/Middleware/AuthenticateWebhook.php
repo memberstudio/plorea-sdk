@@ -24,6 +24,10 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * "Bearer "-prefixed). Requests are rejected when neither check passes, or
  * when no secret is configured at all, so the endpoint fails closed until
  * webhooks are fully set up.
+ *
+ * Setting plorea.webhooks.verify to false skips authentication entirely —
+ * a non-production stopgap for environments that don't have the signing
+ * secret from Plorea yet.
  */
 class AuthenticateWebhook
 {
@@ -31,6 +35,10 @@ class AuthenticateWebhook
 
     public function handle(Request $request, Closure $next): Response
     {
+        if ($this->config->get('plorea.webhooks.verify', true) === false) {
+            return $next($request);
+        }
+
         $secret = $this->config->get('plorea.webhooks.secret');
 
         if (! is_string($secret) || $secret === '') {

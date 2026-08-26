@@ -99,6 +99,15 @@ return [
         'enabled' => env('PLOREA_WEBHOOKS_ENABLED', true),
         'path' => env('PLOREA_WEBHOOK_PATH', 'plorea/webhook'),
         'secret' => env('PLOREA_WEBHOOK_SECRET'),
+
+        // Don't have the signing secret from Plorea yet? On staging/test you
+        // can set PLOREA_WEBHOOK_VERIFY=false to accept deliveries without
+        // authentication instead of rejecting everything. Keep verification
+        // ON in production: without it, anyone who knows the URL can post
+        // fake webhooks — your listeners must then re-fetch the payment
+        // status from the API (as recommended) rather than trust payloads.
+        'verify' => env('PLOREA_WEBHOOK_VERIFY', true),
+
         'middleware' => [],
     ],
 
