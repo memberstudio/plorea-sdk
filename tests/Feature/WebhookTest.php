@@ -82,6 +82,15 @@ class WebhookTest extends TestCase
         Event::assertDispatched(WebhookReceived::class);
     }
 
+    public function test_it_accepts_the_secret_with_a_lowercase_bearer_prefix(): void
+    {
+        Event::fake([WebhookReceived::class]);
+
+        $this->postWebhook(['reference' => 'ref-1'], 'bearer whsec_test')->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class);
+    }
+
     public function test_it_rejects_a_wrong_or_missing_secret(): void
     {
         Event::fake([WebhookReceived::class]);

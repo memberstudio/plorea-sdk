@@ -35,9 +35,8 @@ class AuthenticateWebhook
 
         $provided = (string) $request->header('Authorization', '');
 
-        if (str_starts_with($provided, 'Bearer ')) {
-            $provided = substr($provided, 7);
-        }
+        // The exact prefix casing is unverified, so strip it case-insensitively.
+        $provided = preg_replace('/^Bearer\s+/i', '', $provided) ?? $provided;
 
         if ($provided === '' || ! hash_equals($secret, $provided)) {
             throw new AccessDeniedHttpException('Invalid Plorea webhook secret.');

@@ -22,6 +22,11 @@ class RequestException extends PloreaException
      */
     public static function fromResponse(Response $response): self
     {
+        // The transfer stats hold the original outbound request, including
+        // the Authorization header with the API key. Strip them so dumping
+        // or serializing the exception can never leak the key.
+        $response->transferStats = null;
+
         $status = $response->status();
         $message = self::messageFor($response, $status);
 
