@@ -125,4 +125,24 @@ final readonly class PaymentStatus
     {
         return $this->is('created') || $this->is('pending') || $this->is('active');
     }
+
+    /**
+     * Whether a refund has been requested for this payment. The status
+     * mutates to "refund_requested" as soon as the refund request is
+     * accepted, before the provider has actually settled it.
+     */
+    public function isRefundRequested(): bool
+    {
+        return $this->is('refund_requested');
+    }
+
+    /**
+     * Whether a cancellation has been requested for this payment. The status
+     * mutates to "cancel_requested" as soon as the cancel request is
+     * accepted, before the provider has actually processed it.
+     */
+    public function isCancelRequested(): bool
+    {
+        return $this->is('cancel_requested');
+    }
 }

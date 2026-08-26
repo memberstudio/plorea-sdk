@@ -86,10 +86,12 @@ return [
     | calls from Plorea and dispatches events your application can listen to.
     |
     | Webhook registration with Plorea is manual: hand them the resulting URL
-    | (e.g. https://your-app.test/plorea/webhook) together with a secret you
-    | generate yourself, via a secure channel. Plorea sends that secret back
-    | verbatim in the Authorization header on every webhook call. Incoming
-    | webhooks are rejected until the secret is configured here.
+    | (e.g. https://your-app.test/plorea/webhook) via a secure channel and
+    | obtain the signing secret from them. Deliveries carry an
+    | X-Plorea-Signature header — a base64-encoded HMAC-SHA256 of the raw
+    | request body, keyed with that secret. Requests without a signature fall
+    | back to comparing the Authorization header against the secret verbatim.
+    | Incoming webhooks are rejected until the secret is configured here.
     |
     */
 

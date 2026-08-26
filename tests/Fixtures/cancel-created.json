@@ -1,0 +1,8 @@
+{
+    "status": "cancel_requested",
+    "reference": "GOLDEN-2026-002",
+    "modificationReference": "GOLDEN-2026-002-CANCEL-1",
+    "cancelPspReference": "TESTCANCELPSP001",
+    "paymentPspReference": "TESTPSPREF000002",
+    "environment": "test"
+}

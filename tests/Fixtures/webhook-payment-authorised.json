@@ -1,0 +1,20 @@
+{
+    "eventId": "evt_00000000000000000000000000000001",
+    "createdAt": "2026-08-26T12:05:00.000Z",
+    "tenantId": "test-tenant",
+    "type": "payment.authorised",
+    "data": {
+        "reference": "GOLDEN-2026-001",
+        "orderId": null,
+        "status": "authorised",
+        "provider": "adyen",
+        "pspReference": "TESTPSPREF000001",
+        "paymentLinkId": "pl_test_golden_link",
+        "paymentLinkUrl": "https://pay.plorea.no/pl_test_golden_link",
+        "amount": 1000,
+        "currency": "NOK",
+        "environment": "test",
+        "eventCode": "AUTHORISATION",
+        "success": true
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "status": "refund_requested",
+    "reference": "GOLDEN-2026-001",
+    "modificationReference": "GOLDEN-2026-001-REFUND-1",
+    "refundPspReference": "TESTREFUNDPSP001",
+    "paymentPspReference": "TESTPSPREF000001",
+    "amount": 1000,
+    "currency": "NOK",
+    "environment": "test"
+}

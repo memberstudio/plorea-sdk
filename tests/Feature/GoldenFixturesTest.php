@@ -101,6 +101,84 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($status->lastCancelReference);
     }
 
+    public function test_it_parses_a_real_refund_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/refund' => Http::response($this->fixture('refund-created')),
+        ]);
+
+        $refund = Plorea::payments()->refund(
+            'GOLDEN-2026-001',
+            'GOLDEN-2026-001-REFUND-1',
+            reason: 'Customer requested refund',
+        );
+
+        $this->assertSame('refund_requested', $refund->status);
+        $this->assertSame('GOLDEN-2026-001', $refund->reference);
+        $this->assertSame('GOLDEN-2026-001-REFUND-1', $refund->modificationReference);
+        $this->assertSame('TESTREFUNDPSP001', $refund->refundPspReference);
+        $this->assertSame('TESTPSPREF000001', $refund->paymentPspReference);
+        $this->assertSame(1000, $refund->amount?->value);
+        $this->assertSame('NOK', $refund->amount->currency);
+        $this->assertSame('test', $refund->environment);
+    }
+
+    public function test_it_parses_a_real_cancel_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/cancel' => Http::response($this->fixture('cancel-created')),
+        ]);
+
+        $cancellation = Plorea::payments()->cancel('GOLDEN-2026-002', 'GOLDEN-2026-002-CANCEL-1');
+
+        $this->assertSame('cancel_requested', $cancellation->status);
+        $this->assertSame('GOLDEN-2026-002', $cancellation->reference);
+        $this->assertSame('GOLDEN-2026-002-CANCEL-1', $cancellation->modificationReference);
+        $this->assertSame('TESTCANCELPSP001', $cancellation->cancelPspReference);
+        $this->assertSame('TESTPSPREF000002', $cancellation->paymentPspReference);
+        $this->assertSame('test', $cancellation->environment);
+    }
+
+    public function test_it_parses_a_real_refund_requested_status_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/GOLDEN-2026-001' => Http::response($this->fixture('payment-status-refund-requested')),
+        ]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-001');
+
+        $this->assertSame('refund_requested', $status->status);
+        $this->assertTrue($status->isRefundRequested());
+        $this->assertFalse($status->isCancelRequested());
+        $this->assertFalse($status->isPaid());
+        $this->assertFalse($status->isOpen());
+        $this->assertSame('GOLDEN-2026-001-REFUND-1', $status->lastRefundReference);
+        $this->assertSame('TESTREFUNDPSP001', $status->lastRefundRequestPspReference);
+        $this->assertSame(1000, $status->lastRefundAmount);
+        $this->assertSame('Customer requested refund', $status->lastRefundReason);
+        $this->assertSame('2026-08-26 12:10:00', $status->lastRefundRequestedAt?->format('Y-m-d H:i:s'));
+        $this->assertNull($status->lastCancelReference);
+    }
+
+    public function test_it_parses_a_real_cancel_requested_status_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/GOLDEN-2026-002' => Http::response($this->fixture('payment-status-cancel-requested')),
+        ]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-002');
+
+        $this->assertSame('cancel_requested', $status->status);
+        $this->assertTrue($status->isCancelRequested());
+        $this->assertFalse($status->isRefundRequested());
+        $this->assertFalse($status->isPaid());
+        $this->assertFalse($status->isOpen());
+        $this->assertSame('GOLDEN-2026-002-CANCEL-1', $status->lastCancelReference);
+        $this->assertSame('TESTCANCELPSP001', $status->lastCancelRequestPspReference);
+        $this->assertSame('2026-08-26 12:10:00', $status->lastCancelRequestedAt?->format('Y-m-d H:i:s'));
+        $this->assertNull($status->lastRefundReference);
+    }
+
     public function test_it_parses_a_real_pay_page_response(): void
     {
         Http::fake([
@@ -139,20 +217,5 @@ class GoldenFixturesTest extends TestCase
             $this->assertSame('Payment not found', $caught->getMessage());
             $this->assertSame(404, $caught->status);
         }
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function fixture(string $name): array
-    {
-        $contents = file_get_contents(__DIR__.'/../Fixtures/'.$name.'.json');
-
-        $this->assertIsString($contents);
-
-        /** @var array<string, mixed> $data */
-        $data = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
-
-        return $data;
     }
 }
