@@ -13,9 +13,11 @@ use MemberFlow\Plorea\Events\WebhookReceived;
 /**
  * Receives webhook calls from Plorea and dispatches events.
  *
- * Treat webhooks as a ping: the payload shape is not firmly documented, so
- * listeners should use the reference to fetch the authoritative state from
- * the status endpoint rather than trusting status or amount from the payload.
+ * Captured deliveries look like {eventId, createdAt, tenantId, type,
+ * data: {reference, status, eventCode, success, ...}} with an event type
+ * such as "payment.authorised". Still treat webhooks as a ping: listeners
+ * should use the reference to fetch the authoritative state from the
+ * status endpoint rather than trusting status or amount from the payload.
  */
 class WebhookController
 {
@@ -31,11 +33,9 @@ class WebhookController
         $reference = $this->reference($payload);
 
         if ($reference !== null) {
-            $status = $payload['status'] ?? $payload['eventCode'] ?? null;
-
             $this->events->dispatch(new PaymentStatusUpdated(
                 $reference,
-                is_string($status) ? $status : null,
+                $this->status($payload),
                 $payload,
             ));
         }
@@ -45,9 +45,9 @@ class WebhookController
     }
 
     /**
-     * The payment reference. Plorea's outbound payload shape is undocumented
-     * and unverified, so this defensively checks the likely keys:
-     * "reference", "data.reference", and "merchantReference".
+     * The payment reference. Captured deliveries carry it in
+     * "data.reference"; the top-level and "merchantReference" keys remain
+     * as defensive fallbacks.
      *
      * @param  array<string, mixed>  $payload
      */
@@ -61,5 +61,27 @@ class WebhookController
             ?? null;
 
         return is_string($reference) && $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * The payment status carried by the payload. Captured deliveries put it
+     * in "data.status" (with the Adyen event code in "data.eventCode" and a
+     * "payment.*" event type at the top level); the flat keys remain as
+     * defensive fallbacks.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function status(array $payload): ?string
+    {
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+
+        $status = $payload['status']
+            ?? $data['status']
+            ?? $payload['eventCode']
+            ?? $data['eventCode']
+            ?? $payload['type']
+            ?? null;
+
+        return is_string($status) ? $status : null;
     }
 }
