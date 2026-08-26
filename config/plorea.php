@@ -41,7 +41,7 @@ return [
     | Tenant
     |--------------------------------------------------------------------------
     |
-    | The tenant identifier assigned to you by Plorea (e.g. "debet-2026").
+    | The tenant identifier assigned to you by Plorea (e.g. "acme-2026").
     | It is attached automatically to every request that requires one, and
     | can be overridden per request via the fluent builders.
     |

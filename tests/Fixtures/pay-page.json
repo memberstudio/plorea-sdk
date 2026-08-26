@@ -1,0 +1,21 @@
+{
+    "product": "Golden fixture product",
+    "environment": "test",
+    "currency": "NOK",
+    "partnerSplits": null,
+    "tenantId": "test-tenant",
+    "merchantAccount": "TestMerchantAccount",
+    "createdAt": "2026-08-26T12:00:00.000Z",
+    "merchantName": null,
+    "email": null,
+    "themeId": null,
+    "reference": "GOLDEN-2026-001",
+    "returnUrl": "https://example.com/return",
+    "expiresAt": "2099-12-31T12:00:00.000Z",
+    "merchantOrgNr": null,
+    "amount": 1000,
+    "splits": null,
+    "id": "pl_test_golden_link",
+    "store": "Test Store AS",
+    "expired": false
+}
