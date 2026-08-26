@@ -60,7 +60,7 @@ Set your credentials in `.env`:
 PLOREA_API_KEY=plr_test_...
 PLOREA_ENVIRONMENT=test        # test | live
 PLOREA_TENANT_ID=your-tenant
-PLOREA_WEBHOOK_SECRET=         # optional, enables signature verification
+PLOREA_WEBHOOK_SECRET=         # required for webhooks — the route rejects requests until it is set
 ```
 
 | Env var | Default | Purpose |
@@ -114,7 +114,8 @@ $link = Plorea::payments()
     ->firstOrCreate();
 ```
 
-- An **open** link with the same amount and environment is returned as-is.
+- An **open** link with the same amount, currency, tenant, and environment
+  is returned as-is.
   Because the status endpoint exposes no expiry (and the status string has
   not been observed to flip to `expired`), the candidate link is verified
   against the pay-page endpoint, which reports a computed `expired` flag —
@@ -125,6 +126,12 @@ $link = Plorea::payments()
 - An already **paid** reference throws `PaymentAlreadyPaidException` — a
   fresh link for a settled invoice would be payable again, so this fails
   loudly instead. The exception carries the `PaymentStatus`.
+
+Two caveats: the check-then-create is not atomic, so two calls racing on the
+same new reference can still both create a link — serialize concurrent calls
+per reference (e.g. `Cache::lock()`) if double submits are possible. And the
+suffix scheme assumes `{reference}-1` is not itself a real, distinct invoice
+in your numbering.
 
 ### Check payment status
 
@@ -298,7 +305,9 @@ Two practices worth copying from production integrations:
   that calls `status()` for your open payment links.
 
 Configure the path, extra middleware, or disable the route entirely in
-`config/plorea.php`. Unparseable payloads are acknowledged with a 200 (there
+`config/plorea.php`. Adding a throttle to the extra middleware (e.g.
+`'throttle:60,1'`) is cheap protection against someone brute-forcing the
+shared secret. Unparseable payloads are acknowledged with a 200 (there
 is nothing to retry); return a 500 from your listener only for transient
 failures where you want Plorea to redeliver.
 
@@ -345,6 +354,12 @@ Plorea::fake([
 
 Patterns match the request path (`payments/*`), optionally prefixed with a
 method (`POST payments/link`).
+
+Status lookups mirror the real API: a reference the fake has seen a payment
+link created for reports an open (`active`) status echoing that link — so
+`firstOrCreate()` works out of the box — while an unknown reference throws
+`NotFoundException`, exactly like a live 404. Stub `payments/status/*` to
+simulate paid, refused, or any other state.
 
 ## Error handling
 
