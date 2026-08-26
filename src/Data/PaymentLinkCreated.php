@@ -29,9 +29,9 @@ final readonly class PaymentLinkCreated
         public ?string $store,
         public ?string $balanceAccountId,
         public ?bool $splitsEnabled,
-        public ?bool $partnerSplitsApplied,
         public ?string $provider,
         public ?CarbonImmutable $expiresAt,
+        public ?bool $partnerSplitsApplied = null,
         public array $raw = [],
     ) {}
 
@@ -52,9 +52,9 @@ final readonly class PaymentLinkCreated
             store: self::string($data['store'] ?? null),
             balanceAccountId: self::string($data['balanceAccountId'] ?? null),
             splitsEnabled: self::bool($data['splitsEnabled'] ?? null),
-            partnerSplitsApplied: self::bool($data['partnerSplitsApplied'] ?? null),
             provider: self::string($data['provider'] ?? null),
             expiresAt: self::date($data['expiresAt'] ?? null),
+            partnerSplitsApplied: self::bool($data['partnerSplitsApplied'] ?? null),
             raw: $data,
         );
     }

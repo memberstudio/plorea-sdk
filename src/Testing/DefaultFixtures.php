@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Testing;
 
+use MemberFlow\Plorea\Exceptions\NotFoundException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
 
 /**
@@ -14,9 +15,10 @@ use MemberFlow\Plorea\Exceptions\PloreaException;
 final class DefaultFixtures
 {
     /**
+     * @param  list<RecordedRequest>  $history  Requests already recorded by the fake.
      * @return array<string, mixed>
      */
-    public static function for(RecordedRequest $request): array
+    public static function for(RecordedRequest $request, array $history = []): array
     {
         $method = strtoupper($request->method);
         $path = $request->path;
@@ -25,7 +27,7 @@ final class DefaultFixtures
             $method === 'POST' && $path === 'payments/link' => self::paymentLinkCreated($request),
             $method === 'POST' && $path === 'payments/session' => self::paymentSession(),
             $method === 'GET' && str_starts_with($path, 'pay/') => self::paymentLink($path),
-            $method === 'GET' && str_starts_with($path, 'payments/status/') => self::paymentStatus($path),
+            $method === 'GET' && str_starts_with($path, 'payments/status/') => self::paymentStatus($path, $history),
             $method === 'POST' && $path === 'payments/refund' => self::refund($request),
             $method === 'POST' && $path === 'payments/cancel' => self::cancellation($request),
             $method === 'POST' && $path === 'payment-methods/setup' => self::paymentMethod($request, pending: true),
@@ -59,8 +61,9 @@ final class DefaultFixtures
             'tenantId' => $request->input('tenantId', 'fake-tenant'),
             'merchantAccount' => 'FakeMerchant',
             'splitsEnabled' => false,
+            'partnerSplitsApplied' => false,
             'provider' => 'plorea',
-            'expiresAt' => '2026-12-31T12:00:00Z',
+            'expiresAt' => '2099-12-31T12:00:00Z',
         ];
     }
 
@@ -91,31 +94,44 @@ final class DefaultFixtures
             'currency' => 'NOK',
             'environment' => 'test',
             'returnUrl' => 'https://example.test/return',
-            'expiresAt' => '2026-12-31T12:00:00Z',
+            'expiresAt' => '2099-12-31T12:00:00Z',
             'expired' => false,
         ];
     }
 
     /**
+     * Mirrors the real API: references the fake has seen a link created for
+     * report an open status echoing that link, anything else is a 404. Stub
+     * `payments/status/*` to simulate paid, refused, or other states.
+     *
+     * @param  list<RecordedRequest>  $history
      * @return array<string, mixed>
      */
-    private static function paymentStatus(string $path): array
+    private static function paymentStatus(string $path, array $history): array
     {
-        return [
-            'reference' => basename($path),
-            'tenantId' => 'fake-tenant',
-            'status' => 'authorised',
-            'provider' => 'adyen',
-            'pspReference' => 'FAKEPSP123',
-            'paymentLinkId' => 'pl_fake_link',
-            'paymentLinkUrl' => 'https://pay.plorea.no/pl_fake_link',
-            'amount' => 50000,
-            'currency' => 'NOK',
-            'environment' => 'test',
-            'splitsEnabled' => false,
-            'webhookEventCode' => 'AUTHORISATION',
-            'webhookSuccess' => true,
-        ];
+        $reference = rawurldecode(basename($path));
+
+        foreach ($history as $recorded) {
+            if ($recorded->matches('POST payments/link') && $recorded->input('reference') === $reference) {
+                return [
+                    'reference' => $reference,
+                    'tenantId' => $recorded->input('tenantId', 'fake-tenant'),
+                    'status' => 'active',
+                    'provider' => 'plorea',
+                    'paymentLinkId' => 'pl_fake_link',
+                    'paymentLinkUrl' => 'https://pay.plorea.no/pl_fake_link',
+                    'amount' => $recorded->input('amount', 50000),
+                    'currency' => $recorded->input('currency', 'NOK'),
+                    'environment' => 'test',
+                    'splitsEnabled' => false,
+                ];
+            }
+        }
+
+        throw new NotFoundException(
+            "No payment found for reference [{$reference}]. The fake returns a status only for references it has seen a payment link created for — stub [payments/status/*] to fake other payments.",
+            404,
+        );
     }
 
     /**
@@ -201,7 +217,7 @@ final class DefaultFixtures
             'environment' => 'test',
             'sessionId' => 'CS_FAKE_SESSION',
             'sessionData' => 'fake-session-data',
-            'expiresAt' => '2026-12-31T12:00:00Z',
+            'expiresAt' => '2099-12-31T12:00:00Z',
         ];
     }
 
@@ -253,7 +269,7 @@ final class DefaultFixtures
             'pspReference' => 'FAKECHARGE123',
             'resultCode' => 'Authorised',
             'amount' => ['value' => 19900, 'currency' => 'NOK'],
-            'nextChargeAt' => '2026-12-31T12:00:00Z',
+            'nextChargeAt' => '2099-12-31T12:00:00Z',
         ];
     }
 

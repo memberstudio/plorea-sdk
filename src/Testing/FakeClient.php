@@ -84,7 +84,7 @@ class FakeClient implements Client
             return $response;
         }
 
-        return DefaultFixtures::for($request);
+        return DefaultFixtures::for($request, $this->requests);
     }
 
     /**

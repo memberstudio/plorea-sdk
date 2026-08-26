@@ -13,7 +13,6 @@ use MemberFlow\Plorea\Data\PaymentStatus;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
 use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
-use MemberFlow\Plorea\Exceptions\RequestException;
 
 /**
  * Fluently configures and creates a payment link.
@@ -176,35 +175,48 @@ class PendingPaymentLink
      * "-2", ...). A reference that has already been paid throws, since a
      * fresh link for a settled invoice would be payable again.
      *
+     * Two calls racing on the same new reference can still both create a
+     * link — Plorea offers no server-side guard, so serialize concurrent
+     * calls per reference in your application (e.g. `Cache::lock()`) if
+     * double submits are possible. Suffixed references are assumed to be
+     * owned by this method; avoid a reference scheme where "{reference}-1"
+     * is itself a real, distinct invoice.
+     *
      * @throws PaymentAlreadyPaidException When the payment has already completed.
      */
     public function firstOrCreate(int $maxAttempts = 10): PaymentLinkCreated
     {
         $base = $this->reference;
 
-        for ($attempt = 0; $attempt <= $maxAttempts; $attempt++) {
-            $this->reference = $attempt === 0 ? $base : "{$base}-{$attempt}";
+        try {
+            for ($attempt = 0; $attempt <= $maxAttempts; $attempt++) {
+                $this->reference = $attempt === 0 ? $base : "{$base}-{$attempt}";
 
-            try {
-                $status = PaymentStatus::fromArray(
-                    $this->client->get('payments/status/'.rawurlencode($this->reference)),
-                );
-            } catch (NotFoundException) {
-                return $this->create();
+                try {
+                    $status = PaymentStatus::fromArray(
+                        $this->client->get('payments/status/'.rawurlencode($this->reference)),
+                    );
+                } catch (NotFoundException) {
+                    return $this->create();
+                }
+
+                if ($status->isPaid()) {
+                    throw new PaymentAlreadyPaidException($status);
+                }
+
+                if ($this->isReusable($status)) {
+                    return PaymentLinkCreated::fromArray($status->raw);
+                }
             }
 
-            if ($status->isPaid()) {
-                throw new PaymentAlreadyPaidException($status);
-            }
-
-            if ($this->isReusable($status)) {
-                return PaymentLinkCreated::fromArray($status->raw);
-            }
+            throw new PloreaException(
+                "Unable to find or create a payment link for [{$base}] within {$maxAttempts} reference suffixes.",
+            );
+        } finally {
+            // The loop mutates the reference while probing suffixes; restore
+            // it so the builder can be retried or inspected afterwards.
+            $this->reference = $base;
         }
-
-        throw new PloreaException(
-            "Unable to find or create a payment link for [{$base}] within {$maxAttempts} reference suffixes.",
-        );
     }
 
     /**
@@ -214,10 +226,16 @@ class PendingPaymentLink
     protected function isReusable(PaymentStatus $status): bool
     {
         if (! $status->isOpen()
-            || $status->amount?->value !== $this->amount->value
+            || ! $status->amount instanceof Amount
+            || $status->amount->value !== $this->amount->value
+            || strcasecmp($status->amount->currency, $this->amount->currency) !== 0
             || $status->paymentLinkUrl === null
             || $status->paymentLinkId === null
         ) {
+            return false;
+        }
+
+        if ($status->tenantId !== null && $status->tenantId !== $this->tenantId) {
             return false;
         }
 
@@ -242,9 +260,14 @@ class PendingPaymentLink
             $link = PaymentLink::fromArray(
                 $this->client->get('pay/'.rawurlencode($paymentLinkId)),
             );
-        } catch (RequestException) {
-            // The link lookup is a best-effort guard; when it is unavailable,
-            // fall back to trusting the open status.
+        } catch (NotFoundException) {
+            // The pay page no longer knows the link — it is dead, so a new
+            // one has to be created.
+            return true;
+        } catch (PloreaException) {
+            // The link lookup is a best-effort guard; when it is unavailable
+            // (server error, network failure), fall back to trusting the
+            // open status.
             return false;
         }
 

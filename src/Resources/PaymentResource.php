@@ -8,6 +8,7 @@ use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\PaymentCancellation;
 use MemberFlow\Plorea\Data\PaymentStatus;
 use MemberFlow\Plorea\Data\Refund;
+use MemberFlow\Plorea\Enums\Environment;
 use MemberFlow\Plorea\Pending\PendingPaymentLink;
 
 class PaymentResource extends Resource
@@ -26,6 +27,10 @@ class PaymentResource extends Resource
     public function link(string $reference, string $product, Amount $amount, string $returnUrl): PendingPaymentLink
     {
         $environment = $this->config['environment'] ?? null;
+
+        if ($environment instanceof Environment) {
+            $environment = $environment->value;
+        }
 
         return new PendingPaymentLink(
             $this->client,

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Tests\Feature;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Enums\Environment;
 use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
+use MemberFlow\Plorea\Exceptions\PloreaException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Pending\PendingPaymentLink;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -194,5 +197,105 @@ class FirstOrCreatePaymentLinkTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
             && ($request->data()['reference'] ?? null) === 'INV-1-1'
             && ($request->data()['amount'] ?? null) === 50000);
+    }
+
+    public function test_it_throws_after_exhausting_all_reference_suffixes(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1*' => Http::response($this->statusResponse(['environment' => 'live'])),
+        ]);
+
+        try {
+            $this->pending()->firstOrCreate(maxAttempts: 2);
+            $this->fail('Expected PloreaException.');
+        } catch (PloreaException $e) {
+            $this->assertStringContainsString('Unable to find or create a payment link for [INV-1]', $e->getMessage());
+        }
+
+        Http::assertSentCount(3);
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
+    }
+
+    public function test_it_reuses_an_open_link_when_the_expiry_lookup_cannot_connect(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing' => fn () => throw new ConnectionException('Connection timed out'),
+        ]);
+
+        $link = $this->pending()->firstOrCreate();
+
+        $this->assertSame('pl_existing', $link->id);
+    }
+
+    public function test_it_suffixes_the_reference_when_the_stored_link_no_longer_exists(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
+        ]);
+
+        $link = $this->pending()->firstOrCreate();
+
+        $this->assertSame('INV-1-1', $link->reference);
+    }
+
+    public function test_it_suffixes_the_reference_when_the_currency_differs(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['currency' => 'EUR'])),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
+        ]);
+
+        $link = $this->pending()->firstOrCreate();
+
+        $this->assertSame('pl_new', $link->id);
+    }
+
+    public function test_it_suffixes_the_reference_when_the_tenant_differs(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['tenantId' => 'someone-elses-tenant'])),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
+        ]);
+
+        $link = $this->pending()->firstOrCreate();
+
+        $this->assertSame('pl_new', $link->id);
+    }
+
+    public function test_an_enum_environment_still_guards_reuse(): void
+    {
+        config()->set('plorea.environment', Environment::Live);
+
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['environment' => 'test'])),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
+        ]);
+
+        $link = $this->pending()->firstOrCreate();
+
+        $this->assertSame('INV-1-1', $link->reference);
+    }
+
+    public function test_the_reference_is_restored_after_exhausting_suffixes(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1*' => Http::response($this->statusResponse(['environment' => 'live'])),
+        ]);
+
+        $pending = $this->pending();
+
+        try {
+            $pending->firstOrCreate(maxAttempts: 1);
+            $this->fail('Expected PloreaException.');
+        } catch (PloreaException) {
+            $this->assertSame('INV-1', $pending->toPayload()['reference']);
+        }
     }
 }
