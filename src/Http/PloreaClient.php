@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Http;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Http\Client\ConnectionException as IlluminateConnectionException;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\PendingRequest;
@@ -11,6 +12,8 @@ use Illuminate\Http\Client\RequestException as IlluminateRequestException;
 use Illuminate\Http\Client\Response;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Enums\Environment;
+use MemberFlow\Plorea\Events\RequestSent;
+use MemberFlow\Plorea\Events\ResponseReceived;
 use MemberFlow\Plorea\Exceptions\ConnectionException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
 use MemberFlow\Plorea\Exceptions\RequestException;
@@ -23,6 +26,7 @@ final readonly class PloreaClient implements Client
     public function __construct(
         private Factory $http,
         private array $config,
+        private ?Dispatcher $events = null,
     ) {}
 
     public function get(string $uri, array $query = []): array
@@ -46,6 +50,10 @@ final readonly class PloreaClient implements Client
      */
     private function send(string $method, string $uri, array $data): array
     {
+        $this->events?->dispatch(new RequestSent(strtoupper($method), $uri, $data));
+
+        $startedAt = microtime(true);
+
         try {
             /** @var Response $response */
             $response = $this->request()->{$method}($uri, $data);
@@ -53,13 +61,23 @@ final readonly class PloreaClient implements Client
             throw new ConnectionException("Could not connect to the Plorea API: {$exception->getMessage()}", $exception->getCode(), previous: $exception);
         }
 
+        $json = $response->json();
+        $json = is_array($json) ? $json : null;
+
+        $this->events?->dispatch(new ResponseReceived(
+            strtoupper($method),
+            $uri,
+            $data,
+            $response->status(),
+            $json,
+            round((microtime(true) - $startedAt) * 1000, 2),
+        ));
+
         if ($response->failed()) {
             throw RequestException::fromResponse($response);
         }
 
-        $json = $response->json();
-
-        return is_array($json) ? $json : [];
+        return $json ?? [];
     }
 
     private function request(): PendingRequest
