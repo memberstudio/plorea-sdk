@@ -7,7 +7,7 @@ Only the latest release receives security fixes.
 ## Reporting a vulnerability
 
 If you discover a security vulnerability in this package, please email
-**hello@memberflow.no** instead of opening a public issue. Include a
+**hei@memberflow.no** instead of opening a public issue. Include a
 description of the issue, steps to reproduce, and the affected version.
 
 You will receive a response within a few business days. Please give us a
