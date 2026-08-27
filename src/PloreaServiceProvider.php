@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MemberFlow\Plorea;
 
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Foundation\Console\AboutCommand;
@@ -23,7 +24,7 @@ class PloreaServiceProvider extends ServiceProvider
             /** @var array<string, mixed> $config */
             $config = $app->make(Repository::class)->get('plorea', []);
 
-            return new PloreaClient($app->make(Factory::class), $config);
+            return new PloreaClient($app->make(Factory::class), $config, $app->make(Dispatcher::class));
         });
 
         $this->app->singleton(PloreaManager::class, fn ($app): PloreaManager => new PloreaManager($app));

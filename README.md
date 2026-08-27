@@ -345,6 +345,47 @@ application applies it globally:
 })
 ```
 
+## Request logging
+
+The SDK deliberately stores nothing in your database — payment links and
+subscriptions are your domain data, and a package-owned table would be a
+second source of truth that drifts (Plorea settles refunds and cancels
+asynchronously, and webhook delivery is best-effort). Instead, every API
+call dispatches events you can listen to:
+
+- `RequestSent` — right before a request goes out: `method`, `uri`, `payload`.
+- `ResponseReceived` — for every response, including error responses (before
+  the exception is thrown): `method`, `uri`, `payload`, `status`, `response`
+  (decoded body or `null`), `durationMs`. Not dispatched when the API is
+  unreachable.
+
+Neither event ever carries the API key or any headers.
+
+If you want an audit trail of everything sent to Plorea, build a small
+log table in your app and fill it from `ResponseReceived` — one listener
+gives you a full request/response row:
+
+```php
+use MemberFlow\Plorea\Events\ResponseReceived;
+
+Event::listen(ResponseReceived::class, function (ResponseReceived $event) {
+    PloreaRequestLog::create([
+        'method' => $event->method,          // "POST"
+        'uri' => $event->uri,                // "payments/link"
+        'payload' => $event->payload,        // json column
+        'status' => $event->status,          // 200, 404, ...
+        'response' => $event->response,      // json column, nullable
+        'duration_ms' => $event->durationMs,
+    ]);
+});
+```
+
+This keeps the schema in your hands — add the columns and relations you
+actually need (a `payable` morph to your invoice model, an indexed
+`reference` extracted from the payload, a retention policy). Queue the
+listener if you don't want logging on the request's critical path, and
+treat the logged payloads as sensitive: they contain customer emails.
+
 ## Testing
 
 Swap the HTTP client for a fake — no requests leave your test suite, and every
