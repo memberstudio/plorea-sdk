@@ -115,8 +115,11 @@ class PendingPaymentLink
     }
 
     /**
-     * The invoice issuer receiving the funds. Plorea starts KYC automatically
-     * for merchants it has not seen before.
+     * The invoice issuer receiving the funds — always your client's
+     * organisation number, never the platform's own. Required by Plorea:
+     * without it the system does not know who should receive the payment.
+     * Plorea starts KYC automatically for merchants it has not seen before;
+     * name and email are optional but recommended for KYC communication.
      */
     public function merchant(
         string $orgNr,
@@ -146,6 +149,9 @@ class PendingPaymentLink
 
     /**
      * Use a specific Adyen store instead of the default tenant store.
+     *
+     * @deprecated Plorea resolves the store from `merchantOrgNr` automatically;
+     *             sending a store is no longer needed.
      */
     public function store(string $store): static
     {
@@ -156,9 +162,20 @@ class PendingPaymentLink
 
     /**
      * Create the payment link.
+     *
+     * @throws PloreaException When no merchant organisation number is set.
      */
     public function create(): PaymentLinkCreated
     {
+        // Plorea accepts a link without merchantOrgNr but cannot route the
+        // payout without it, so fail here instead of after the customer pays.
+        if ($this->merchantOrgNr === null || $this->merchantOrgNr === '') {
+            throw new PloreaException(
+                'Plorea requires a merchant organisation number — the invoice issuer (your client), '
+                .'not your own. Set it with ->merchant(orgNr: ...).',
+            );
+        }
+
         return PaymentLinkCreated::fromArray(
             $this->client->post('payments/link', $this->toPayload()),
         );

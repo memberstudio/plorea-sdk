@@ -24,7 +24,7 @@ $link = Plorea::payments()
     )
     ->payerEmail('kunde@eksempel.no')
     ->invoiceUrl('https://app.example/invoices/123.pdf')
-    // Merchant details trigger implicit KYC onboarding + splits:
+    // Required: the invoice issuer (the client) — never the platform's own org nr:
     ->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
     ->create();
 
@@ -32,6 +32,8 @@ $link->url;       // send the customer here
 $link->id;        // pl_...
 $link->expiresAt; // store this — expiry is judged from it, not from status
 ```
+
+`merchantOrgNr` is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
 
 Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible.
 
