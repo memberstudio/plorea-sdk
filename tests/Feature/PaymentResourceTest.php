@@ -71,6 +71,18 @@ class PaymentResourceTest extends TestCase
         });
     }
 
+    public function test_it_refuses_to_create_a_payment_link_without_a_merchant_org_nr(): void
+    {
+        Http::fake();
+
+        $this->expectException(PloreaException::class);
+        $this->expectExceptionMessage('merchant organisation number');
+
+        Plorea::payments()
+            ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
+            ->create();
+    }
+
     public function test_it_fetches_payment_status(): void
     {
         Http::fake([

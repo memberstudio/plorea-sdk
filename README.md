@@ -89,7 +89,7 @@ $link = Plorea::payments()
     )
     ->payerEmail('kunde@eksempel.no')
     ->invoiceUrl('https://app.example/invoices/123.pdf')
-    // Providing merchant details triggers KYC onboarding and splits:
+    // Required: the invoice issuer (your client), never your own org number.
     ->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
     ->create();
 
@@ -98,10 +98,19 @@ $link->id;        // pl_...
 $link->expiresAt; // CarbonImmutable|null
 ```
 
-KYC is implicit: the first link for a new `merchantOrgNr` starts merchant
-onboarding, and `merchantEmail` receives the KYC mail. The link works while
-KYC is pending — the payout is simply held in escrow until onboarding
-completes (typically 1–5 days).
+`merchantOrgNr` is required — it tells Plorea who should receive the payment,
+so it must always be your client's organisation number, not your own. The
+Plorea API silently accepts a link without it, so the SDK refuses to create
+one (`PloreaException`) rather than let the payment fail after your customer
+has paid. `merchantName` and `merchantEmail` are optional but recommended for
+KYC communication. Do not send a store or balance account — Plorea resolves
+those from the org number automatically.
+
+KYC is implicit: the first payment for a new `merchantOrgNr` starts merchant
+onboarding, and the merchant receives an email with an onboarding link
+(`merchantEmail` when provided). The link is payable while KYC is pending —
+the payout is simply held in escrow until KYC is approved (typically 1–5
+business days).
 
 ### Reuse or create (`firstOrCreate`)
 

@@ -29,6 +29,7 @@ class GoldenFixturesTest extends TestCase
 
         $link = Plorea::payments()
             ->link('GOLDEN-2026-001', 'Golden fixture product', Amount::nok(1000), 'https://example.com/return')
+            ->merchant(orgNr: '912650774')
             ->create();
 
         $this->assertSame('created', $link->status);

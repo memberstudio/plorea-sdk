@@ -4,6 +4,15 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
+- `merchantOrgNr` is now required when creating payment links — Plorea needs
+  it to route the payout (it must be the invoice issuer's org number, never
+  the platform's own). `create()` throws `PloreaException` when it is
+  missing, since the API silently accepts the link and fails only at
+  payment time. `->store()` is deprecated: Plorea resolves the store from
+  the org number automatically.
+
+## v0.1.0
+
 - Initial release: payment links, payment status, refunds, cancellations,
   payment method setup (hosted + Drop-in), subscriptions (create, update,
   list by external ID, manual charges, charge history, cancel, reactivate),

@@ -21,6 +21,7 @@ class FakeClientTest extends TestCase
 
         $link = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
+            ->merchant(orgNr: '912650774')
             ->create();
 
         $this->assertSame('pl_fake_link', $link->id);
@@ -61,12 +62,14 @@ class FakeClientTest extends TestCase
 
         $created = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
+            ->merchant(orgNr: '912650774')
             ->firstOrCreate();
 
         $this->assertSame('pl_fake_link', $created->id);
 
         $reused = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
+            ->merchant(orgNr: '912650774')
             ->firstOrCreate();
 
         $this->assertSame('pl_fake_link', $reused->id);
@@ -99,6 +102,7 @@ class FakeClientTest extends TestCase
 
         $link = Plorea::payments()
             ->link('ref-9', 'Product', Amount::nok(1000), 'https://example.test')
+            ->merchant(orgNr: '912650774')
             ->create();
 
         $this->assertSame('pl_from_callable', $link->id);
