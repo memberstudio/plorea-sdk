@@ -279,9 +279,16 @@ Plorea::subscriptions()->reactivate($subscription->id);
 
 Cancelling clears `nextChargeAt` and sets `accessEndsAt` one billing interval
 after the last charge — gate access on that date, not on the cancellation
-time. The status is spelled `canceled`. Reactivating schedules the next charge
-for *now*, so the card is charged again within seconds; it does not resume the
-original cadence.
+time. The status is spelled `canceled`.
+
+> [!WARNING]
+> `reactivate()` schedules the next charge for *now* and charges
+> unconditionally — it does not resume the original cadence, and it does not
+> check whether the current period was already paid. A customer who cancels
+> and immediately reactivates is charged twice for the same period (observed
+> on a daily subscription reactivated 33 seconds after cancelling). Guard the
+> call yourself: only reactivate once `accessEndsAt` has passed, and start a
+> fresh subscription otherwise.
 
 ### Find and list
 

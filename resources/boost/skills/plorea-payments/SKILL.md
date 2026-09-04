@@ -105,8 +105,12 @@ Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat');
 Plorea owns the billing schedule — your app never triggers the recurring
 charge. Billing starts immediately: `create()` already returns the first
 `nextChargeAt` and the scheduler charges within seconds unless a trial is set.
-Reactivating also schedules the next charge for *now*, so the card is charged
-again at once; it does not resume the old cadence.
+`reactivate()` schedules the next charge for *now* and charges
+unconditionally — it neither resumes the old cadence nor checks whether the
+current period was already paid, so cancel-then-reactivate bills the same
+period twice (verified on a daily subscription reactivated 33s after
+cancelling). Only reactivate once `accessEndsAt` has passed; otherwise create
+a fresh subscription.
 
 Statuses are `active` and `canceled` (US spelling) — use `isActive()`,
 `isCanceled()`, `hasPaymentFailure()`, or `is('...')`, never string
