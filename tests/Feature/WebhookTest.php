@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
+use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 use MemberFlow\Plorea\Events\WebhookReceived;
 use MemberFlow\Plorea\Tests\TestCase;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
@@ -68,6 +69,79 @@ class WebhookTest extends TestCase
         Event::assertDispatched(WebhookReceived::class, fn (WebhookReceived $event): bool => $event->payload === $payload);
         Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->reference === 'GOLDEN-2026-001'
             && $event->status === 'authorised');
+    }
+
+    public function test_it_handles_a_real_subscription_charge_webhook(): void
+    {
+        Event::fake([WebhookReceived::class, SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
+
+        $payload = $this->fixture('webhook-subscription-charge-succeeded');
+
+        $this->postSignedWebhook($payload)
+            ->assertOk()
+            ->assertSee('[accepted]');
+
+        Event::assertDispatched(WebhookReceived::class, fn (WebhookReceived $event): bool => $event->payload === $payload);
+        Event::assertDispatched(
+            SubscriptionChargeSucceeded::class,
+            fn (SubscriptionChargeSucceeded $event): bool => $event->subscriptionId === 'sub_test_golden'
+                && $event->chargeId === 'chg_test_golden_2'
+                && $event->reference === 'sub_test_golden-chg_test_golden_2'
+                && $event->externalId === 'GOLDEN-EXT-001',
+        );
+
+        // The payload carries a data.reference, but it belongs to a
+        // scheduler-created charge that the payment status endpoint refuses
+        // with a 403 — raising PaymentStatusUpdated would walk listeners
+        // straight into that failure.
+        Event::assertNotDispatched(PaymentStatusUpdated::class);
+    }
+
+    public function test_a_manual_subscription_charge_arrives_as_a_payment_webhook(): void
+    {
+        Event::fake([SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
+
+        // Manually created charges were observed emitting payment.authorised
+        // rather than subscription.charge_succeeded, and their reference does
+        // resolve through the payment status endpoint.
+        $this->postSignedWebhook($this->fixture('webhook-payment-authorised-subscription-charge'))->assertOk();
+
+        Event::assertDispatched(
+            PaymentStatusUpdated::class,
+            fn (PaymentStatusUpdated $event): bool => $event->reference === 'sub_test_golden-chg_test_golden_1'
+                && $event->status === 'authorised',
+        );
+        Event::assertNotDispatched(SubscriptionChargeSucceeded::class);
+    }
+
+    public function test_it_acknowledges_unknown_subscription_event_types_without_guessing(): void
+    {
+        Event::fake([WebhookReceived::class, SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
+
+        // Only subscription.charge_succeeded has been observed live. Any
+        // other subscription type reaches consumers through WebhookReceived
+        // alone rather than through an event built on a guessed shape.
+        $this->postSignedWebhook([
+            'type' => 'subscription.canceled',
+            'data' => ['subscriptionId' => 'sub_test_golden', 'reference' => 'sub_test_golden-chg_test_golden_2'],
+        ])->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertNotDispatched(SubscriptionChargeSucceeded::class);
+        Event::assertNotDispatched(PaymentStatusUpdated::class);
+    }
+
+    public function test_it_ignores_a_subscription_charge_payload_without_a_subscription_id(): void
+    {
+        Event::fake([WebhookReceived::class, SubscriptionChargeSucceeded::class]);
+
+        $this->postSignedWebhook([
+            'type' => 'subscription.charge_succeeded',
+            'data' => ['chargeId' => 'chg_test_golden_2'],
+        ])->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertNotDispatched(SubscriptionChargeSucceeded::class);
     }
 
     public function test_it_rejects_a_wrong_signature(): void

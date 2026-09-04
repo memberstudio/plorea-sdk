@@ -384,12 +384,39 @@ Event::listen(WebhookReceived::class, fn (WebhookReceived $event) => $event->pay
 
 ### Subscription webhooks
 
-`PaymentStatusUpdated` fires only for payloads carrying a payment
-`reference`. There is no dedicated subscription event yet: no subscription
-delivery has been captured from Plorea, so the event type names and the
-`data` shape are unknown and the SDK does not guess at them. Listen on
-`WebhookReceived`, branch on `type`, and re-fetch with
-`Plorea::subscriptions()->find($id)`.
+Real deliveries were captured on 2026-09-04. Plorea emitted exactly two event
+types across a full subscription lifecycle:
+
+| Trigger | Event type | SDK event |
+| --- | --- | --- |
+| Scheduler charges the card | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` |
+| Manual `charge()` | `payment.authorised` | `PaymentStatusUpdated` |
+
+Nothing was emitted for card setup, cancellation or reactivation. Those events
+either do not exist or are not enabled for the captured tenant, so **do not
+wait on a webhook for them** — cancel and reactivate are synchronous API calls
+that already return the new state.
+
+```php
+use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
+
+Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSucceeded $event) {
+    // $event->subscriptionId, ->chargeId, ->reference, ->externalId
+    $subscription = Plorea::subscriptions()->find($event->subscriptionId);
+
+    // extend access idempotently — the same charge can be delivered twice
+});
+```
+
+`SubscriptionChargeSucceeded` deliberately does **not** also raise
+`PaymentStatusUpdated`, even though the payload carries a
+`{subscriptionId}-{chargeId}` reference: that reference belongs to a
+scheduler-created charge, which the payment status endpoint currently refuses
+with a 403. Read the charge from `subscriptions()->charges()` instead.
+
+Any other `subscription.*` type reaches you through `WebhookReceived` only.
+The SDK will not invent an event for a shape nobody has seen — branch on
+`type` there and re-fetch with `Plorea::subscriptions()->find($id)`.
 
 Do not rely on webhooks for billing state at all — run a scheduled job that
 refreshes active subscriptions through `find()` or `forExternalId()`.

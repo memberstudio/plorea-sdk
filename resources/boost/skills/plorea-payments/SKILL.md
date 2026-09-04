@@ -150,43 +150,30 @@ Delivery is best-effort — also run a scheduled job polling `status()` for open
 
 ### Subscription webhooks
 
-`PaymentStatusUpdated` only fires for payloads carrying a payment
-`reference`. There is no dedicated subscription event: no subscription
-delivery has been captured, so the `type` names and `data` shape are unknown
-and the SDK does not guess at them. Listen on `WebhookReceived` (dispatched
-for every delivery), branch on `type`, and re-fetch instead of reading status
-from the payload.
+Verified from real deliveries (2026-09-04). A **scheduler** charge emits
+`subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. A **manual**
+`charge()` emits `payment.authorised` → `PaymentStatusUpdated`. Nothing at all
+is emitted for card setup, cancel or reactivate — do not wait on a webhook for
+those; the API calls already return the new state.
 
 ```php
-use MemberFlow\Plorea\Events\WebhookReceived;
+use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 
-Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
-    $type = $event->payload['type'] ?? '';
+Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSucceeded $event) {
+    $subscription = Plorea::subscriptions()->find($event->subscriptionId);
 
-    if (! str_starts_with($type, 'subscription.')) {
-        return;
-    }
-
-    // Shape unverified — log the payload the first time you see one.
-    $id = $event->payload['data']['subscriptionId'] ?? null;
-
-    if ($id === null) {
-        return;
-    }
-
-    $subscription = Plorea::subscriptions()->find($id);
-
-    // sync locally, idempotently: ->status, ->nextChargeAt, ->lastChargeAt,
-    // ->accessEndsAt, ->failureReason, ->retryCount
-    if ($subscription->hasPaymentFailure()) {
-        // ask the customer for a new card, then
-        // update()->paymentMethod('pm_new')->save() and reactivate()
-    }
+    // extend access idempotently — ->status, ->nextChargeAt, ->accessEndsAt
+    // $event->externalId links back to your own entity
 });
 ```
 
-Never rely on webhooks alone for billing state — schedule a job that refreshes
-active subscriptions via `find()` / `forExternalId()`.
+`SubscriptionChargeSucceeded` does not also raise `PaymentStatusUpdated`,
+though the payload carries a `{subId}-{chgId}` reference: that lookup 403s for
+scheduler charges. Read the charge from `charges()`.
+
+Every other `subscription.*` type arrives only as `WebhookReceived` — branch on
+`type` and re-fetch. Never rely on webhooks alone for billing state; schedule a
+job that refreshes active subscriptions via `find()` / `forExternalId()`.
 
 ## Testing
 

@@ -1,0 +1,20 @@
+{
+    "eventId": "evt_00000000000000000000000000000003",
+    "createdAt": "2026-09-04T09:55:31.000Z",
+    "tenantId": "test-tenant",
+    "type": "payment.authorised",
+    "data": {
+        "reference": "sub_test_golden-chg_test_golden_1",
+        "orderId": "GOLDEN-EXT-001",
+        "status": "authorised",
+        "provider": "adyen",
+        "pspReference": "TESTCHARGEPSP001",
+        "paymentLinkId": null,
+        "paymentLinkUrl": null,
+        "amount": 29900,
+        "currency": "NOK",
+        "environment": "test",
+        "eventCode": "AUTHORISATION",
+        "success": true
+    }
+}
