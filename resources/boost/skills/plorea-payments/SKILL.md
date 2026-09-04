@@ -73,8 +73,15 @@ $session = Plorea::paymentMethods()->setup('customer-123', RecurringType::Subscr
 
 // Poll until stored:
 $method = Plorea::paymentMethods()->find($method->id);
-$method->isActive();
+$method->isPendingSetup();  // customer has not finished the flow
+$method->isActive();        // card stored — cardLast4, cardBrand, expiryDate populated
+$method->hasFailed();       // verification refused, no card stored
 ```
+
+Both flows authorise and reverse a 1 NOK verification charge to store the
+card; the customer is never billed for it. `failed` is terminal — start a new
+setup, never retry the charge. Subscriptions reject a non-active method with a
+400 `ValidationException` ("Payment method is not active").
 
 ## Subscriptions
 
@@ -92,8 +99,34 @@ Plorea::subscriptions()->update($subscription->id)->amount(Amount::nok(39900))->
 Plorea::subscriptions()->cancel($subscription->id, 'customer_requested');
 Plorea::subscriptions()->reactivate($subscription->id);
 Plorea::subscriptions()->forExternalId('ws_acme_456', status: 'active');
-Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat'); // throws ChargeFailedException when declined
+Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat');
 ```
+
+Plorea owns the billing schedule — your app never triggers the recurring
+charge. Billing starts immediately: `create()` already returns the first
+`nextChargeAt` and the scheduler charges within seconds unless a trial is set.
+Reactivating also schedules the next charge for *now*, so the card is charged
+again at once; it does not resume the old cadence.
+
+Statuses are `active` and `canceled` (US spelling) — use `isActive()`,
+`isCanceled()`, `hasPaymentFailure()`, or `is('...')`, never string
+comparison. Cancelling clears `nextChargeAt` and sets `accessEndsAt` one
+interval after the last charge; gate access on that date, not on
+`canceledAt`.
+
+Charges: the POST returns `status: charge_created` with Adyen's answer in
+`resultCode`, while `charges()` history items report the settled `status`
+(`authorised`) and a `reason` of `manual_charge` or `scheduled_charge`. A
+declined card throws `ChargeFailedException` (402); a subscription that is not
+chargeable at all throws `ValidationException` (400) — different failures,
+handle them differently.
+
+Each charge produces a payment referenced `{subscriptionId}-{chargeId}`, also
+on `$subscription->lastPaymentReference`, resolvable via
+`Plorea::payments()->status(...)`. **Known Plorea bug (2026-09-04):** that
+lookup 403s with "Tenant mismatch" for scheduler-created charges while manual
+ones resolve fine — read scheduled outcomes from `charges()` until it is
+fixed.
 
 ## Webhooks
 
@@ -114,6 +147,46 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
 ```
 
 Delivery is best-effort — also run a scheduled job polling `status()` for open links.
+
+### Subscription webhooks
+
+`PaymentStatusUpdated` only fires for payloads carrying a payment
+`reference`. There is no dedicated subscription event: no subscription
+delivery has been captured, so the `type` names and `data` shape are unknown
+and the SDK does not guess at them. Listen on `WebhookReceived` (dispatched
+for every delivery), branch on `type`, and re-fetch instead of reading status
+from the payload.
+
+```php
+use MemberFlow\Plorea\Events\WebhookReceived;
+
+Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
+    $type = $event->payload['type'] ?? '';
+
+    if (! str_starts_with($type, 'subscription.')) {
+        return;
+    }
+
+    // Shape unverified — log the payload the first time you see one.
+    $id = $event->payload['data']['subscriptionId'] ?? null;
+
+    if ($id === null) {
+        return;
+    }
+
+    $subscription = Plorea::subscriptions()->find($id);
+
+    // sync locally, idempotently: ->status, ->nextChargeAt, ->lastChargeAt,
+    // ->accessEndsAt, ->failureReason, ->retryCount
+    if ($subscription->hasPaymentFailure()) {
+        // ask the customer for a new card, then
+        // update()->paymentMethod('pm_new')->save() and reactivate()
+    }
+});
+```
+
+Never rely on webhooks alone for billing state — schedule a job that refreshes
+active subscriptions via `find()` / `forExternalId()`.
 
 ## Testing
 

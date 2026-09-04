@@ -76,10 +76,37 @@ final readonly class PaymentMethod
     }
 
     /**
+     * Whether the payment method status matches the given value.
+     */
+    public function is(string $status): bool
+    {
+        return $this->status !== null && strcasecmp($this->status, $status) === 0;
+    }
+
+    /**
      * Whether the payment method is active and can be charged.
      */
     public function isActive(): bool
     {
-        return $this->status !== null && strcasecmp($this->status, 'active') === 0;
+        return $this->is('active');
+    }
+
+    /**
+     * Whether the customer has not finished the setup flow yet. Poll until
+     * the status leaves this state.
+     */
+    public function isPendingSetup(): bool
+    {
+        return $this->is('pending_setup');
+    }
+
+    /**
+     * Whether the setup failed — the verification authorisation Adyen makes
+     * during setup was refused, so no card was stored. A failed method can
+     * never be charged; start a new setup instead.
+     */
+    public function hasFailed(): bool
+    {
+        return $this->is('failed');
     }
 }

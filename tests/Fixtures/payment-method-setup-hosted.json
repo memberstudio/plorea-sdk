@@ -1,0 +1,12 @@
+{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-001",
+    "recurringType": "Subscription",
+    "status": "pending_setup",
+    "environment": "test",
+    "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+    "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+    "expiresAt": "2026-09-05T11:51:00+02:00"
+}

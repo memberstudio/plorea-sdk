@@ -1,0 +1,22 @@
+{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-001",
+    "recurringType": "Subscription",
+    "environment": "test",
+    "status": "active",
+    "adyenReference": "pmsetup_pm_test_golden_method",
+    "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+    "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "consentAt": "2026-09-04T09:54:00.000Z",
+    "expiresAt": "2026-09-05T11:51:00+02:00",
+    "metadata": [],
+    "createdAt": "2026-09-04T09:51:00.000Z",
+    "updatedAt": "2026-09-04T09:54:00.000Z",
+    "setupPspReference": "TESTSETUPPSP0001",
+    "cardLast4": "1111",
+    "cardBrand": "visa",
+    "expiryDate": "03/2030"
+}

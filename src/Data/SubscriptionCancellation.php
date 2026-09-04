@@ -9,6 +9,9 @@ use MemberFlow\Plorea\Data\Concerns\ParsesResponseData;
 
 /**
  * The result of canceling a subscription.
+ *
+ * Access typically runs to the end of the paid period: `accessEndsAt` is one
+ * billing interval after the last charge, not the cancellation time.
  */
 final readonly class SubscriptionCancellation
 {
@@ -21,6 +24,7 @@ final readonly class SubscriptionCancellation
         public string $subscriptionId,
         public ?string $status,
         public ?CarbonImmutable $canceledAt,
+        public ?CarbonImmutable $accessEndsAt,
         public ?string $reason,
         public array $raw = [],
     ) {}
@@ -34,6 +38,7 @@ final readonly class SubscriptionCancellation
             subscriptionId: self::string($data['subscriptionId'] ?? null) ?? '',
             status: self::string($data['status'] ?? null),
             canceledAt: self::date($data['canceledAt'] ?? null),
+            accessEndsAt: self::date($data['accessEndsAt'] ?? null),
             reason: self::string($data['reason'] ?? null),
             raw: $data,
         );

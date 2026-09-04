@@ -211,15 +211,28 @@ $session->sessionId;
 $session->sessionData;
 ```
 
+Both flows make Adyen authorise (and immediately reverse) a 1 NOK
+verification charge to store the card. The customer is never billed for it.
+
 Poll until the customer has completed the setup:
 
 ```php
 $method = Plorea::paymentMethods()->find($method->id);
 
-$method->isActive();  // card stored, ready to charge
-$method->cardLast4;   // "0004"
-$method->cardBrand;   // "mc"
+$method->isPendingSetup();  // customer has not finished the flow yet
+$method->isActive();        // card stored, ready to charge
+$method->hasFailed();       // verification refused — no card stored
+
+$method->cardLast4;             // "1111"
+$method->cardBrand;             // "visa"
+$method->expiryDate;            // "03/2030"
+$method->storedPaymentMethodId; // Adyen's token
 ```
+
+A `failed` method is terminal: the verification authorisation was refused, so
+no card was ever stored and no charge can succeed. Start a new setup rather
+than retrying. Subscriptions reject a non-active payment method with a 400
+`ValidationException` ("Payment method is not active").
 
 ## Subscriptions
 
@@ -242,6 +255,11 @@ $subscription->isActive();
 $subscription->nextChargeAt;
 ```
 
+Billing starts immediately — the create response already carries the first
+`nextChargeAt`, and Plorea's scheduler charges the card within seconds unless
+you set a trial. Plorea owns the schedule; your app never triggers the
+recurring charge itself.
+
 ### Update, cancel, reactivate
 
 ```php
@@ -250,12 +268,20 @@ Plorea::subscriptions()->update($subscription->id)
     ->quantity(10)
     ->save();
 
-Plorea::subscriptions()->cancel($subscription->id, 'customer_requested');
+$cancellation = Plorea::subscriptions()->cancel($subscription->id, 'customer_requested');
+
+$cancellation->accessEndsAt;  // end of the period already paid for
 
 // After the customer fixes their card on a payment_failed subscription:
 Plorea::subscriptions()->update($subscription->id)->paymentMethod('pm_new...')->save();
 Plorea::subscriptions()->reactivate($subscription->id);
 ```
+
+Cancelling clears `nextChargeAt` and sets `accessEndsAt` one billing interval
+after the last charge — gate access on that date, not on the cancellation
+time. The status is spelled `canceled`. Reactivating schedules the next charge
+for *now*, so the card is charged again within seconds; it does not resume the
+original cadence.
 
 ### Find and list
 
@@ -269,12 +295,39 @@ $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', status: '
 ### Charges
 
 ```php
-// Manual, off-schedule charge (throws ChargeFailedException when declined):
+// Manual, off-schedule charge:
 $charge = Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat');
+
+$charge->status;      // "charge_created" — the request was accepted
+$charge->resultCode;  // "Authorised" — Adyen's answer
+$charge->reference;   // "sub_…-chg_…"
 
 // Charge history, newest first:
 $charges = Plorea::subscriptions()->charges($subscription->id);
+
+$charges->first()->status;  // "authorised"
+$charges->first()->reason;  // "scheduled_charge" or "manual_charge"
 ```
+
+A declined card raises `ChargeFailedException` (402). A subscription that is
+not chargeable at all (cancelled, or on an inactive payment method) raises
+`ValidationException` (400) instead — the two are different failures.
+
+Each charge produces a payment whose reference is `{subscriptionId}-{chargeId}`,
+also exposed as `$subscription->lastPaymentReference`. It resolves through the
+ordinary payment status endpoint:
+
+```php
+$status = Plorea::payments()->status($subscription->lastPaymentReference);
+$status->isPaid();
+```
+
+> [!WARNING]
+> Charges created by Plorea's *scheduler* currently answer that lookup with a
+> 403 `AuthenticationException` ("Tenant mismatch"), while manually created
+> charges resolve fine. This is a Plorea-side bug reported 2026-09-04. Until
+> it is fixed, read scheduled-charge outcomes from `charges()`, not from
+> `payments()->status()`.
 
 ## Webhooks
 
@@ -328,6 +381,18 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
 // Or the raw payload for every webhook:
 Event::listen(WebhookReceived::class, fn (WebhookReceived $event) => $event->payload);
 ```
+
+### Subscription webhooks
+
+`PaymentStatusUpdated` fires only for payloads carrying a payment
+`reference`. There is no dedicated subscription event yet: no subscription
+delivery has been captured from Plorea, so the event type names and the
+`data` shape are unknown and the SDK does not guess at them. Listen on
+`WebhookReceived`, branch on `type`, and re-fetch with
+`Plorea::subscriptions()->find($id)`.
+
+Do not rely on webhooks for billing state at all — run a scheduled job that
+refreshes active subscriptions through `find()` or `forExternalId()`.
 
 Two practices worth copying from production integrations:
 
