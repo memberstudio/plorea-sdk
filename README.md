@@ -106,6 +106,11 @@ has paid. `merchantName` and `merchantEmail` are optional but recommended for
 KYC communication. Do not send a store or balance account — Plorea resolves
 those from the org number automatically.
 
+The create response does **not** echo the merchant back — the org number only
+reappears on the pay page, so `Plorea::payByLink()->find($id)->merchantOrgNr`
+is the only way to confirm which one Plorea recorded. Attaching a merchant
+also populates `partnerSplits` there.
+
 KYC is implicit: the first payment for a new `merchantOrgNr` starts merchant
 onboarding, and the merchant receives an email with an onboarding link
 (`merchantEmail` when provided). The link is payable while KYC is pending —
@@ -260,6 +265,11 @@ Billing starts immediately — the create response already carries the first
 you set a trial. Plorea owns the schedule; your app never triggers the
 recurring charge itself.
 
+With `trialUntil()`, the subscription is created `trialing` and `nextChargeAt`
+is set to exactly `trialEndsAt`, so nothing is charged until the trial runs
+out. Use `$subscription->isTrialing()` — a trialing subscription is *not*
+`isActive()`.
+
 ### Update, cancel, reactivate
 
 ```php
@@ -280,6 +290,10 @@ Plorea::subscriptions()->reactivate($subscription->id);
 Cancelling clears `nextChargeAt` and sets `accessEndsAt` one billing interval
 after the last charge — gate access on that date, not on the cancellation
 time. The status is spelled `canceled`.
+
+Cancelling during a trial leaves `accessEndsAt` **null**, because it is
+derived from the last charge and a trial has none. Treat null as "access ends
+now" rather than "access never ends".
 
 > [!WARNING]
 > `reactivate()` schedules the next charge for *now* and charges
