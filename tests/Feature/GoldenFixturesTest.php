@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Tests\Feature;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
@@ -612,5 +613,143 @@ class GoldenFixturesTest extends TestCase
             $this->assertSame('Tenant mismatch', $caught->getMessage());
             $this->assertSame(403, $caught->status);
         }
+    }
+
+    public function test_it_parses_a_real_card_on_file_setup_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup' => Http::response($this->fixture('payment-method-setup-card-on-file')),
+        ]);
+
+        $method = Plorea::paymentMethods()
+            ->setup('golden-shopper-002', RecurringType::CardOnFile, 'https://example.com/return')
+            ->create();
+
+        // The API echoes the recurring type back verbatim, so the enum round
+        // trips rather than silently collapsing to Subscription.
+        $this->assertSame(RecurringType::CardOnFile, $method->recurringType);
+        $this->assertSame('pm_test_golden_cardonfile', $method->id);
+        $this->assertTrue($method->isPendingSetup());
+    }
+
+    public function test_it_parses_a_real_unscheduled_card_on_file_setup_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup' => Http::response($this->fixture('payment-method-setup-unscheduled')),
+        ]);
+
+        $method = Plorea::paymentMethods()
+            ->setup('golden-shopper-003', RecurringType::UnscheduledCardOnFile, 'https://example.com/return')
+            ->create();
+
+        $this->assertSame(RecurringType::UnscheduledCardOnFile, $method->recurringType);
+        $this->assertSame('pm_test_golden_unscheduled', $method->id);
+    }
+
+    public function test_it_parses_a_real_trial_subscription_created_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions' => Http::response($this->fixture('subscription-created-trial')),
+        ]);
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_test_golden_method', Amount::nok(24900), BillingInterval::monthly())
+            ->externalId('GOLDEN-EXT-TRIAL-001')
+            ->title('Golden fixture trial plan')
+            ->trialUntil(CarbonImmutable::parse('2026-09-14T21:57:00Z'))
+            ->save();
+
+        // A trial reports its own status, and billing is deferred: nextChargeAt
+        // is exactly trialEndsAt rather than "now" as it is without a trial.
+        $this->assertSame('trialing', $subscription->status);
+        $this->assertTrue($subscription->isTrialing());
+        $this->assertFalse($subscription->isActive());
+        $this->assertSame(
+            $subscription->trialEndsAt?->utc()->format('Y-m-d H:i:s'),
+            $subscription->nextChargeAt?->utc()->format('Y-m-d H:i:s'),
+        );
+        $this->assertSame('2026-09-14 21:57:00', $subscription->trialEndsAt?->utc()->format('Y-m-d H:i:s'));
+    }
+
+    public function test_it_parses_a_real_trialing_subscription_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_trial' => Http::response($this->fixture('subscription-trialing')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->find('sub_test_golden_trial');
+
+        $this->assertTrue($subscription->isTrialing());
+        $this->assertSame('TESTSTORED000001', $subscription->storedPaymentMethodId);
+
+        // Nothing has been charged yet, so every charge-derived field is null.
+        $this->assertNull($subscription->lastChargeAt);
+        $this->assertNull($subscription->lastPaymentReference);
+        $this->assertNull($subscription->accessEndsAt);
+        $this->assertSame(0, $subscription->retryCount);
+    }
+
+    public function test_a_canceled_trial_has_no_access_end_date(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_trial/cancel' => Http::response($this->fixture('subscription-cancel-trial')),
+        ]);
+
+        $cancellation = Plorea::subscriptions()->cancel('sub_test_golden_trial');
+
+        // accessEndsAt is derived from the last charge, so cancelling during a
+        // trial leaves it null — there is no paid period to run out. Consumers
+        // gating access on that date must treat null as "access ends now",
+        // not as "access never ends".
+        $this->assertSame('canceled', $cancellation->status);
+        $this->assertNull($cancellation->accessEndsAt);
+        $this->assertNotNull($cancellation->canceledAt);
+    }
+
+    public function test_it_parses_a_real_payment_link_created_with_a_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/link' => Http::response($this->fixture('payment-link-created-with-merchant')),
+        ]);
+
+        $link = Plorea::payments()
+            ->link('GOLDEN-2026-002', 'Golden fixture product', Amount::nok(19900), 'https://example.com/return')
+            ->merchant(orgNr: '912650774', name: 'Golden Fixture Gym AS')
+            ->create();
+
+        $this->assertSame('created', $link->status);
+        $this->assertSame('pl_test_golden_orgnr_link', $link->id);
+
+        // Plorea resolves the store and balance account from the org number.
+        $this->assertSame('Test Store AS', $link->store);
+        $this->assertSame('BA_TEST_BALANCE_ACCOUNT', $link->balanceAccountId);
+        $this->assertTrue($link->partnerSplitsApplied);
+
+        // The create response does NOT echo the merchant back — the org number
+        // only reappears on the pay page.
+        $this->assertArrayNotHasKey('merchantOrgNr', $link->raw);
+        $this->assertArrayNotHasKey('merchantName', $link->raw);
+    }
+
+    public function test_it_parses_a_real_pay_page_carrying_the_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/pay/pl_test_golden_orgnr_link' => Http::response($this->fixture('pay-page-with-merchant')),
+        ]);
+
+        $link = Plorea::payByLink()->find('pl_test_golden_orgnr_link');
+
+        // This is the only response that echoes the merchant back, so it is
+        // the only way to confirm which org number Plorea recorded.
+        $this->assertSame('912650774', $link->merchantOrgNr);
+        $this->assertSame('Golden Fixture Gym AS', $link->merchantName);
+        $this->assertFalse($link->expired);
+        $this->assertSame(19900, $link->amount?->value);
+
+        // Splits are populated once a merchant is attached; they were null on
+        // the earlier merchant-less capture.
+        $this->assertSame(19900, $link->raw['partnerSplits']['totalAmount']);
+        $this->assertSame('BA_TEST_SPLIT_ACCOUNT', $link->raw['partnerSplits']['splits'][0]['account']);
+        $this->assertNull($link->raw['store']);
     }
 }
