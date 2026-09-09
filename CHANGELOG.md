@@ -41,6 +41,15 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   `tests/Feature/GoldenFixturesTest.php`. Covers subscriptions, payment
   methods, trials, subscription webhooks, the create/update/reactivate error
   shapes, and the refused payment above.
+- A real `payment.failed` webhook delivery is now captured as
+  `tests/Fixtures/webhook-payment-failed.json` and asserted end to end through
+  the signed webhook route. Three of Plorea's four catalogue types have now
+  been observed on the wire; only `payment.refunded` is still routed on the
+  shared envelope alone. The delivery confirms the type string is
+  `payment.failed` in both the `x-plorea-event` header and `body.type`, that
+  `eventId` is duplicated in `x-plorea-event-id` so deliveries can be
+  deduplicated without parsing the body, and that `data` is a strict subset of
+  the payment status shape carrying no refusal reason of any kind.
 
 ### Changed
 

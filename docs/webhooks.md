@@ -80,9 +80,12 @@ open.
 | Plorea type | SDK event | Observed on the wire |
 | --- | --- | --- |
 | `payment.authorised` | `PaymentStatusUpdated` | Yes |
-| `payment.failed` | `PaymentStatusUpdated` | No — routed on the shared envelope |
+| `payment.failed` | `PaymentStatusUpdated` | Yes |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
+
+The type string is what you would expect from the status endpoint, not from
+the English: a refusal is `payment.failed`, never `payment.refused`.
 
 Every delivery — including types not in this table — also dispatches the
 catch-all `WebhookReceived`. The package will not invent a typed event for a
@@ -119,8 +122,26 @@ in particular will never announce itself — if you need dunning, you must poll.
 }
 ```
 
-See `tests/Fixtures/webhook-payment-authorised.json` for a full capture. The
-controller extracts the reference and status defensively — nested `data.*`
+See `tests/Fixtures/webhook-payment-authorised.json` and
+`webhook-payment-failed.json` for full captures.
+
+`data` is a strict **subset** of the payment status shape — no
+`merchantAccount`, `balanceAccountId`, `store` or `splitsEnabled`, no
+`lastRefund*` / `lastCancel*`, and no `createdAt` or `updatedAt` for the
+payment itself. The top-level `createdAt` is the *event's*. On a failure the
+body carries `eventCode: "AUTHORISATION"` with `success: false` and no
+refusal-reason field of any shape, mirroring the status endpoint exactly.
+
+`eventId` appears both in the body and in the `x-plorea-event-id` header, so
+you can deduplicate deliveries without parsing the body at all:
+
+```php
+if (Cache::add("plorea:webhook:{$request->header('x-plorea-event-id')}", true, now()->addDay()) === false) {
+    return;  // already handled
+}
+```
+
+The controller extracts the reference and status defensively — nested `data.*`
 first, then flat fallbacks — but the extracted values are only used to *address*
 the re-fetch, never to decide anything.
 

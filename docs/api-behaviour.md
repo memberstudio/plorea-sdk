@@ -191,8 +191,28 @@ is why an earlier staging run saw nothing at all.
 ### 📋 The catalogue is four types — Plorea, 2026-09-09
 
 `payment.authorised`, `payment.failed`, `payment.refunded`,
-`subscription.charge_succeeded`. More are planned. Only the first and last have
-been observed on the wire; the other two are routed on the shared envelope.
+`subscription.charge_succeeded`. More are planned. Three have now been observed
+on the wire; only `payment.refunded` is still routed on the shared envelope
+alone.
+
+### ✅ `payment.failed` delivery — captured 2026-09-09
+
+Delivered about two seconds after the payment status flipped, for the refused
+payment above.
+
+- The type is `payment.failed` in **both** the `x-plorea-event` header and
+  `body.type`. Never `payment.refused`.
+- `eventId` is duplicated in the `x-plorea-event-id` header — an idempotency
+  key you can read without parsing the body.
+- The body carries `eventCode: "AUTHORISATION"` with `success: false`,
+  mirroring the `webhookEventCode` / `webhookSuccess` pair the status endpoint
+  exposes afterwards. No refusal-reason field of any shape.
+- `data` is a strict **subset** of the payment status shape: no
+  `merchantAccount`, `balanceAccountId`, `store` or `splitsEnabled`, no
+  `lastRefund*` / `lastCancel*`, and no `createdAt`/`updatedAt` for the payment
+  itself — the top-level `createdAt` is the event's.
+
+Fixture: `webhook-payment-failed.json`.
 
 ### 📋 Nothing is emitted for setup, cancel, reactivate, or a failed charge
 
