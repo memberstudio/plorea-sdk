@@ -65,6 +65,21 @@ flag. The status string will not tell you.
 `refund_requested` / `cancel_requested` appear immediately and persist until
 the provider settles — which can take a long time in test. Not a failure.
 
+**How long is "a long time": more than 11 hours, observed 2026-09-09.** A
+`POST payments/refund` returns `refund_requested` with a `refundPspReference`
+right away, and the payment then sat unsettled for over eleven hours before
+`payment.refunded` fired. Nothing was wrong with the refund.
+
+This matters more than it looks, because it sets the horizon for any polling
+loop. A job that polls a refund every few minutes and gives up after an hour —
+a completely reasonable-looking design — will conclude the refund failed on a
+refund that is merely in flight. Poll on a scale of hours, or wait for the
+webhook and treat polling as the backstop. Never surface "refund failed" to a
+user or reverse it in your own books on a timeout alone; `refund_requested`
+means accepted, not pending-and-possibly-doomed.
+
+Whether the test environment's latency reflects production is unknown.
+
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
 The create response omits `merchantOrgNr` and `merchantName` entirely. They
@@ -219,20 +234,27 @@ Fixture: `webhook-payment-failed.json`.
 Confirmed by Plorea 2026-09-09. These transitions are poll-only. A failed
 recurring charge never announces itself.
 
-### ❓ Signature verification is UNPROVEN
+### ✅ Signature convention confirmed — 2026-09-09
 
 `AuthenticateWebhook` uses `PLOREA_WEBHOOK_SECRET` as the HMAC key
-**verbatim** — the characters of the hex string, not the bytes they spell.
+**verbatim** — the characters of the secret, not the bytes they spell.
 
-No check has ever been run against a real signature and its matching secret,
-because the two have never been held at the same time: the secret was never
-stored anywhere, and the captured deliveries cannot be verified against the
-fixtures because the tenant id in them is redacted.
+That convention was checked against a real production `payment.failed`
+delivery: `base64(HMAC-SHA256(secret, raw UTF-8 body))` matched the 44-character
+header value exactly, and the hex-decoded-key variant did **not** match. So the
+middleware's implementation is correct as written.
 
-If Plorea insists deliveries are correctly signed and the route rejects them,
-try `hex2bin($secret)` as the key. **Get one worked example — raw body, a
-throwaway secret, and the resulting `X-Plorea-Signature` — and verify it before
-trusting the middleware end to end.**
+The check was run by the consuming application, which held the signing secret;
+this repository still has never held a secret, and never should. The result
+came back as a match/no-match verdict only — no secret and no signature value
+crossed into this repo, and none belongs in a fixture. That is also why there
+is no golden test for it: a fixture proving signature verification would have
+to contain a real signature over a real body, which is exactly the artefact
+this repo refuses to store.
+
+The remaining exposure is not the algorithm but the bytes it runs over: any
+middleware that re-encodes the body before `AuthenticateWebhook` sees it will
+break verification while the payload still looks valid.
 
 ---
 

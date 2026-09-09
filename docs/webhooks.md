@@ -50,16 +50,18 @@ The middleware verifies the signature against `PLOREA_WEBHOOK_SECRET` with
 for registrations that use an echoed shared secret instead. **It fails closed**:
 with no secret configured, every request is rejected.
 
-> [!IMPORTANT]
-> **Unproven.** `PLOREA_WEBHOOK_SECRET` is a hex string from Plorea, and the
-> package uses it as the HMAC key **verbatim** — the characters of the secret,
-> not the bytes they spell. No verification against a real signature and its
-> matching secret has ever been performed, because the two have never been held
-> at the same time.
->
-> If Plorea insists deliveries are correctly signed and the route still rejects
-> them, that convention is the first thing to check: re-sign the raw body with
-> `hex2bin($secret)` as the key and compare.
+`PLOREA_WEBHOOK_SECRET` is used as the HMAC key **verbatim** — the characters
+of the secret as Plorea gives them to you, not the bytes they spell. That
+convention was checked against a real production delivery on 2026-09-09 and
+matched; re-signing with `hex2bin($secret)` as the key did **not** match. So if
+the route rejects a delivery you believe is genuine, the secret or the raw body
+is wrong, not the encoding.
+
+> [!WARNING]
+> Verify against the **raw** body. Any middleware that re-encodes the request
+> before this one — a JSON normaliser, a body-rewriting proxy, a trailing
+> newline — changes the bytes and breaks the HMAC while leaving the payload
+> looking perfectly valid.
 
 ### Waiting on the secret
 

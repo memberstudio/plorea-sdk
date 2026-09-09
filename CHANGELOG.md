@@ -41,6 +41,18 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   `tests/Feature/GoldenFixturesTest.php`. Covers subscriptions, payment
   methods, trials, subscription webhooks, the create/update/reactivate error
   shapes, and the refused payment above.
+- **The webhook signature convention is confirmed** (2026-09-09). Checked
+  against a real production delivery by the consuming application, which holds
+  the signing secret: `base64(HMAC-SHA256(secret, raw UTF-8 body))` matched the
+  header exactly, and the hex-decoded-key variant did not. `AuthenticateWebhook`
+  is therefore correct as written and needs no change — this was previously the
+  package's one entirely unverified security-relevant behaviour. No secret or
+  signature value entered this repository, and none ever should, which is also
+  why this cannot be covered by a golden fixture.
+- Refund settlement latency is documented: a refund stayed `refund_requested`
+  for **more than 11 hours** before `payment.refunded` fired (test environment,
+  2026-09-09). Polling loops must be sized in hours — an hour-long timeout
+  reports a healthy refund as failed.
 - A real `payment.failed` webhook delivery is now captured as
   `tests/Fixtures/webhook-payment-failed.json` and asserted end to end through
   the signed webhook route. Three of Plorea's four catalogue types have now
@@ -83,11 +95,6 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   populated `failureReason` / `retryCount`, and any `subscription.charge_failed`
   webhook are modelled from Plorea's documentation rather than observed.
   Write dunning code that tolerates a slightly different shape.
-- **Webhook signature verification is unproven.** The package uses
-  `PLOREA_WEBHOOK_SECRET` as the HMAC key verbatim; no check has been run
-  against a real signature and its matching secret. If Plorea insists
-  deliveries are correctly signed and the route rejects them, try
-  `hex2bin($secret)` as the key.
 
 ### Earlier in this cycle
 

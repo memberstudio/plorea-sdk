@@ -110,8 +110,8 @@ SDK's DTOs by `tests/Feature/GoldenFixturesTest.php`, so a shape change breaks
 the build.
 
 [Verified API behaviour](docs/api-behaviour.md) records what has been observed,
-when, and how — including the things that are *not* verified, such as webhook
-signature checking, and the ones known to be
+when, and how — including what is only stated by Plorea rather than seen, and
+what is known to be
 [impossible to reproduce in test](docs/api-behaviour.md#what-cannot-be-reproduced-in-test).
 
 ## Contributing

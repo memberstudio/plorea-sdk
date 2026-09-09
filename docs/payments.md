@@ -179,9 +179,16 @@ Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 Cancel a payment that has not settled; refund one that has.
 
 Both return **immediately** with `refund_requested` / `cancel_requested` and
-the provider settles asynchronously — this can take a while in test. Poll
-`status()` or wait for a `payment.refunded` webhook for the final state. The
-requested status persists in the meantime, so do not treat it as a failure.
+the provider settles asynchronously. Poll `status()` or wait for a
+`payment.refunded` webhook for the final state. The requested status persists
+in the meantime, so do not treat it as a failure.
+
+> [!IMPORTANT]
+> **Settlement took over 11 hours** in one observed test-environment refund
+> (2026-09-09). Size any polling loop in hours, not minutes: a job that gives
+> up after an hour will report a perfectly healthy refund as failed. Never
+> reverse a refund in your own books, or tell a customer it failed, because a
+> timeout elapsed — `refund_requested` means Adyen accepted it.
 
 `modificationReference` is your idempotency key for the modification itself.
 
