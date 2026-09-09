@@ -6,12 +6,12 @@
 [![License](https://img.shields.io/packagist/l/memberflow/plorea)](LICENSE.md)
 
 A Laravel SDK for the [Plorea Payments API](https://docs.plorea.no) — payment
-links, refunds, stored payment methods, subscriptions and webhooks, with an
-expressive, fluent API and first-class testing support.
+links, refunds, stored cards, subscriptions and webhooks, with a fluent API and
+first-class testing support.
 
 Plorea abstracts the underlying payment provider (Adyen) behind a simple API:
 you create a payment link, your customer pays on `pay.plorea.no`, and Plorea
-notifies you via webhook.
+notifies you by webhook.
 
 ```php
 use MemberFlow\Plorea\Data\Amount;
@@ -20,24 +20,11 @@ use MemberFlow\Plorea\Facades\Plorea;
 $link = Plorea::payments()
     ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
     ->payerEmail('kunde@eksempel.no')
-    ->create();
+    ->merchant(orgNr: '912650774', name: 'Techify AS')
+    ->firstOrCreate();
 
 return redirect($link->url);
 ```
-
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Payments](#payments) — [create](#create-a-payment-link) · [firstOrCreate](#reuse-or-create-firstorcreate) · [status](#check-payment-status) · [refund / cancel](#refund-or-cancel)
-- [Payment methods](#payment-methods)
-- [Subscriptions](#subscriptions)
-- [Webhooks](#webhooks)
-- [Testing](#testing)
-- [Error handling](#error-handling)
-
-## Requirements
-
-- PHP 8.4+
-- Laravel 12 or 13
 
 ## Installation
 
@@ -45,596 +32,97 @@ return redirect($link->url);
 composer require memberflow/plorea
 ```
 
-Publish the config file if you need to change more than the environment
-variables cover:
-
-```bash
-php artisan vendor:publish --tag=plorea-config
-```
-
-## Configuration
-
-Set your credentials in `.env`:
-
 ```dotenv
 PLOREA_API_KEY=plr_test_...
 PLOREA_ENVIRONMENT=test        # test | live
 PLOREA_TENANT_ID=your-tenant
-PLOREA_WEBHOOK_SECRET=         # required for webhooks — the route rejects requests until it is set
+PLOREA_WEBHOOK_SECRET=         # the webhook route rejects everything until this is set
 ```
 
-| Env var | Default | Purpose |
-| --- | --- | --- |
-| `PLOREA_API_KEY` | — | Bearer token for the Plorea API |
-| `PLOREA_ENVIRONMENT` | `test` | Sent as the `X-Environment` header on every request |
-| `PLOREA_BASE_URL` | `https://payments.plorea.no` | API base URL |
-| `PLOREA_TENANT_ID` | — | Your tenant, injected into every request that needs one |
-| `PLOREA_WEBHOOK_SECRET` | — | Shared secret for authenticating incoming webhooks (required for the webhook route to accept requests) |
+Requires PHP 8.4+ and Laravel 12 or 13. The service provider is auto-discovered.
 
-All amounts are in **minor units** (øre): `Amount::nok(450000)` is 4 500,00 kr.
+## Documentation
 
-## Payments
+Full documentation lives in [`docs/`](docs/README.md).
 
-### Create a payment link
-
-`link()` takes the required fields; everything optional is chained:
-
-```php
-$link = Plorea::payments()
-    ->link(
-        reference: 'FIN-2026-00123',          // your unique reference
-        product: 'Faktura FIN-2026-00123',
-        amount: Amount::nok(450000),
-        returnUrl: 'https://app.example/paid',
-    )
-    ->payerEmail('kunde@eksempel.no')
-    ->invoiceUrl('https://app.example/invoices/123.pdf')
-    // Required: the invoice issuer (your client), never your own org number.
-    ->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
-    ->create();
-
-$link->url;       // https://pay.plorea.no/...  — send your customer here
-$link->id;        // pl_...
-$link->expiresAt; // CarbonImmutable|null
-```
-
-`merchantOrgNr` is required — it tells Plorea who should receive the payment,
-so it must always be your client's organisation number, not your own. The
-Plorea API silently accepts a link without it, so the SDK refuses to create
-one (`PloreaException`) rather than let the payment fail after your customer
-has paid. `merchantName` and `merchantEmail` are optional but recommended for
-KYC communication. Do not send a store or balance account — Plorea resolves
-those from the org number automatically.
-
-The create response does **not** echo the merchant back — the org number only
-reappears on the pay page, so `Plorea::payByLink()->find($id)->merchantOrgNr`
-is the only way to confirm which one Plorea recorded. Attaching a merchant
-also populates `partnerSplits` there.
-
-KYC is implicit: the first payment for a new `merchantOrgNr` starts merchant
-onboarding, and the merchant receives an email with an onboarding link
-(`merchantEmail` when provided). The link is payable while KYC is pending —
-the payout is simply held in escrow until KYC is approved (typically 1–5
-business days).
-
-### Reuse or create (`firstOrCreate`)
-
-Plorea has no idempotency on duplicate references — creating twice gives you
-two live links. `firstOrCreate()` checks the stored payment state first:
-
-```php
-$link = Plorea::payments()
-    ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
-    ->firstOrCreate();
-```
-
-- An **open** link with the same amount, currency, tenant, and environment
-  is returned as-is.
-  Because the status endpoint exposes no expiry (and the status string has
-  not been observed to flip to `expired`), the candidate link is verified
-  against the pay-page endpoint, which reports a computed `expired` flag —
-  an open-but-expired link is superseded instead of handed out again.
-- A **dead** link (expired, cancelled, refunded) or an open link with a
-  different amount is superseded by a new link with a suffixed reference
-  (`FIN-2026-00123-1`, `-2`, ...).
-- An already **paid** reference throws `PaymentAlreadyPaidException` — a
-  fresh link for a settled invoice would be payable again, so this fails
-  loudly instead. The exception carries the `PaymentStatus`.
-
-Two caveats: the check-then-create is not atomic, so two calls racing on the
-same new reference can still both create a link — serialize concurrent calls
-per reference (e.g. `Cache::lock()`) if double submits are possible. And the
-suffix scheme assumes `{reference}-1` is not itself a real, distinct invoice
-in your numbering.
-
-### Check payment status
-
-```php
-$status = Plorea::payments()->status('FIN-2026-00123');
-
-$status->isPaid();             // authorised or paid — money moved
-$status->isOpen();             // created, pending or active — still payable
-$status->isRefundRequested();  // a refund request was accepted, provider settling
-$status->isCancelRequested();  // a cancel request was accepted, provider settling
-$status->status;               // the raw status string
-$status->amount;               // Amount|null
-$status->pspReference;
-```
-
-Observed statuses: `created`, `pending`, `active` (open), `authorised`,
-`paid` (paid — test payments settle on `authorised`), `refund_requested`,
-`cancel_requested` (a modification was accepted and awaits the provider),
-`cancelled`,
-`refunded`. `expired` is handled defensively but has not been observed live —
-links past their expiry keep reporting an open status, so judge expiry from
-the `expiresAt` you stored when creating the link (or the pay-page endpoint),
-not the status string. The model is deliberately open: unknown strings pass
-through on `status` and can be checked with `is('...')`.
-
-The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe
-the inbound Adyen webhook Plorea received for the payment — not the webhook
-Plorea sends to your application.
-
-### Refund or cancel
-
-```php
-Plorea::payments()->refund(
-    'FIN-2026-00123',
-    modificationReference: 'FIN-2026-00123-refund-1', // your idempotency reference
-    amount: Amount::nok(450000),                      // omit for a full refund
-    reason: 'Customer requested refund',
-);
-
-Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
-```
-
-Both requests return immediately with a `refund_requested` /
-`cancel_requested` status — the provider settles the modification
-asynchronously, so poll `status()` (or wait for a webhook) to observe the
-final state.
-
-## Payment methods
-
-Store a card for recurring charges. Two flows are supported:
-
-```php
-use MemberFlow\Plorea\Enums\RecurringType;
-
-// Hosted: redirect the customer to an Adyen-hosted page
-$method = Plorea::paymentMethods()
-    ->setup('customer-123', RecurringType::Subscription, 'https://app.example/return')
-    ->create();
-
-return redirect($method->adyenPaymentLinkUrl);
-
-// Drop-in: embed the Adyen Drop-in in your own UI
-$session = Plorea::paymentMethods()
-    ->setup('customer-123', RecurringType::Subscription, 'https://app.example/return')
-    ->session();
-
-$session->sessionId;
-$session->sessionData;
-```
-
-Both flows make Adyen authorise (and immediately reverse) a 1 NOK
-verification charge to store the card. The customer is never billed for it.
-
-Poll until the customer has completed the setup:
-
-```php
-$method = Plorea::paymentMethods()->find($method->id);
-
-$method->isPendingSetup();  // customer has not finished the flow yet
-$method->isActive();        // card stored, ready to charge
-$method->hasFailed();       // verification refused — no card stored
-
-$method->cardLast4;             // "1111"
-$method->cardBrand;             // "visa"
-$method->expiryDate;            // "03/2030"
-$method->storedPaymentMethodId; // Adyen's token
-```
-
-A `failed` method is terminal: the verification authorisation was refused, so
-no card was ever stored and no charge can succeed. Start a new setup rather
-than retrying. Both creating and updating a subscription reject a non-active
-payment method with a 400 `ValidationException` ("Payment method is not
-active"); the create response also names the offending `paymentMethodId`.
-
-Do not branch on `failureReason` — it comes back **null even for a genuine
-Adyen refusal** (verified 2026-09-09), so the status is the only signal you
-have. The same caution applies to Plorea's validation messages: a request
-missing two required fields answers with a static list of all five, so treat
-the message as text for a human, never as a parseable list of what to fix.
-
-## Subscriptions
-
-### Create
-
-```php
-use MemberFlow\Plorea\Data\{Amount, BillingInterval};
-
-$subscription = Plorea::subscriptions()
-    ->create('pm_63cd...', Amount::nok(19900), BillingInterval::monthly())
-    ->externalId('ws_acme_456')           // link to an entity in your system
-    ->title('Done CRM Pro')
-    ->quantity(5)
-    ->vat(rate: 0.25, amount: 3980)
-    ->trialUntil(now()->addDays(14))
-    ->retryPolicy(3, retryIntervalDays: 2)
-    ->save();
-
-$subscription->isActive();
-$subscription->nextChargeAt;
-```
-
-Billing starts immediately — the create response already carries the first
-`nextChargeAt`, and Plorea's scheduler charges the card within seconds unless
-you set a trial. Plorea owns the schedule; your app never triggers the
-recurring charge itself.
-
-With `trialUntil()`, the subscription is created `trialing` and `nextChargeAt`
-is set to exactly `trialEndsAt`, so nothing is charged until the trial runs
-out. Use `$subscription->isTrialing()` — a trialing subscription is *not*
-`isActive()`.
-
-### Update, cancel, reactivate
-
-```php
-Plorea::subscriptions()->update($subscription->id)
-    ->amount(Amount::nok(39900))
-    ->quantity(10)
-    ->save();
-
-$cancellation = Plorea::subscriptions()->cancel($subscription->id, 'customer_requested');
-
-$cancellation->accessEndsAt;  // end of the period already paid for
-
-// After the customer fixes their card on a payment_failed subscription:
-Plorea::subscriptions()->update($subscription->id)->paymentMethod('pm_new...')->save();
-Plorea::subscriptions()->reactivate($subscription->id);
-```
-
-Cancelling clears `nextChargeAt` and sets `accessEndsAt` one billing interval
-after the last charge — gate access on that date, not on the cancellation
-time. The status is spelled `canceled`.
-
-Cancelling during a trial leaves `accessEndsAt` **null**, because it is
-derived from the last charge and a trial has none. Treat null as "access ends
-now" rather than "access never ends".
-
-> [!NOTE]
-> `reactivate()` does not resume the original cadence — it sets the
-> subscription active again and recomputes `nextChargeAt`.
->
-> It used to charge *unconditionally*, billing a customer twice for a period
-> they had already paid (observed on a daily subscription reactivated 33
-> seconds after cancelling). Fixed by Plorea and **verified against the test
-> environment on 2026-09-09**: a single cancel → reactivate on a subscription
-> with one settled charge left the charge count unchanged across a 10-minute
-> poll, and set `nextChargeAt` to exactly one interval after that charge.
->
-> Reactivating an *already active* subscription is refused outright — HTTP 400
-> `ValidationException`, "Only canceled subscriptions can be reactivated"
-> (verified 2026-09-09) — so neither shape can double-charge any more. Only
-> production remains unobserved, and checking that `accessEndsAt` has passed
-> before reactivating still costs nothing.
-
-### Find and list
-
-```php
-$subscription = Plorea::subscriptions()->find('sub_774c...');
-
-// All subscriptions for one of your entities:
-$subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', status: 'active');
-```
-
-### Charges
-
-```php
-// Manual, off-schedule charge:
-$charge = Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat');
-
-$charge->status;      // "charge_created" — the request was accepted
-$charge->resultCode;  // "Authorised" — Adyen's answer
-$charge->reference;   // "sub_…-chg_…"
-
-// Charge history, newest first:
-$charges = Plorea::subscriptions()->charges($subscription->id);
-
-$charges->first()->status;  // "authorised"
-$charges->first()->reason;  // "scheduled_charge" or "manual_charge"
-```
-
-A declined card raises `ChargeFailedException` (402). A subscription that is
-not chargeable at all (cancelled, or on an inactive payment method) raises
-`ValidationException` (400) instead — the two are different failures.
-
-Each charge produces a payment whose reference is `{subscriptionId}-{chargeId}`,
-also exposed as `$subscription->lastPaymentReference`. It resolves through the
-ordinary payment status endpoint:
-
-```php
-$status = Plorea::payments()->status($subscription->lastPaymentReference);
-$status->isPaid();
-```
-
-> [!WARNING]
-> **Scheduler-created charges are not resolvable through `payments()->status()`.**
-> Read them from `subscriptions()->charges()` instead.
->
-> The symptom has changed but the outcome has not. On 2026-09-04 the lookup
-> answered 403 `AuthenticationException` ("Tenant mismatch"); retested on
-> 2026-09-09 against a fresh, authorised, same-tenant scheduler charge it
-> answered 404 `NotFoundException` ("Payment not found"), twice, 25 minutes
-> apart. The reference was taken verbatim from the charge's own `reference`
-> field, so this is not a formatting problem.
->
-> Manually created charges *do* resolve — `payment-status-subscription-charge.json`
-> is a real capture of one, returning `platform: "subscription"` with a null
-> `paymentLinkId`. So the endpoint is not restricted to payment links; the
-> split is specifically manual versus scheduled. Whether that is intended is
-> an open question with Plorea.
-
-## Webhooks
-
-Webhook registration with Plorea is **manual, per tenant**: hand Plorea your
-webhook URL via a secure channel and obtain the signing secret from them.
-Real deliveries (captured from Plorea's test environment) are **signed, not
-authenticated with an echoed header**: each request carries an
-`X-Plorea-Signature` header holding a base64-encoded HMAC-SHA256 of the raw
-request body, plus `x-plorea-event-id` (`evt_…`) and `x-plorea-event`
-(e.g. `payment.authorised`) headers. The middleware verifies the signature
-with `PLOREA_WEBHOOK_SECRET`; requests without a signature header fall back
-to comparing the `Authorization` header against the secret verbatim
-(optionally `Bearer `-prefixed), for registrations that use an echoed
-shared secret instead.
-
-The package registers `POST /plorea/webhook` automatically and rejects every
-request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed).
-
-Plorea's event catalogue, confirmed by Plorea on 2026-09-09, has four types —
-more are planned, so treat the list as open:
-
-| Type | SDK event |
+| Guide | |
 | --- | --- |
-| `payment.authorised` | `PaymentStatusUpdated` |
-| `payment.failed` | `PaymentStatusUpdated` |
-| `payment.refunded` | `PaymentStatusUpdated` |
-| `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` |
+| [Getting started](docs/getting-started.md) | Installation, the full configuration reference, the facade |
+| [Payments](docs/payments.md) | Payment links, `firstOrCreate`, status, refunds, cancellations |
+| [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in |
+| [Subscriptions](docs/subscriptions.md) | Create, trials, update, cancel, reactivate, charges, dunning |
+| [Webhooks](docs/webhooks.md) | Signature verification, the event catalogue, what is poll-only |
+| [Testing](docs/testing.md) | `Plorea::fake()`, stubs, assertions |
+| [Error handling](docs/errors.md) | Exceptions, status mapping, retries and idempotency |
+| [Request logging](docs/request-logging.md) | Building an audit trail from SDK events |
+| [API reference](docs/api-reference.md) | Every method, DTO property, enum and event |
+| [Verified API behaviour](docs/api-behaviour.md) | What has actually been observed against the live API — and what has not |
 
-Anything else — including future types — reaches you through `WebhookReceived`
-alone; the package will not invent a typed event for a payload shape it has
-never seen. With the secret in place, listen for the events:
+## What you need to know before writing code
 
-> [!TIP]
-> Waiting on the signing secret from Plorea? Set
-> `PLOREA_WEBHOOK_VERIFY=false` on staging/test to accept deliveries without
-> authentication so the rest of the flow can be exercised. Keep verification
-> on in production — without it anyone who knows the URL can post fake
-> webhooks, so your listeners must re-fetch the payment status from the API
-> (as the listener below already does) rather than trust payloads.
+Five behaviours account for most of the surprises. Each links to the detail.
 
-> [!NOTE]
-> Captured deliveries look like `{eventId, createdAt, tenantId, type,
-> data: {reference, status, eventCode, success, …}}` — see
-> `tests/Fixtures/webhook-payment-authorised.json` for a full example. The
-> package extracts the reference and status defensively (nested `data.*`
-> first-party keys plus flat fallbacks) but still treats the payload as
-> untrusted — which is exactly why the listener below re-fetches the
-> authoritative state instead of reading it from the payload.
+**Amounts are minor units.** `Amount::nok(450000)` is 4 500,00 kr. There is no
+major-unit constructor, on purpose.
 
-> [!IMPORTANT]
-> `PLOREA_WEBHOOK_SECRET` is a hex string from Plorea, and the package uses
-> it as the HMAC key **verbatim** — the characters of the secret, not the
-> bytes they spell. If signature verification rejects deliveries that Plorea
-> insists are correctly signed, that convention is the first thing to check:
-> re-signing the raw body with `hex2bin($secret)` as the key instead would
-> confirm it. No verification against a real signature has been performed
-> yet.
+**`merchantOrgNr` is required**, and it is always the invoice issuer's — your
+client's — organisation number, never your platform's. Plorea accepts a link
+without it and fails only at payout time, so the SDK refuses to create one.
+→ [Payments](docs/payments.md#the-merchant-is-required)
 
-```php
-use MemberFlow\Plorea\Events\{PaymentStatusUpdated, WebhookReceived};
+**There is no idempotency on references.** Creating twice gives you two live,
+payable links. Use `firstOrCreate()`, which reuses an open link, supersedes a
+dead one, and throws `PaymentAlreadyPaidException` for a settled reference.
+→ [Payments](docs/payments.md#reuse-or-create-firstorcreate)
 
-Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) {
-    // Treat the webhook as a ping: fetch the authoritative state instead of
-    // trusting status or amount from the payload.
-    $status = Plorea::payments()->status($event->reference);
+**Webhooks are pings, not truth.** Re-fetch authoritative state in every
+listener. Delivery is best-effort, and several important transitions — card
+setup, cancellation, reactivation, and a **failed** recurring charge — emit no
+webhook at all. If you need dunning, you must poll.
+→ [Webhooks](docs/webhooks.md#what-is-not-sent)
 
-    if ($status->isPaid()) {
-        // mark the invoice paid — idempotently: the webhook, a status poll,
-        // and the customer's return page can all race on the same reference.
-    }
-});
-
-// Or the raw payload for every webhook:
-Event::listen(WebhookReceived::class, fn (WebhookReceived $event) => $event->payload);
-```
-
-### Subscription webhooks
-
-Real deliveries were captured on 2026-09-04. Plorea emitted exactly two event
-types across a full subscription lifecycle:
-
-| Trigger | Event type | SDK event |
-| --- | --- | --- |
-| Scheduler charges the card | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` |
-| Manual `charge()` | `payment.authorised` | `PaymentStatusUpdated` |
-
-Plorea confirmed on 2026-09-09 that this is by design: nothing is emitted for
-card setup (success or failure), cancellation, reactivation, or a **failed**
-scheduler charge. Those transitions are poll-only, so **do not wait on a
-webhook for them** — read them from `paymentMethods()->find()`,
-`subscriptions()->find()` and `payments()->status()`. A failed recurring
-charge in particular will never announce itself; if you need to react to
-dunning, poll.
-
-```php
-use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
-
-Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSucceeded $event) {
-    // $event->subscriptionId, ->chargeId, ->reference, ->externalId
-    $subscription = Plorea::subscriptions()->find($event->subscriptionId);
-
-    // extend access idempotently — the same charge can be delivered twice
-});
-```
-
-`SubscriptionChargeSucceeded` deliberately does **not** also raise
-`PaymentStatusUpdated`, even though the payload carries a
-`{subscriptionId}-{chargeId}` reference. Firing both would have every listener
-book the same charge twice — and that reference is not resolvable through the
-payment status endpoint anyway (see the warning above). Read the charge from
-`subscriptions()->charges()` instead.
-
-Any other `subscription.*` type reaches you through `WebhookReceived` only.
-The SDK will not invent an event for a shape nobody has seen — branch on
-`type` there and re-fetch with `Plorea::subscriptions()->find($id)`.
-
-Do not rely on webhooks for billing state at all — run a scheduled job that
-refreshes active subscriptions through `find()` or `forExternalId()`.
-
-Two practices worth copying from production integrations:
-
-- **Verify amounts before booking.** Compare `$status->amount` against what
-  you expected locally; on mismatch, flag for manual handling instead of
-  auto-booking.
-- **Poll as backup.** Webhook delivery is best-effort — run a scheduled job
-  that calls `status()` for your open payment links.
-
-Configure the path, extra middleware, or disable the route entirely in
-`config/plorea.php`. Adding a throttle to the extra middleware (e.g.
-`'throttle:60,1'`) rate-limits the endpoint against secret-guessing.
-Unparseable payloads are acknowledged with a 200 (there
-is nothing to retry); return a 500 from your listener only for transient
-failures where you want Plorea to redeliver.
-
-Remember to exclude the webhook path from CSRF verification if your
-application applies it globally:
-
-```php
-// bootstrap/app.php
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->validateCsrfTokens(except: ['plorea/webhook']);
-})
-```
-
-## Request logging
-
-The SDK deliberately stores nothing in your database — payment links and
-subscriptions are your domain data, and a package-owned table would be a
-second source of truth that drifts (Plorea settles refunds and cancels
-asynchronously, and webhook delivery is best-effort). Instead, every API
-call dispatches events you can listen to:
-
-- `RequestSent` — right before a request goes out: `method`, `uri`, `payload`.
-- `ResponseReceived` — for every response, including error responses (before
-  the exception is thrown): `method`, `uri`, `payload`, `status`, `response`
-  (decoded body or `null`), `durationMs`. Not dispatched when the API is
-  unreachable.
-
-Neither event ever carries the API key or any headers.
-
-If you want an audit trail of everything sent to Plorea, build a small
-log table in your app and fill it from `ResponseReceived` — one listener
-gives you a full request/response row:
-
-```php
-use MemberFlow\Plorea\Events\ResponseReceived;
-
-Event::listen(ResponseReceived::class, function (ResponseReceived $event) {
-    PloreaRequestLog::create([
-        'method' => $event->method,          // "POST"
-        'uri' => $event->uri,                // "payments/link"
-        'payload' => $event->payload,        // json column
-        'status' => $event->status,          // 200, 404, ...
-        'response' => $event->response,      // json column, nullable
-        'duration_ms' => $event->durationMs,
-    ]);
-});
-```
-
-This keeps the schema in your hands — add the columns and relations you
-actually need (a `payable` morph to your invoice model, an indexed
-`reference` extracted from the payload, a retention policy). Queue the
-listener if you don't want logging on the request's critical path, and
-treat the logged payloads as sensitive: they contain customer emails.
+**Status strings do not always say what you would guess.** A refused payment
+reports `failed`, not `refused`. Subscriptions use the US spelling `canceled`.
+`expired` is never reported — judge expiry from `expiresAt`. Use the typed
+helpers (`isPaid()`, `isActive()`, `is('...')`) rather than comparing strings.
+→ [Verified API behaviour](docs/api-behaviour.md)
 
 ## Testing
 
-Swap the HTTP client for a fake — no requests leave your test suite, and every
-endpoint has a sensible default response:
-
 ```php
-use MemberFlow\Plorea\Facades\Plorea;
-
 Plorea::fake();
 
-$link = Plorea::payments()
-    ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
-    ->create();
+// ... exercise your code ...
 
 Plorea::assertSent('payments/link');
 Plorea::assertSent(fn ($request) => $request->input('amount') === 50000);
-Plorea::assertSentCount(1);
 ```
 
-Stub specific endpoints with arrays, callables, or exceptions:
+No HTTP leaves your suite, every endpoint has a sensible default, and status
+lookups mirror the real API closely enough that `firstOrCreate()` works out of
+the box. → [Testing](docs/testing.md)
 
-```php
-use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+## Verified against the live API
 
-Plorea::fake([
-    'payments/status/*' => ['reference' => 'ref-1', 'status' => 'refused'],
-    'POST payments/link' => fn ($request) => ['paymentLinkId' => 'pl_1', /* ... */],
-    'subscriptions/*/charge' => new ChargeFailedException('Charge failed: Refused', 402),
-]);
-```
+The claims in these docs are not read off Plorea's API documentation. Anonymised
+captures of **real** responses live in `tests/Fixtures/` and are run through the
+SDK's DTOs by `tests/Feature/GoldenFixturesTest.php`, so a shape change breaks
+the build.
 
-Patterns match the request path (`payments/*`), optionally prefixed with a
-method (`POST payments/link`).
-
-Status lookups mirror the real API: a reference the fake has seen a payment
-link created for reports an open (`active`) status echoing that link — so
-`firstOrCreate()` works out of the box — while an unknown reference throws
-`NotFoundException`, exactly like a live 404. Stub `payments/status/*` to
-simulate paid, refused, or any other state.
-
-## Error handling
-
-All exceptions extend `MemberFlow\Plorea\Exceptions\PloreaException`:
-
-| Exception | Thrown when |
-| --- | --- |
-| `ValidationException` | 400 — invalid request data |
-| `AuthenticationException` | 401 / 403 — invalid or missing API key |
-| `ChargeFailedException` | 402 — a subscription charge was declined |
-| `NotFoundException` | 404 — unknown reference or ID |
-| `ServerException` | 5xx — Plorea-side error |
-| `ConnectionException` | The API could not be reached |
-| `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |
-
-Plorea's error bodies are not consistently shaped, so the exception message
-falls back through `error`, `message`, and the raw body. `RequestException`
-(the parent of the HTTP errors above) always exposes the full response:
-
-```php
-try {
-    Plorea::subscriptions()->charge($id);
-} catch (ChargeFailedException $e) {
-    $e->status;              // 402
-    $e->response?->json();   // the raw error body
-}
-```
+[Verified API behaviour](docs/api-behaviour.md) records what has been observed,
+when, and how — including what is only stated by Plorea rather than seen, and
+what is known to be
+[impossible to reproduce in test](docs/api-behaviour.md#what-cannot-be-reproduced-in-test).
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
-development setup and the checks your pull request must pass.
+See [CONTRIBUTING.md](CONTRIBUTING.md). `composer check` (Pint, Rector,
+PHPStan level 8, PHPUnit) must pass.
 
 ## Security
 
-If you discover a security vulnerability, please follow the process in
-[SECURITY.md](SECURITY.md) instead of opening a public issue.
+Report vulnerabilities via [SECURITY.md](SECURITY.md), not a public issue.
+Never commit real credentials — not in tests, fixtures, or comments.
 
 ## License
 

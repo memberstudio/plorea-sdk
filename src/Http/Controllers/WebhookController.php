@@ -23,10 +23,11 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * Plorea's official catalogue (confirmed by Plorea 2026-09-09) holds four
  * types: "payment.authorised", "payment.failed", "payment.refunded" and
  * "subscription.charge_succeeded", with more planned. The three payment
- * types all carry a reference and raise PaymentStatusUpdated; only
- * "payment.authorised" and "subscription.charge_succeeded" have been seen
- * on the wire here, so the other two are routed on the shared envelope
- * rather than a captured body.
+ * types all carry a reference and raise PaymentStatusUpdated.
+ * "payment.authorised", "payment.failed" and
+ * "subscription.charge_succeeded" have been captured from the wire; only
+ * "payment.refunded" is still routed on the shared envelope rather than a
+ * captured body.
  *
  * Nothing is emitted for card setup, cancel, reactivate, or a *failed*
  * scheduler charge — those transitions are poll-only, via

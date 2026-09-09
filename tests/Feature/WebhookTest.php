@@ -72,39 +72,68 @@ class WebhookTest extends TestCase
     }
 
     /**
-     * Plorea's catalogue (confirmed 2026-09-09) also contains
-     * "payment.failed" and "payment.refunded". Neither has been captured
-     * from the wire yet, so this asserts only that the shared envelope
-     * routes them to PaymentStatusUpdated — the `data` bodies below are
-     * constructed, not golden fixtures, and nothing beyond `reference`
-     * and `status` is claimed about them.
+     * A real "payment.failed" delivery, captured 2026-09-09 roughly two
+     * seconds after the payment status flipped.
+     *
+     * The type string is "payment.failed" in both the x-plorea-event header
+     * and body.type — never "payment.refused", matching the status endpoint,
+     * which reports a refusal as "failed". The body carries eventCode
+     * "AUTHORISATION" with success false, mirroring the webhookEventCode /
+     * webhookSuccess pair the status endpoint exposes afterwards, and no
+     * refusal-reason field of any shape. `data` is a strict subset of the
+     * payment status shape: no merchantAccount / balanceAccountId / store,
+     * no lastRefund* or lastCancel*, and the only createdAt is the event's
+     * own, not the payment's.
      */
-    public function test_it_routes_the_other_payment_event_types_to_payment_status_updated(): void
+    public function test_it_handles_a_real_failed_payment_webhook(): void
+    {
+        Event::fake([WebhookReceived::class, PaymentStatusUpdated::class]);
+
+        $payload = $this->fixture('webhook-payment-failed');
+
+        $this->postSignedWebhook($payload)
+            ->assertOk()
+            ->assertSee('[accepted]');
+
+        Event::assertDispatched(WebhookReceived::class, fn (WebhookReceived $event): bool => $event->payload === $payload);
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->reference === 'GOLDEN-2026-REFUSED-001'
+            && $event->status === 'failed');
+
+        $this->assertArrayNotHasKey('failureReason', $payload['data']);
+        $this->assertArrayNotHasKey('refusalReason', $payload['data']);
+
+        // The event id is duplicated in the x-plorea-event-id header, so
+        // consumers can deduplicate without parsing the body.
+        $this->assertSame('evt_00000000000000000000000000000009', $payload['eventId']);
+    }
+
+    /**
+     * "payment.refunded" is in Plorea's catalogue (confirmed 2026-09-09) but
+     * has not been captured from the wire, so this asserts only that the
+     * shared envelope routes it to PaymentStatusUpdated — the `data` body
+     * below is constructed, not a golden fixture, and nothing beyond
+     * `reference` and `status` is claimed about it.
+     */
+    public function test_it_routes_refunded_payment_events_to_payment_status_updated(): void
     {
         Event::fake([PaymentStatusUpdated::class]);
 
-        $types = ['payment.failed' => 'refused', 'payment.refunded' => 'refunded'];
+        $this->postSignedWebhook([
+            'eventId' => 'evt_00000000000000000000000000000010',
+            'createdAt' => '2026-09-09T12:00:00.000Z',
+            'tenantId' => 'test-tenant',
+            'type' => 'payment.refunded',
+            'data' => [
+                'reference' => 'GOLDEN-2026-001',
+                'status' => 'refunded',
+            ],
+        ])->assertOk();
 
-        foreach ($types as $type => $status) {
-            $this->postSignedWebhook([
-                'eventId' => 'evt_00000000000000000000000000000009',
-                'createdAt' => '2026-09-09T12:00:00.000Z',
-                'tenantId' => 'test-tenant',
-                'type' => $type,
-                'data' => [
-                    'reference' => 'GOLDEN-2026-001',
-                    'status' => $status,
-                ],
-            ])->assertOk();
-        }
-
-        foreach ($types as $status) {
-            Event::assertDispatched(
-                PaymentStatusUpdated::class,
-                fn (PaymentStatusUpdated $event): bool => $event->reference === 'GOLDEN-2026-001'
-                    && $event->status === $status,
-            );
-        }
+        Event::assertDispatched(
+            PaymentStatusUpdated::class,
+            fn (PaymentStatusUpdated $event): bool => $event->reference === 'GOLDEN-2026-001'
+                && $event->status === 'refunded',
+        );
     }
 
     public function test_it_handles_a_real_subscription_charge_webhook(): void

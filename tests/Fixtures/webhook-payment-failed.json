@@ -1,0 +1,20 @@
+{
+    "eventId": "evt_00000000000000000000000000000009",
+    "createdAt": "2026-09-09T08:56:40.922Z",
+    "tenantId": "test-tenant",
+    "type": "payment.failed",
+    "data": {
+        "reference": "GOLDEN-2026-REFUSED-001",
+        "orderId": null,
+        "status": "failed",
+        "provider": "adyen",
+        "pspReference": "TESTPSPREF000009",
+        "paymentLinkId": "pl_test_golden_refused",
+        "paymentLinkUrl": "https://pay.plorea.no/pl_test_golden_refused",
+        "amount": 10000,
+        "currency": "NOK",
+        "environment": "test",
+        "eventCode": "AUTHORISATION",
+        "success": false
+    }
+}

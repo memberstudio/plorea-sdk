@@ -102,7 +102,7 @@ final class DefaultFixtures
     /**
      * Mirrors the real API: references the fake has seen a link created for
      * report an open status echoing that link, anything else is a 404. Stub
-     * `payments/status/*` to simulate paid, refused, or other states.
+     * `payments/status/*` to simulate paid, failed, or other states.
      *
      * @param  list<RecordedRequest>  $history
      * @return array<string, mixed>
