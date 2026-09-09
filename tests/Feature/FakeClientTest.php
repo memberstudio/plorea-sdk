@@ -80,12 +80,12 @@ class FakeClientTest extends TestCase
     public function test_it_uses_stubbed_responses(): void
     {
         Plorea::fake([
-            'payments/status/*' => ['reference' => 'ref-1', 'status' => 'refused'],
+            'payments/status/*' => ['reference' => 'ref-1', 'status' => 'failed'],
         ]);
 
         $status = Plorea::payments()->status('ref-1');
 
-        $this->assertTrue($status->is('refused'));
+        $this->assertTrue($status->is('failed'));
     }
 
     public function test_it_supports_callable_and_throwable_stubs(): void

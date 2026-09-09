@@ -51,7 +51,7 @@ $status->isRefundRequested();  // accepted, provider settling asynchronously
 $status->isCancelRequested();
 ```
 
-Use the helpers, not string comparison. `expired` never appears live — links past expiry keep reporting open; judge expiry from the stored `expiresAt`. The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe Plorea's inbound Adyen webhook, not webhooks sent to your app. Verify `$status->amount` against your local expectation before booking; on mismatch, flag for manual handling.
+Use the helpers, not string comparison. A **refused payment reports `failed`, not `refused`** (captured 2026-09-09) — `$status->is('failed')`; the decline itself shows as `webhookEventCode: AUTHORISATION` with `webhookSuccess: false`, and there is no `failureReason` field on this shape. `expired` never appears live — links past expiry keep reporting open; judge expiry from the stored `expiresAt`. The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe Plorea's inbound Adyen webhook, not webhooks sent to your app. Verify `$status->amount` against your local expectation before booking; on mismatch, flag for manual handling.
 
 ## Refund / cancel
 
@@ -214,7 +214,7 @@ Plorea::assertSentCount(1);
 
 // Stub endpoints with arrays, callables, or exceptions:
 Plorea::fake([
-    'payments/status/*' => ['reference' => 'ref-1', 'status' => 'refused'],
+    'payments/status/*' => ['reference' => 'ref-1', 'status' => 'failed'],
     'subscriptions/*/charge' => new ChargeFailedException('Charge failed: Refused', 402),
 ]);
 ```

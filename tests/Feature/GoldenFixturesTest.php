@@ -107,6 +107,40 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($status->lastCancelReference);
     }
 
+    /**
+     * A refused payment reports status "failed" — not "refused".
+     *
+     * Captured 2026-09-09 from a real payment link paid with a card Adyen
+     * declines after a completed 3DS2 challenge. Two shape facts matter:
+     * the refusal shows up as webhookEventCode "AUTHORISATION" with
+     * webhookSuccess false (the fields describing Plorea's *inbound* Adyen
+     * webhook are what report the decline), and the payment status shape
+     * carries no failureReason-style field at all, so status is the only
+     * signal. The status endpoint resolves normally here — the 404 seen for
+     * subscription charges is specific to the scheduler-charge path.
+     */
+    public function test_it_parses_a_real_refused_payment_status_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/GOLDEN-2026-REFUSED-001' => Http::response($this->fixture('payment-status-refused')),
+        ]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-REFUSED-001');
+
+        $this->assertSame('failed', $status->status);
+        $this->assertTrue($status->is('failed'));
+        $this->assertFalse($status->isPaid());
+        $this->assertFalse($status->isOpen());
+        $this->assertFalse($status->isAuthorised());
+        $this->assertFalse($status->isRefundRequested());
+        $this->assertFalse($status->isCancelRequested());
+        $this->assertSame(10000, $status->amount?->value);
+        $this->assertSame('AUTHORISATION', $status->webhookEventCode);
+        $this->assertFalse($status->webhookSuccess);
+        $this->assertSame('2026-09-09 08:56:40', $status->lastWebhookAt?->format('Y-m-d H:i:s'));
+        $this->assertArrayNotHasKey('failureReason', $status->raw);
+    }
+
     public function test_it_parses_a_real_refund_response(): void
     {
         Http::fake([

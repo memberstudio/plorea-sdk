@@ -4,6 +4,84 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
+### Documentation
+
+- Full documentation now lives in `docs/`, split into guides (getting started,
+  payments, payment methods, subscriptions, webhooks, testing, error handling,
+  request logging), a complete `docs/api-reference.md` covering every public
+  method, DTO property, enum and event, and `docs/api-behaviour.md` — a dated
+  record of what has actually been observed against the live Plorea test
+  environment, what was only stated by Plorea, and what is known to be
+  impossible to reproduce in test. The README is now an overview that links
+  into it.
+
+### Fixed
+
+- **A refused payment reports `status: "failed"`, not `"refused"`.** Captured
+  2026-09-09 from a real declined authorisation. Previous documentation and
+  the fake's stub examples used `refused`, a string the API never returns, so
+  any `$status->is('refused')` written from those examples was dead code.
+  `isPaid()` and `isOpen()` were already correct. The decline itself is
+  carried by `webhookEventCode: "AUTHORISATION"` with `webhookSuccess: false`;
+  there is no `failureReason`-style field on the payment status shape.
+
+### Added
+
+- `subscription.charge_succeeded` webhooks now dispatch a dedicated
+  `SubscriptionChargeSucceeded` event carrying `subscriptionId`, `chargeId`,
+  `reference` and `externalId`. It deliberately does not also raise
+  `PaymentStatusUpdated` — firing both would book the same charge twice.
+- Trial support: `->trialUntil()` creates the subscription `trialing` with
+  `nextChargeAt` equal to `trialEndsAt`, and `isTrialing()` distinguishes it
+  from `isActive()`.
+- `RecurringType::CardOnFile` and `RecurringType::UnscheduledCardOnFile` are
+  verified against the live API and echoed back on setup.
+- Golden fixtures: anonymised captures of real API responses in
+  `tests/Fixtures/`, asserted through the SDK's DTOs by
+  `tests/Feature/GoldenFixturesTest.php`. Covers subscriptions, payment
+  methods, trials, subscription webhooks, the create/update/reactivate error
+  shapes, and the refused payment above.
+
+### Changed
+
+- Webhook documentation now matches Plorea's official catalogue (confirmed
+  2026-09-09): `payment.authorised`, `payment.failed`, `payment.refunded` →
+  `PaymentStatusUpdated`; `subscription.charge_succeeded` →
+  `SubscriptionChargeSucceeded`. Nothing is emitted for card setup,
+  cancellation, reactivation, or a **failed** scheduler charge — those are
+  poll-only, so dunning must poll.
+- Scheduler-created charge references (`{subId}-{chgId}`) do not resolve
+  through `payments()->status()`: 403 "Tenant mismatch" on 2026-09-04, 404
+  "Payment not found" on retest 2026-09-09. Manual charges do resolve. Read
+  scheduled outcomes from `charges()`. Reported to Plorea.
+- `reactivate()` no longer double-bills a cancel-then-reactivate (fixed by
+  Plorea, verified 2026-09-09), and reactivating an already-active
+  subscription now returns 400. Guarding on an elapsed `accessEndsAt` is
+  still recommended while production is unobserved.
+- Documented that `failureReason` is null even for a genuine refusal, and that
+  Plorea's validation messages are static templates — a request missing two
+  fields lists all five — so they must never be parsed.
+
+### Known limitations
+
+- A **failing subscription charge cannot be reproduced** with Adyen's public
+  test cards (verified 2026-09-08 and 2026-09-09). Adyen triggers refusals
+  only through `paymentMethod.holderName` or
+  `additionalData.RequestedTestAcquirerResponseCode`, both of which ride on
+  the `/payments` request — i.e. card setup — where they refuse the
+  verification and leave no stored card to charge. Consequently the 402
+  `ChargeFailedException` body, the `payment_failed` subscription status, a
+  populated `failureReason` / `retryCount`, and any `subscription.charge_failed`
+  webhook are modelled from Plorea's documentation rather than observed.
+  Write dunning code that tolerates a slightly different shape.
+- **Webhook signature verification is unproven.** The package uses
+  `PLOREA_WEBHOOK_SECRET` as the HMAC key verbatim; no check has been run
+  against a real signature and its matching secret. If Plorea insists
+  deliveries are correctly signed and the route rejects them, try
+  `hex2bin($secret)` as the key.
+
+### Earlier in this cycle
+
 - `merchantOrgNr` is now required when creating payment links — Plorea needs
   it to route the payout (it must be the invoice issuer's org number, never
   the platform's own). `create()` throws `PloreaException` when it is

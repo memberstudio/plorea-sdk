@@ -83,7 +83,7 @@ class WebhookTest extends TestCase
     {
         Event::fake([PaymentStatusUpdated::class]);
 
-        $types = ['payment.failed' => 'refused', 'payment.refunded' => 'refunded'];
+        $types = ['payment.failed' => 'failed', 'payment.refunded' => 'refunded'];
 
         foreach ($types as $type => $status) {
             $this->postSignedWebhook([
