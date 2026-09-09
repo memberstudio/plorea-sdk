@@ -80,6 +80,18 @@ means accepted, not pending-and-possibly-doomed.
 
 Whether the test environment's latency reflects production is unknown.
 
+**There is no per-refund status field.** Three independent captures of a
+refund-requested payment returned an identical 29-key body, cross-checked
+against this repo's fixtures on 2026-09-09 — same keys, same order, and every
+one of them read by `PaymentStatus`. The refund's own PSP reference
+(`refundPspReference`) exists only on the `POST payments/refund` response;
+`payments/status` carries `lastRefundRequestPspReference`, which identifies the
+request rather than the refund. Persist the `Refund` DTO — that identifier
+cannot be recovered from a later poll.
+
+What the top-level status becomes *after* settlement is still unobserved; the
+only refund anyone has watched was still in flight after eleven hours.
+
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
 The create response omits `merchantOrgNr` and `merchantName` entirely. They

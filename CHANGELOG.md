@@ -49,6 +49,12 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   package's one entirely unverified security-relevant behaviour. No secret or
   signature value entered this repository, and none ever should, which is also
   why this cannot be covered by a golden fixture.
+- The refund PSP reference is documented as response-only: `refundPspReference`
+  exists on the `POST payments/refund` response and never on
+  `payments()->status()`, whose `lastRefundRequestPspReference` identifies the
+  *request* rather than the refund. Persist the `Refund` DTO — that identifier
+  cannot be recovered from a later poll, and it is what provider support asks
+  for. There is no per-refund status field at all.
 - Refund settlement latency is documented: a refund stayed `refund_requested`
   for **more than 11 hours** before `payment.refunded` fired (test environment,
   2026-09-09). Polling loops must be sized in hours — an hour-long timeout

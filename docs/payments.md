@@ -183,6 +183,23 @@ the provider settles asynchronously. Poll `status()` or wait for a
 `payment.refunded` webhook for the final state. The requested status persists
 in the meantime, so do not treat it as a failure.
 
+### Keep the refund response — the PSP reference is only there
+
+`refund()` returns a `Refund` whose `$refundPspReference` identifies the refund
+at the provider. **That value never appears on `payments()->status()`.** The
+status shape carries `lastRefundRequestPspReference`, which is a different
+identifier for a different thing: the *request*, not the resulting refund.
+
+So if you throw the `Refund` away and expect to recover the PSP reference from
+a later status poll, you cannot — and it is the identifier Plorea and Adyen
+support will ask you for. Persist it at the moment of the refund.
+
+There is also **no per-refund status field anywhere**. Until settlement, the
+only signal is the payment's own top-level `status` being `refund_requested`,
+plus the `lastRefund*` group. The top-level status flips there immediately
+(from `paid` / `authorised`) while `webhookEventCode` stays `AUTHORISATION` —
+that field describes the original authorisation and does not track the refund.
+
 > [!IMPORTANT]
 > **Settlement took over 11 hours** in one observed test-environment refund
 > (2026-09-09). Size any polling loop in hours, not minutes: a job that gives
