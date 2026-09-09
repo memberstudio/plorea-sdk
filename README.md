@@ -306,10 +306,11 @@ now" rather than "access never ends".
 > with one settled charge left the charge count unchanged across a 10-minute
 > poll, and set `nextChargeAt` to exactly one interval after that charge.
 >
-> Two gaps remain, so the guard is still worth keeping: the fix has been
-> observed on test only, not production, and reactivating an *already active*
-> subscription is untested. Checking that `accessEndsAt` has passed before
-> reactivating costs nothing.
+> Reactivating an *already active* subscription is refused outright — HTTP 400
+> `ValidationException`, "Only canceled subscriptions can be reactivated"
+> (verified 2026-09-09) — so neither shape can double-charge any more. Only
+> production remains unobserved, and checking that `accessEndsAt` has passed
+> before reactivating still costs nothing.
 
 ### Find and list
 
@@ -350,12 +351,22 @@ $status = Plorea::payments()->status($subscription->lastPaymentReference);
 $status->isPaid();
 ```
 
-> [!NOTE]
-> Charges created by Plorea's *scheduler* used to answer that lookup with a
-> 403 `AuthenticationException` ("Tenant mismatch"), while manually created
-> charges resolved fine — a Plorea-side bug reported 2026-09-04 and reported
-> fixed on 2026-09-09 (not re-verified here). `charges()` remains the more
-> direct way to read scheduled-charge outcomes either way.
+> [!WARNING]
+> **Scheduler-created charges are not resolvable through `payments()->status()`.**
+> Read them from `subscriptions()->charges()` instead.
+>
+> The symptom has changed but the outcome has not. On 2026-09-04 the lookup
+> answered 403 `AuthenticationException` ("Tenant mismatch"); retested on
+> 2026-09-09 against a fresh, authorised, same-tenant scheduler charge it
+> answered 404 `NotFoundException` ("Payment not found"), twice, 25 minutes
+> apart. The reference was taken verbatim from the charge's own `reference`
+> field, so this is not a formatting problem.
+>
+> Manually created charges *do* resolve — `payment-status-subscription-charge.json`
+> is a real capture of one, returning `platform: "subscription"` with a null
+> `paymentLinkId`. So the endpoint is not restricted to payment links; the
+> split is specifically manual versus scheduled. Whether that is intended is
+> an open question with Plorea.
 
 ## Webhooks
 
@@ -463,9 +474,10 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
 
 `SubscriptionChargeSucceeded` deliberately does **not** also raise
 `PaymentStatusUpdated`, even though the payload carries a
-`{subscriptionId}-{chargeId}` reference: that reference belongs to a
-scheduler-created charge, which the payment status endpoint currently refuses
-with a 403. Read the charge from `subscriptions()->charges()` instead.
+`{subscriptionId}-{chargeId}` reference. Firing both would have every listener
+book the same charge twice — and that reference is not resolvable through the
+payment status endpoint anyway (see the warning above). Read the charge from
+`subscriptions()->charges()` instead.
 
 Any other `subscription.*` type reaches you through `WebhookReceived` only.
 The SDK will not invent an event for a shape nobody has seen — branch on

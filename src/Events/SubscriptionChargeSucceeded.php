@@ -10,9 +10,10 @@ namespace MemberFlow\Plorea\Events;
  *
  * Treat it as a ping like every other webhook: fetch the authoritative
  * subscription with Plorea::subscriptions()->find($subscriptionId) rather
- * than trusting the payload. Note that `payments()->status($reference)`
- * currently answers 403 for scheduler-created charges (a Plorea-side bug),
- * so read the charge itself from subscriptions()->charges() instead.
+ * than trusting the payload. Do not look the reference up through
+ * payments()->status() — a scheduler-created charge does not resolve there
+ * (403 "Tenant mismatch" on 2026-09-04, 404 "Payment not found" when
+ * retested 2026-09-09). Read the charge from subscriptions()->charges().
  */
 class SubscriptionChargeSucceeded
 {

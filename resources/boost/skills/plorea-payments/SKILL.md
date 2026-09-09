@@ -113,9 +113,11 @@ charge. Billing starts immediately: `create()` already returns the first
 unconditionally, billing the same period twice on cancel-then-reactivate;
 fixed by Plorea and verified on the test environment 2026-09-09 (single
 cancel → reactivate, charge count unchanged over a 10-minute poll,
-`nextChargeAt` set one interval after the settled charge). Keep guarding on
-`accessEndsAt` anyway — only test was observed, not production, and
-reactivating an already-active subscription is untested.
+`nextChargeAt` set one interval after the settled charge). Reactivating an
+already-active subscription is refused with a 400 `ValidationException`
+("Only canceled subscriptions can be reactivated"), so that shape cannot
+charge either. Production is still unobserved, so guarding on `accessEndsAt`
+stays cheap insurance.
 
 With `trialUntil()` the subscription is created `trialing` with `nextChargeAt`
 equal to `trialEndsAt` — nothing is charged until the trial ends, and a
@@ -138,10 +140,11 @@ handle them differently.
 
 Each charge produces a payment referenced `{subscriptionId}-{chargeId}`, also
 on `$subscription->lastPaymentReference`, resolvable via
-`Plorea::payments()->status(...)`. That lookup used to 403 with "Tenant
-mismatch" for scheduler-created charges while manual ones resolved fine
-(Plorea bug reported 2026-09-04, reported fixed 2026-09-09, unverified here).
-`charges()` is the more direct read for scheduled outcomes regardless.
+`Plorea::payments()->status(...)` — but **only for manual charges**. A
+scheduler-created reference does not resolve: 403 "Tenant mismatch" on
+2026-09-04, 404 "Payment not found" when retested 2026-09-09 against a fresh
+authorised charge. Always read scheduled outcomes from `charges()`; dunning
+must poll that, never `payments()->status()`.
 
 ## Webhooks
 
@@ -186,9 +189,10 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
 });
 ```
 
-`SubscriptionChargeSucceeded` does not also raise `PaymentStatusUpdated`,
-though the payload carries a `{subId}-{chgId}` reference: that lookup 403s for
-scheduler charges. Read the charge from `charges()`.
+`SubscriptionChargeSucceeded` does not also raise `PaymentStatusUpdated`:
+firing both would double-book the same charge, and the `{subId}-{chgId}`
+reference does not resolve for scheduler charges anyway. Read it from
+`charges()`.
 
 Every other `subscription.*` type arrives only as `WebhookReceived` — branch on
 `type` and re-fetch. Never rely on webhooks alone for billing state; schedule a
