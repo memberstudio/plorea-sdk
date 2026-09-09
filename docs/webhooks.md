@@ -51,11 +51,13 @@ for registrations that use an echoed shared secret instead. **It fails closed**:
 with no secret configured, every request is rejected.
 
 `PLOREA_WEBHOOK_SECRET` is used as the HMAC key **verbatim** — the characters
-of the secret as Plorea gives them to you, not the bytes they spell. That
-convention was checked against a real production delivery on 2026-09-09 and
-matched; re-signing with `hex2bin($secret)` as the key did **not** match. So if
-the route rejects a delivery you believe is genuine, the secret or the raw body
-is wrong, not the encoding.
+of the secret as Plorea gives them to you, not the bytes they spell.
+
+This was proven end to end on 2026-09-09 by replaying a real captured delivery
+against a live stack: the genuine request was accepted, and the same request
+with a one-byte payload edit and the original signature was rejected with 403.
+So if the route rejects a delivery you believe is genuine, the secret or the raw
+body is wrong — not the encoding.
 
 > [!WARNING]
 > Verify against the **raw** body. Any middleware that re-encodes the request

@@ -221,16 +221,48 @@ $page->merchantName;
 $page->raw['partnerSplits'] ?? null;  // populated once a merchant is attached
 ```
 
-If you render your own checkout instead of redirecting to `pay.plorea.no`,
-open an Adyen Drop-in session for the link:
+### Embedded checkout
+
+`pay.plorea.no` is itself just an Adyen Drop-in mounted on a session, so you
+can render the same checkout on your own domain. The session endpoint is
+callable directly with your API key:
 
 ```php
 $session = Plorea::payByLink()->session($link->id, returnUrl: 'https://app.example/paid');
 
 $session->sessionId;
 $session->sessionData;
-$session->clientKey;
 ```
+
+Then mount it with Adyen Web v5+:
+
+```js
+const checkout = await AdyenCheckout({
+    environment: 'test',
+    clientKey,                                   // see the warning below
+    session: { id: sessionId, sessionData },
+});
+
+checkout.create('dropin').mount('#checkout');
+```
+
+> [!WARNING]
+> **`$session->clientKey` comes back `null`**, and the browser cannot mount a
+> Drop-in without one. The property is exposed because the field exists in the
+> response, not because it is usable — do not build on it.
+>
+> The working key is visible in the hosted page's JavaScript, but lifting it
+> from there does not work either: Adyen scopes every client key to an
+> allowed-origins list, and your domain is not on Plorea's. The Drop-in mounts
+> and then fails the `/sessions/{id}/setup` preflight with a CORS rejection —
+> late, and looking nothing like a configuration problem.
+>
+> Embedded checkout therefore needs Plorea to whitelist your origins, or to
+> issue you your own client key. Ask before you build; the redirect flow is the
+> supported path today. Verified 2026-09-09.
+
+The SDK needs no changes for this — the blocker is entirely on the credential
+side.
 
 ## A complete flow
 

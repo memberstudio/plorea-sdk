@@ -246,17 +246,22 @@ Fixture: `webhook-payment-failed.json`.
 Confirmed by Plorea 2026-09-09. These transitions are poll-only. A failed
 recurring charge never announces itself.
 
-### ✅ Signature convention confirmed — 2026-09-09
+### ✅ Signature verification proven end to end — 2026-09-09
 
 `AuthenticateWebhook` uses `PLOREA_WEBHOOK_SECRET` as the HMAC key
 **verbatim** — the characters of the secret, not the bytes they spell.
 
-That convention was checked against a real production `payment.failed`
-delivery: `base64(HMAC-SHA256(secret, raw UTF-8 body))` matched the 44-character
-header value exactly, and the hex-decoded-key variant did **not** match. So the
-middleware's implementation is correct as written.
+A real captured delivery was replayed against a live stack running this
+middleware. The genuine request returned `200 [accepted]`; the same request with
+a **one-byte** payload edit (`NOK` → `EUR`) and the original signature returned
+`403`. Separately, `base64(HMAC-SHA256(secret, raw UTF-8 body))` matched the
+44-character header exactly while the hex-decoded-key variant did not.
 
-The check was run by the consuming application, which held the signing secret;
+Both halves matter. The first says genuine traffic is accepted; the second says
+tampered traffic is rejected. A verifier that only ever sees valid input can
+pass every test while doing nothing at all — this one demonstrably rejects.
+
+The check was run by the consuming application, which holds the signing secret;
 this repository still has never held a secret, and never should. The result
 came back as a match/no-match verdict only — no secret and no signature value
 crossed into this repo, and none belongs in a fixture. That is also why there

@@ -41,14 +41,25 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   `tests/Feature/GoldenFixturesTest.php`. Covers subscriptions, payment
   methods, trials, subscription webhooks, the create/update/reactivate error
   shapes, and the refused payment above.
-- **The webhook signature convention is confirmed** (2026-09-09). Checked
-  against a real production delivery by the consuming application, which holds
-  the signing secret: `base64(HMAC-SHA256(secret, raw UTF-8 body))` matched the
-  header exactly, and the hex-decoded-key variant did not. `AuthenticateWebhook`
-  is therefore correct as written and needs no change — this was previously the
-  package's one entirely unverified security-relevant behaviour. No secret or
+- **Webhook signature verification is proven end to end** (2026-09-09). A real
+  captured delivery was replayed against a live stack running
+  `AuthenticateWebhook`: the genuine request was accepted, and the same request
+  with a one-byte payload edit (`NOK` → `EUR`) carrying the original signature
+  was rejected with 403. The convention was confirmed alongside it —
+  `base64(HMAC-SHA256(secret, raw UTF-8 body))` matched the header, the
+  hex-decoded-key variant did not. The middleware needs no change; this was
+  previously the package's one entirely unverified security-relevant behaviour,
+  and it is now verified in both directions rather than only against valid
+  input. No secret or
   signature value entered this repository, and none ever should, which is also
   why this cannot be covered by a golden fixture.
+- Embedded checkout is documented on `payByLink()->session()`: the session
+  endpoint is callable directly and returns a live Adyen session, but
+  `$session->clientKey` comes back **null** and Adyen scopes client keys to an
+  allowed-origins list you will not be on. The Drop-in mounts and then fails a
+  CORS preflight late, looking nothing like a credential problem. Embedding
+  needs Plorea to whitelist your origins or issue you a key — ask before you
+  build. No SDK change; the blocker is entirely credential-side.
 - The refund PSP reference is documented as response-only: `refundPspReference`
   exists on the `POST payments/refund` response and never on
   `payments()->status()`, whose `lastRefundRequestPspReference` identifies the
