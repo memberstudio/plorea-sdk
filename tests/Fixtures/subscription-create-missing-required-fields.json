@@ -1,0 +1,3 @@
+{
+    "error": "tenantId, paymentMethodId, recurringType, amount and interval are required"
+}

@@ -1,0 +1,5 @@
+{
+    "error": "Payment method is not active",
+    "paymentMethodId": "pm_test_golden_failed",
+    "status": "failed"
+}

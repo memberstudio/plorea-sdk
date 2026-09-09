@@ -597,6 +597,59 @@ class GoldenFixturesTest extends TestCase
         }
     }
 
+    public function test_it_maps_a_real_create_with_a_failed_payment_method_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions' => Http::response(
+                $this->fixture('subscription-create-payment-method-not-active'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-09-09. A payment method whose setup was refused is
+        // terminal: creating a subscription with it fails at the API, and the
+        // body names the offending method so the caller can start a fresh
+        // setup rather than retry this one.
+        try {
+            Plorea::subscriptions()
+                ->create('pm_test_golden_failed', Amount::nok(10000), BillingInterval::monthly())
+                ->save();
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('Payment method is not active', $caught->getMessage());
+            $this->assertSame('pm_test_golden_failed', $caught->response?->json('paymentMethodId'));
+            $this->assertSame('failed', $caught->response?->json('status'));
+            $this->assertSame(400, $caught->status);
+        }
+    }
+
+    public function test_it_maps_a_real_missing_required_fields_response_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions' => Http::response(
+                $this->fixture('subscription-create-missing-required-fields'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-09-09 from a request missing only tenantId and
+        // recurringType. The message still lists all five fields, so it is a
+        // static template rather than a computed list of what was absent --
+        // never parse it to decide which field to fix.
+        try {
+            Plorea::subscriptions()
+                ->create('pm_test_golden_method', Amount::nok(10000), BillingInterval::monthly())
+                ->save();
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame(
+                'tenantId, paymentMethodId, recurringType, amount and interval are required',
+                $caught->getMessage(),
+            );
+            $this->assertSame(400, $caught->status);
+        }
+    }
+
     public function test_it_maps_a_real_reactivate_on_active_subscription_to_a_validation_error(): void
     {
         Http::fake([
