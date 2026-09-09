@@ -20,10 +20,20 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * listeners should fetch the authoritative state from the API rather than
  * trusting status or amount from the payload.
  *
- * Only two event types have ever been observed live: "payment.authorised"
- * and "subscription.charge_succeeded". Every delivery also dispatches the
- * catch-all WebhookReceived, which is how consumers handle types this
- * controller does not know about.
+ * Plorea's official catalogue (confirmed by Plorea 2026-09-09) holds four
+ * types: "payment.authorised", "payment.failed", "payment.refunded" and
+ * "subscription.charge_succeeded", with more planned. The three payment
+ * types all carry a reference and raise PaymentStatusUpdated; only
+ * "payment.authorised" and "subscription.charge_succeeded" have been seen
+ * on the wire here, so the other two are routed on the shared envelope
+ * rather than a captured body.
+ *
+ * Nothing is emitted for card setup, cancel, reactivate, or a *failed*
+ * scheduler charge — those transitions are poll-only, via
+ * paymentMethods()->find(), subscriptions()->find() and
+ * payments()->status(). Every delivery also dispatches the catch-all
+ * WebhookReceived, which is how consumers handle types this controller
+ * does not know about.
  */
 class WebhookController
 {
@@ -62,13 +72,19 @@ class WebhookController
      * Dispatch the event for a "subscription.*" delivery.
      *
      * Subscription payloads carry a "data.reference" of
-     * {subscriptionId}-{chargeId}, but it must not raise
-     * PaymentStatusUpdated: that reference belongs to a scheduler-created
-     * charge, and looking it up through the payment status endpoint
-     * currently fails with a 403 (a Plorea-side bug). Only
-     * "subscription.charge_succeeded" has been observed live, so any other
-     * subscription type reaches consumers through WebhookReceived alone
-     * rather than through an event built on a guessed shape.
+     * {subscriptionId}-{chargeId}, but it must not also raise
+     * PaymentStatusUpdated: a scheduler charge is subscription state, and
+     * firing both events would have every listener book the same charge
+     * twice. Consumers read the outcome through subscriptions()->find() or
+     * charges(). (Historically that reference could not be resolved at all
+     * — payments()->status() answered 403 "Tenant mismatch" for
+     * scheduler-created charges. Plorea reports this fixed on 2026-09-09;
+     * not re-verified here.)
+     *
+     * "subscription.charge_succeeded" is the only subscription type in
+     * Plorea's catalogue, so any other subscription type reaches consumers
+     * through WebhookReceived alone rather than through an event built on
+     * a guessed shape.
      *
      * @param  array<string, mixed>  $payload
      */

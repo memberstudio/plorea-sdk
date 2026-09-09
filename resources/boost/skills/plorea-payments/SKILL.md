@@ -108,12 +108,14 @@ Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat');
 Plorea owns the billing schedule — your app never triggers the recurring
 charge. Billing starts immediately: `create()` already returns the first
 `nextChargeAt` and the scheduler charges within seconds unless a trial is set.
-`reactivate()` schedules the next charge for *now* and charges
-unconditionally — it neither resumes the old cadence nor checks whether the
-current period was already paid, so cancel-then-reactivate bills the same
-period twice (verified on a daily subscription reactivated 33s after
-cancelling). Only reactivate once `accessEndsAt` has passed; otherwise create
-a fresh subscription.
+`reactivate()` sets the subscription active again and recomputes
+`nextChargeAt` — it does not resume the old cadence. It used to charge
+unconditionally, billing the same period twice on cancel-then-reactivate
+(verified on a daily subscription reactivated 33s after cancelling); Plorea
+reports that fixed on 2026-09-09, unverified here. Keep the guard anyway:
+only reactivate once `accessEndsAt` has passed, otherwise create a fresh
+subscription. It is free if the fix holds and prevents a double charge if it
+does not.
 
 With `trialUntil()` the subscription is created `trialing` with `nextChargeAt`
 equal to `trialEndsAt` — nothing is charged until the trial ends, and a
@@ -136,14 +138,16 @@ handle them differently.
 
 Each charge produces a payment referenced `{subscriptionId}-{chargeId}`, also
 on `$subscription->lastPaymentReference`, resolvable via
-`Plorea::payments()->status(...)`. **Known Plorea bug (2026-09-04):** that
-lookup 403s with "Tenant mismatch" for scheduler-created charges while manual
-ones resolve fine — read scheduled outcomes from `charges()` until it is
-fixed.
+`Plorea::payments()->status(...)`. That lookup used to 403 with "Tenant
+mismatch" for scheduler-created charges while manual ones resolved fine
+(Plorea bug reported 2026-09-04, reported fixed 2026-09-09, unverified here).
+`charges()` is the more direct read for scheduled outcomes regardless.
 
 ## Webhooks
 
-The package registers `POST /plorea/webhook` and verifies the `X-Plorea-Signature` header (base64 HMAC-SHA256 of the raw body) against `PLOREA_WEBHOOK_SECRET`. It fails closed without a secret; `PLOREA_WEBHOOK_VERIFY=false` is staging-only. Exclude `plorea/webhook` from CSRF verification.
+The package registers `POST /plorea/webhook` and verifies the `X-Plorea-Signature` header (base64 HMAC-SHA256 of the raw body, secret used as the key verbatim) against `PLOREA_WEBHOOK_SECRET`. It fails closed without a secret; `PLOREA_WEBHOOK_VERIFY=false` is staging-only. Exclude `plorea/webhook` from CSRF verification.
+
+Plorea's catalogue (confirmed 2026-09-09) has four types, with more planned: `payment.authorised`, `payment.failed`, `payment.refunded` → `PaymentStatusUpdated`; `subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. Everything else arrives as `WebhookReceived` only.
 
 Treat webhooks as pings — re-fetch the authoritative state:
 
@@ -165,9 +169,11 @@ Delivery is best-effort — also run a scheduled job polling `status()` for open
 
 Verified from real deliveries (2026-09-04). A **scheduler** charge emits
 `subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. A **manual**
-`charge()` emits `payment.authorised` → `PaymentStatusUpdated`. Nothing at all
-is emitted for card setup, cancel or reactivate — do not wait on a webhook for
-those; the API calls already return the new state.
+`charge()` emits `payment.authorised` → `PaymentStatusUpdated`. Plorea
+confirmed on 2026-09-09 that nothing is emitted for card setup (success or
+failure), cancel, reactivate, or a **failed** scheduler charge — those are
+poll-only. A failed recurring charge never announces itself, so poll
+`subscriptions()->find()` if you need dunning.
 
 ```php
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;

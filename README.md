@@ -296,13 +296,18 @@ derived from the last charge and a trial has none. Treat null as "access ends
 now" rather than "access never ends".
 
 > [!WARNING]
-> `reactivate()` schedules the next charge for *now* and charges
-> unconditionally — it does not resume the original cadence, and it does not
-> check whether the current period was already paid. A customer who cancels
-> and immediately reactivates is charged twice for the same period (observed
-> on a daily subscription reactivated 33 seconds after cancelling). Guard the
-> call yourself: only reactivate once `accessEndsAt` has passed, and start a
-> fresh subscription otherwise.
+> `reactivate()` does not resume the original cadence — it sets the
+> subscription active again and recomputes `nextChargeAt`.
+>
+> It used to charge *unconditionally*: a customer who cancelled and
+> immediately reactivated was billed twice for the same period (observed on a
+> daily subscription reactivated 33 seconds after cancelling). Plorea reports
+> this fixed on 2026-09-09 — reactivate no longer charges when the current
+> period is already paid — but that fix has **not been re-verified here**.
+> Until it is, keep guarding the call yourself: only reactivate once
+> `accessEndsAt` has passed, and start a fresh subscription otherwise. The
+> guard costs nothing if the fix holds, and prevents a double charge if it
+> does not.
 
 ### Find and list
 
@@ -343,12 +348,12 @@ $status = Plorea::payments()->status($subscription->lastPaymentReference);
 $status->isPaid();
 ```
 
-> [!WARNING]
-> Charges created by Plorea's *scheduler* currently answer that lookup with a
+> [!NOTE]
+> Charges created by Plorea's *scheduler* used to answer that lookup with a
 > 403 `AuthenticationException` ("Tenant mismatch"), while manually created
-> charges resolve fine. This is a Plorea-side bug reported 2026-09-04. Until
-> it is fixed, read scheduled-charge outcomes from `charges()`, not from
-> `payments()->status()`.
+> charges resolved fine — a Plorea-side bug reported 2026-09-04 and reported
+> fixed on 2026-09-09 (not re-verified here). `charges()` remains the more
+> direct way to read scheduled-charge outcomes either way.
 
 ## Webhooks
 
@@ -365,8 +370,21 @@ to comparing the `Authorization` header against the secret verbatim
 shared secret instead.
 
 The package registers `POST /plorea/webhook` automatically and rejects every
-request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed). With
-the secret in place, listen for the events:
+request until `PLOREA_WEBHOOK_SECRET` is configured (it fails closed).
+
+Plorea's event catalogue, confirmed by Plorea on 2026-09-09, has four types —
+more are planned, so treat the list as open:
+
+| Type | SDK event |
+| --- | --- |
+| `payment.authorised` | `PaymentStatusUpdated` |
+| `payment.failed` | `PaymentStatusUpdated` |
+| `payment.refunded` | `PaymentStatusUpdated` |
+| `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` |
+
+Anything else — including future types — reaches you through `WebhookReceived`
+alone; the package will not invent a typed event for a payload shape it has
+never seen. With the secret in place, listen for the events:
 
 > [!TIP]
 > Waiting on the signing secret from Plorea? Set
@@ -384,6 +402,15 @@ the secret in place, listen for the events:
 > first-party keys plus flat fallbacks) but still treats the payload as
 > untrusted — which is exactly why the listener below re-fetches the
 > authoritative state instead of reading it from the payload.
+
+> [!IMPORTANT]
+> `PLOREA_WEBHOOK_SECRET` is a hex string from Plorea, and the package uses
+> it as the HMAC key **verbatim** — the characters of the secret, not the
+> bytes they spell. If signature verification rejects deliveries that Plorea
+> insists are correctly signed, that convention is the first thing to check:
+> re-signing the raw body with `hex2bin($secret)` as the key instead would
+> confirm it. No verification against a real signature has been performed
+> yet.
 
 ```php
 use MemberFlow\Plorea\Events\{PaymentStatusUpdated, WebhookReceived};
@@ -413,10 +440,13 @@ types across a full subscription lifecycle:
 | Scheduler charges the card | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` |
 | Manual `charge()` | `payment.authorised` | `PaymentStatusUpdated` |
 
-Nothing was emitted for card setup, cancellation or reactivation. Those events
-either do not exist or are not enabled for the captured tenant, so **do not
-wait on a webhook for them** — cancel and reactivate are synchronous API calls
-that already return the new state.
+Plorea confirmed on 2026-09-09 that this is by design: nothing is emitted for
+card setup (success or failure), cancellation, reactivation, or a **failed**
+scheduler charge. Those transitions are poll-only, so **do not wait on a
+webhook for them** — read them from `paymentMethods()->find()`,
+`subscriptions()->find()` and `payments()->status()`. A failed recurring
+charge in particular will never announce itself; if you need to react to
+dunning, poll.
 
 ```php
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;

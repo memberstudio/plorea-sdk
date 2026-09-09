@@ -71,6 +71,42 @@ class WebhookTest extends TestCase
             && $event->status === 'authorised');
     }
 
+    /**
+     * Plorea's catalogue (confirmed 2026-09-09) also contains
+     * "payment.failed" and "payment.refunded". Neither has been captured
+     * from the wire yet, so this asserts only that the shared envelope
+     * routes them to PaymentStatusUpdated — the `data` bodies below are
+     * constructed, not golden fixtures, and nothing beyond `reference`
+     * and `status` is claimed about them.
+     */
+    public function test_it_routes_the_other_payment_event_types_to_payment_status_updated(): void
+    {
+        Event::fake([PaymentStatusUpdated::class]);
+
+        $types = ['payment.failed' => 'refused', 'payment.refunded' => 'refunded'];
+
+        foreach ($types as $type => $status) {
+            $this->postSignedWebhook([
+                'eventId' => 'evt_00000000000000000000000000000009',
+                'createdAt' => '2026-09-09T12:00:00.000Z',
+                'tenantId' => 'test-tenant',
+                'type' => $type,
+                'data' => [
+                    'reference' => 'GOLDEN-2026-001',
+                    'status' => $status,
+                ],
+            ])->assertOk();
+        }
+
+        foreach ($types as $status) {
+            Event::assertDispatched(
+                PaymentStatusUpdated::class,
+                fn (PaymentStatusUpdated $event): bool => $event->reference === 'GOLDEN-2026-001'
+                    && $event->status === $status,
+            );
+        }
+    }
+
     public function test_it_handles_a_real_subscription_charge_webhook(): void
     {
         Event::fake([WebhookReceived::class, SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
