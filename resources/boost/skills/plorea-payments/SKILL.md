@@ -35,6 +35,9 @@ $link->expiresAt; // store this — expiry is judged from it, not from status
 
 `merchantOrgNr` is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
 
+The create response does not echo the merchant back; the org number only
+reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
+
 Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible.
 
 ## Status
@@ -112,7 +115,13 @@ period twice (verified on a daily subscription reactivated 33s after
 cancelling). Only reactivate once `accessEndsAt` has passed; otherwise create
 a fresh subscription.
 
-Statuses are `active` and `canceled` (US spelling) — use `isActive()`,
+With `trialUntil()` the subscription is created `trialing` with `nextChargeAt`
+equal to `trialEndsAt` — nothing is charged until the trial ends, and a
+trialing subscription is not `isActive()`. Cancelling during a trial leaves
+`accessEndsAt` **null** (it is derived from the last charge, and there is
+none) — treat null as "access ends now", not "never ends".
+
+Statuses are `active`, `trialing` and `canceled` (US spelling) — use `isActive()`,
 `isCanceled()`, `hasPaymentFailure()`, or `is('...')`, never string
 comparison. Cancelling clears `nextChargeAt` and sets `accessEndsAt` one
 interval after the last charge; gate access on that date, not on

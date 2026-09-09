@@ -1,0 +1,33 @@
+{
+    "environment": "test",
+    "product": "Golden fixture product",
+    "currency": "NOK",
+    "partnerSplits": {
+        "totalAmount": 19900,
+        "splits": [
+            {
+                "type": "Default",
+                "account": "BA_TEST_SPLIT_ACCOUNT",
+                "amount": {
+                    "value": 19900,
+                    "currency": "NOK"
+                }
+            }
+        ]
+    },
+    "tenantId": "test-tenant",
+    "merchantAccount": "TestMerchantAccount",
+    "createdAt": "2026-09-07T19:58:00.000Z",
+    "merchantName": "Golden Fixture Gym AS",
+    "email": null,
+    "themeId": null,
+    "reference": "GOLDEN-2026-002",
+    "returnUrl": "https://example.com/return",
+    "expiresAt": "2026-11-16T19:58:00.000Z",
+    "merchantOrgNr": "912650774",
+    "amount": 19900,
+    "splits": null,
+    "id": "pl_test_golden_orgnr_link",
+    "store": null,
+    "expired": false
+}

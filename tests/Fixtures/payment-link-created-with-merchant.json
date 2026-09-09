@@ -1,0 +1,20 @@
+{
+    "status": "created",
+    "environment": "test",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_golden_orgnr_link",
+    "paymentLinkId": "pl_test_golden_orgnr_link",
+    "reference": "GOLDEN-2026-002",
+    "tenantId": "test-tenant",
+    "merchantAccount": "TestMerchantAccount",
+    "amount": 19900,
+    "currency": "NOK",
+    "store": "Test Store AS",
+    "themeId": null,
+    "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+    "splitsEnabled": false,
+    "clientType": "payments_only",
+    "skipKyc": false,
+    "partnerSplitsApplied": true,
+    "provider": "plorea",
+    "expiresAt": "2026-11-16T19:58:00.000Z"
+}

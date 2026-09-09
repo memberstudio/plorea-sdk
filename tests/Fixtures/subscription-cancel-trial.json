@@ -1,0 +1,7 @@
+{
+    "subscriptionId": "sub_test_golden_trial",
+    "status": "canceled",
+    "canceledAt": "2026-09-07T19:57:00.000Z",
+    "accessEndsAt": null,
+    "reason": "customer_requested"
+}

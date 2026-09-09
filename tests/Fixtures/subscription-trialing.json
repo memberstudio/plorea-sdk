@@ -1,0 +1,40 @@
+{
+    "subscriptionId": "sub_test_golden_trial",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "shopperReference": "golden-shopper-001",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 24900,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "count": 1,
+        "unit": "month"
+    },
+    "trialEndsAt": "2026-09-14T21:57:00.000Z",
+    "nextChargeAt": "2026-09-14T21:57:00.000Z",
+    "retryPolicy": {
+        "maxRetries": 3,
+        "retryIntervalDays": 1
+    },
+    "retryCount": 0,
+    "lastChargeAt": null,
+    "lastPaymentReference": null,
+    "failureReason": null,
+    "canceledAt": null,
+    "cancelReason": null,
+    "accessEndsAt": null,
+    "status": "trialing",
+    "externalId": "GOLDEN-EXT-TRIAL-001",
+    "title": "Golden fixture trial plan",
+    "description": "Golden fixture trial subscription",
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "metadata": [],
+    "createdAt": "2026-09-07T19:57:00.000Z",
+    "updatedAt": "2026-09-07T19:57:00.000Z"
+}
