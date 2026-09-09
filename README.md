@@ -295,19 +295,21 @@ Cancelling during a trial leaves `accessEndsAt` **null**, because it is
 derived from the last charge and a trial has none. Treat null as "access ends
 now" rather than "access never ends".
 
-> [!WARNING]
+> [!NOTE]
 > `reactivate()` does not resume the original cadence — it sets the
 > subscription active again and recomputes `nextChargeAt`.
 >
-> It used to charge *unconditionally*: a customer who cancelled and
-> immediately reactivated was billed twice for the same period (observed on a
-> daily subscription reactivated 33 seconds after cancelling). Plorea reports
-> this fixed on 2026-09-09 — reactivate no longer charges when the current
-> period is already paid — but that fix has **not been re-verified here**.
-> Until it is, keep guarding the call yourself: only reactivate once
-> `accessEndsAt` has passed, and start a fresh subscription otherwise. The
-> guard costs nothing if the fix holds, and prevents a double charge if it
-> does not.
+> It used to charge *unconditionally*, billing a customer twice for a period
+> they had already paid (observed on a daily subscription reactivated 33
+> seconds after cancelling). Fixed by Plorea and **verified against the test
+> environment on 2026-09-09**: a single cancel → reactivate on a subscription
+> with one settled charge left the charge count unchanged across a 10-minute
+> poll, and set `nextChargeAt` to exactly one interval after that charge.
+>
+> Two gaps remain, so the guard is still worth keeping: the fix has been
+> observed on test only, not production, and reactivating an *already active*
+> subscription is untested. Checking that `accessEndsAt` has passed before
+> reactivating costs nothing.
 
 ### Find and list
 

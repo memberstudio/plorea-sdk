@@ -110,12 +110,12 @@ charge. Billing starts immediately: `create()` already returns the first
 `nextChargeAt` and the scheduler charges within seconds unless a trial is set.
 `reactivate()` sets the subscription active again and recomputes
 `nextChargeAt` — it does not resume the old cadence. It used to charge
-unconditionally, billing the same period twice on cancel-then-reactivate
-(verified on a daily subscription reactivated 33s after cancelling); Plorea
-reports that fixed on 2026-09-09, unverified here. Keep the guard anyway:
-only reactivate once `accessEndsAt` has passed, otherwise create a fresh
-subscription. It is free if the fix holds and prevents a double charge if it
-does not.
+unconditionally, billing the same period twice on cancel-then-reactivate;
+fixed by Plorea and verified on the test environment 2026-09-09 (single
+cancel → reactivate, charge count unchanged over a 10-minute poll,
+`nextChargeAt` set one interval after the settled charge). Keep guarding on
+`accessEndsAt` anyway — only test was observed, not production, and
+reactivating an already-active subscription is untested.
 
 With `trialUntil()` the subscription is created `trialing` with `nextChargeAt`
 equal to `trialEndsAt` — nothing is charged until the trial ends, and a
