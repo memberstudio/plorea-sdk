@@ -4,6 +4,10 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
+Nothing yet.
+
+## v0.2.0 - 2026-09-09
+
 ### Documentation
 
 - Full documentation now lives in `docs/`, split into guides (getting started,
