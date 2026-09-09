@@ -76,10 +76,10 @@ class WebhookController
      * PaymentStatusUpdated: a scheduler charge is subscription state, and
      * firing both events would have every listener book the same charge
      * twice. Consumers read the outcome through subscriptions()->find() or
-     * charges(). (Historically that reference could not be resolved at all
-     * — payments()->status() answered 403 "Tenant mismatch" for
-     * scheduler-created charges. Plorea reports this fixed on 2026-09-09;
-     * not re-verified here.)
+     * charges(). That reference cannot be resolved through the payment
+     * status endpoint anyway: it answered 403 "Tenant mismatch" on
+     * 2026-09-04 and 404 "Payment not found" when retested against a fresh
+     * authorised charge on 2026-09-09. Manual charges do resolve there.
      *
      * "subscription.charge_succeeded" is the only subscription type in
      * Plorea's catalogue, so any other subscription type reaches consumers

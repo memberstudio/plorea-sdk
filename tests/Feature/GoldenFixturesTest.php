@@ -597,15 +597,41 @@ class GoldenFixturesTest extends TestCase
         }
     }
 
+    public function test_it_maps_a_real_reactivate_on_active_subscription_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden/reactivate' => Http::response(
+                $this->fixture('subscription-reactivate-not-canceled'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-09-09. Reactivating a subscription that is already
+        // active is refused outright, which is what closes the second half of
+        // the old double-charge hazard: the call cannot draw a charge because
+        // it never runs.
+        try {
+            Plorea::subscriptions()->reactivate('sub_test_golden');
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('Only canceled subscriptions can be reactivated', $caught->getMessage());
+            $this->assertSame('active', $caught->response?->json('status'));
+            $this->assertSame(400, $caught->status);
+        }
+    }
+
     public function test_it_maps_a_real_tenant_mismatch_response_to_an_authentication_error(): void
     {
         Http::fake([
             'payments.plorea.no/payments/status/*' => Http::response($this->fixture('payment-status-tenant-mismatch'), 403),
         ]);
 
-        // Plorea-side bug (reported 2026-09-04): a scheduler-created charge's
-        // payment record is not stamped with the creating tenant, so looking
-        // it up by reference 403s. Manually created charges resolve fine.
+        // Captured 2026-09-04, when a scheduler-created charge's reference
+        // answered 403 here. The symptom has since changed to a 404 (retested
+        // 2026-09-09 against a fresh authorised charge), so this asserts the
+        // 403 mapping rather than current live behaviour — scheduler charges
+        // still do not resolve either way. Manual charges do; see
+        // test_it_parses_a_real_subscription_charge_payment_status.
         try {
             Plorea::payments()->status('sub_test_golden-chg_test_golden_2');
             $this->fail('Expected AuthenticationException.');
