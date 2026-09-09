@@ -83,8 +83,11 @@ $method->hasFailed();       // verification refused, no card stored
 
 Both flows authorise and reverse a 1 NOK verification charge to store the
 card; the customer is never billed for it. `failed` is terminal — start a new
-setup, never retry the charge. Subscriptions reject a non-active method with a
-400 `ValidationException` ("Payment method is not active").
+setup, never retry the charge. Creating or updating a subscription with a
+non-active method fails with a 400 `ValidationException` ("Payment method is
+not active"). `failureReason` is null even on a real refusal, so branch on
+`status` alone. Validation messages are static templates — one missing field
+still lists all five — so never parse them.
 
 ## Subscriptions
 

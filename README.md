@@ -236,8 +236,15 @@ $method->storedPaymentMethodId; // Adyen's token
 
 A `failed` method is terminal: the verification authorisation was refused, so
 no card was ever stored and no charge can succeed. Start a new setup rather
-than retrying. Subscriptions reject a non-active payment method with a 400
-`ValidationException` ("Payment method is not active").
+than retrying. Both creating and updating a subscription reject a non-active
+payment method with a 400 `ValidationException` ("Payment method is not
+active"); the create response also names the offending `paymentMethodId`.
+
+Do not branch on `failureReason` — it comes back **null even for a genuine
+Adyen refusal** (verified 2026-09-09), so the status is the only signal you
+have. The same caution applies to Plorea's validation messages: a request
+missing two required fields answers with a static list of all five, so treat
+the message as text for a human, never as a parseable list of what to fix.
 
 ## Subscriptions
 
