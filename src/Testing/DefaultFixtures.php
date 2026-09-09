@@ -269,6 +269,8 @@ final class DefaultFixtures
             'pspReference' => 'FAKECHARGE123',
             'resultCode' => 'Authorised',
             'amount' => ['value' => 19900, 'currency' => 'NOK'],
+            'vatRate' => null,
+            'vatAmount' => null,
             'nextChargeAt' => '2099-12-31T12:00:00Z',
         ];
     }
@@ -307,6 +309,7 @@ final class DefaultFixtures
             'subscriptionId' => basename(dirname($path)),
             'status' => 'canceled',
             'canceledAt' => '2026-08-26T12:00:00Z',
+            'accessEndsAt' => '2026-09-26T12:00:00Z',
             'reason' => 'customer_requested',
         ];
     }

@@ -1,0 +1,19 @@
+{
+    "paymentMethodId": "pm_test_golden_session",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-dropin",
+    "recurringType": "Subscription",
+    "status": "pending_setup",
+    "environment": "test",
+    "sessionId": "CS_TEST_SESSION",
+    "sessionData": "test-session-data",
+    "expiresAt": "2026-09-04T12:51:00+02:00",
+    "reference": null,
+    "product": null,
+    "amount": 100,
+    "currency": "NOK",
+    "clientType": "payments_only",
+    "skipKyc": false,
+    "partnerSplitsApplied": false
+}

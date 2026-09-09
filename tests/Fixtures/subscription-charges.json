@@ -1,0 +1,43 @@
+{
+    "subscriptionId": "sub_test_golden",
+    "items": [
+        {
+            "subscriptionId": "sub_test_golden",
+            "chargeId": "chg_test_golden_2",
+            "tenantId": "test-tenant",
+            "reference": "sub_test_golden-chg_test_golden_2",
+            "pspReference": "TESTCHARGEPSP002",
+            "amount": {
+                "currency": "NOK",
+                "value": 29900
+            },
+            "vatRate": 0.25,
+            "vatAmount": 4980,
+            "status": "authorised",
+            "retryNumber": 0,
+            "failureReason": null,
+            "reason": "scheduled_charge",
+            "createdAt": "2026-09-04T10:04:00.000Z",
+            "updatedAt": "2026-09-04T10:04:00.000Z"
+        },
+        {
+            "subscriptionId": "sub_test_golden",
+            "chargeId": "chg_test_golden_1",
+            "tenantId": "test-tenant",
+            "reference": "sub_test_golden-chg_test_golden_1",
+            "pspReference": "TESTCHARGEPSP001",
+            "amount": {
+                "currency": "NOK",
+                "value": 29900
+            },
+            "vatRate": 0.25,
+            "vatAmount": 4980,
+            "status": "authorised",
+            "retryNumber": 0,
+            "failureReason": null,
+            "reason": "manual_charge",
+            "createdAt": "2026-09-04T09:55:00.000Z",
+            "updatedAt": "2026-09-04T09:55:00.000Z"
+        }
+    ]
+}

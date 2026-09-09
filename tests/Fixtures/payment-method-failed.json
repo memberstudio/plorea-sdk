@@ -1,0 +1,22 @@
+{
+    "paymentMethodId": "pm_test_golden_failed",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-003",
+    "recurringType": "Subscription",
+    "environment": "test",
+    "status": "failed",
+    "adyenReference": "pmsetup_pm_test_golden_failed",
+    "adyenPaymentLinkId": null,
+    "adyenPaymentLinkUrl": null,
+    "storedPaymentMethodId": null,
+    "consentAt": null,
+    "expiresAt": "2026-09-04T13:00:00+02:00",
+    "metadata": [],
+    "createdAt": "2026-09-04T10:00:00.000Z",
+    "updatedAt": "2026-09-04T10:04:00.000Z",
+    "setupPspReference": null,
+    "cardLast4": null,
+    "cardBrand": null,
+    "expiryDate": null
+}

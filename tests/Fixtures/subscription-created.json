@@ -1,0 +1,29 @@
+{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 24900,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "unit": "day",
+        "count": 1
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-09-04T09:55:00.000Z",
+    "retryPolicy": {
+        "maxRetries": 2,
+        "retryIntervalDays": 1
+    },
+    "status": "active",
+    "externalId": "GOLDEN-EXT-001",
+    "title": "Golden fixture plan",
+    "description": "Golden fixture subscription",
+    "metadata": [],
+    "vatRate": 0.25,
+    "vatAmount": 4980
+}

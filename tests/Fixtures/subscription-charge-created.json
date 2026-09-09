@@ -1,0 +1,15 @@
+{
+    "status": "charge_created",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_1",
+    "reference": "sub_test_golden-chg_test_golden_1",
+    "pspReference": "TESTCHARGEPSP001",
+    "resultCode": "Authorised",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "nextChargeAt": "2026-09-05T09:55:00.000Z"
+}

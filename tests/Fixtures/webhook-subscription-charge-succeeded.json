@@ -1,0 +1,21 @@
+{
+    "eventId": "evt_00000000000000000000000000000002",
+    "createdAt": "2026-09-04T10:04:58.000Z",
+    "tenantId": "test-tenant",
+    "type": "subscription.charge_succeeded",
+    "data": {
+        "subscriptionId": "sub_test_golden",
+        "chargeId": "chg_test_golden_2",
+        "reference": "sub_test_golden-chg_test_golden_2",
+        "customerId": null,
+        "shopperReference": "golden-shopper-001",
+        "externalId": "GOLDEN-EXT-001",
+        "amount": {
+            "value": 29900,
+            "currency": "NOK"
+        },
+        "pspReference": "TESTCHARGEPSP002",
+        "nextChargeAt": "2026-09-05T10:04:51.000Z",
+        "environment": "test"
+    }
+}

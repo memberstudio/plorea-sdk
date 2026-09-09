@@ -8,16 +8,22 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
+use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 use MemberFlow\Plorea\Events\WebhookReceived;
 
 /**
  * Receives webhook calls from Plorea and dispatches events.
  *
  * Captured deliveries look like {eventId, createdAt, tenantId, type,
- * data: {reference, status, eventCode, success, ...}} with an event type
- * such as "payment.authorised". Still treat webhooks as a ping: listeners
- * should use the reference to fetch the authoritative state from the
- * status endpoint rather than trusting status or amount from the payload.
+ * data: {...}} with an event type such as "payment.authorised" or
+ * "subscription.charge_succeeded". Still treat webhooks as a ping:
+ * listeners should fetch the authoritative state from the API rather than
+ * trusting status or amount from the payload.
+ *
+ * Only two event types have ever been observed live: "payment.authorised"
+ * and "subscription.charge_succeeded". Every delivery also dispatches the
+ * catch-all WebhookReceived, which is how consumers handle types this
+ * controller does not know about.
  */
 class WebhookController
 {
@@ -30,6 +36,15 @@ class WebhookController
 
         $this->events->dispatch(new WebhookReceived($payload));
 
+        $type = is_string($payload['type'] ?? null) ? $payload['type'] : '';
+
+        if (str_starts_with($type, 'subscription.')) {
+            $this->dispatchSubscriptionEvent($type, $payload);
+
+            // Always acknowledge — an unparseable payload has nothing to retry.
+            return new Response('[accepted]');
+        }
+
         $reference = $this->reference($payload);
 
         if ($reference !== null) {
@@ -40,8 +55,52 @@ class WebhookController
             ));
         }
 
-        // Always acknowledge — an unparseable payload has nothing to retry.
         return new Response('[accepted]');
+    }
+
+    /**
+     * Dispatch the event for a "subscription.*" delivery.
+     *
+     * Subscription payloads carry a "data.reference" of
+     * {subscriptionId}-{chargeId}, but it must not raise
+     * PaymentStatusUpdated: that reference belongs to a scheduler-created
+     * charge, and looking it up through the payment status endpoint
+     * currently fails with a 403 (a Plorea-side bug). Only
+     * "subscription.charge_succeeded" has been observed live, so any other
+     * subscription type reaches consumers through WebhookReceived alone
+     * rather than through an event built on a guessed shape.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function dispatchSubscriptionEvent(string $type, array $payload): void
+    {
+        if ($type !== 'subscription.charge_succeeded') {
+            return;
+        }
+
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+
+        $subscriptionId = $data['subscriptionId'] ?? null;
+
+        if (! is_string($subscriptionId) || $subscriptionId === '') {
+            return;
+        }
+
+        $this->events->dispatch(new SubscriptionChargeSucceeded(
+            $subscriptionId,
+            $this->stringOrNull($data['chargeId'] ?? null),
+            $this->stringOrNull($data['reference'] ?? null),
+            $this->stringOrNull($data['externalId'] ?? null),
+            $payload,
+        ));
+    }
+
+    /**
+     * A non-empty string from the payload, or null for anything else.
+     */
+    protected function stringOrNull(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**
