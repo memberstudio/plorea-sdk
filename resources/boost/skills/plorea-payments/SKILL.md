@@ -60,7 +60,13 @@ Plorea::payments()->refund('FIN-2026-00123', modificationReference: 'FIN-2026-00
 Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
 
-Both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook.
+Both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook. **Settlement takes hours** (>11h observed 2026-09-09), so size polling loops in hours: an hour-long timeout reports a healthy refund as failed, and reversing your books or telling the customer on that basis does real damage. `refund_requested` means accepted. There is no per-refund status field — pre-settlement the only signal is top-level `status` plus the `lastRefund*` group, and `webhookEventCode` stays `AUTHORISATION` because it describes the original authorisation.
+
+**Persist the `Refund` DTO.** `refundPspReference` exists only on the refund response and never on `payments/status`, whose `lastRefundRequestPspReference` identifies the *request* rather than the refund. No later poll can recover it, and it is the identifier provider support asks for.
+
+## Embedded checkout
+
+`Plorea::payByLink()->session($linkId, returnUrl: ...)` returns a live Adyen session — `pay.plorea.no` is just a Drop-in mounted on one — so you can render checkout on your own domain. **But `$session->clientKey` comes back `null`**, and lifting the key from the hosted page does not work either: Adyen scopes client keys to an allowed-origins list you are not on, so the Drop-in mounts and then fails the `/sessions/{id}/setup` preflight with CORS, looking nothing like a credential problem. Embedding needs Plorea to whitelist your origins or issue you a key — ask before building. The redirect flow is the supported path today (verified 2026-09-09).
 
 ## Payment methods (stored cards)
 
