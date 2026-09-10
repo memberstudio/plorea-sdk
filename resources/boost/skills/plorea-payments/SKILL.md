@@ -155,11 +155,41 @@ scheduler-created reference does not resolve: 403 "Tenant mismatch" on
 authorised charge. Always read scheduled outcomes from `charges()`; dunning
 must poll that, never `payments()->status()`.
 
+### Dunning
+
+A failed scheduler charge emits no webhook, so poll for it:
+
+```php
+foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
+    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+
+    if ($latest?->isAuthorised() !== true) {
+        // prompt for a new card — do not branch on failureReason, it is null
+        // even for a genuine refusal
+    }
+}
+```
+
+`needingAttention()` returns a subscription reporting `payment_failed` **or**
+one whose `nextChargeAt` is more than `$graceMinutes` (default 60) in the past.
+Lean on the overdue half: `payment_failed`, `failureReason` and `retryCount`
+are modelled from Plorea's documentation and have never been observed, because
+no test card can store successfully and then decline. The scheduler charges
+within seconds of `nextChargeAt` and moves the date forward, so a date still in
+the past means the cycle did not complete whatever the status ends up being.
+Canceled subscriptions are never overdue.
+
+Neither `forExternalId()` nor `charges()` has been observed to paginate, and
+neither sends paging parameters. Verify large result sets against your own
+records.
+
 ## Webhooks
 
 The package registers `POST /plorea/webhook` and verifies the `X-Plorea-Signature` header (base64 HMAC-SHA256 of the raw body, secret used as the key verbatim) against `PLOREA_WEBHOOK_SECRET`. It fails closed without a secret; `PLOREA_WEBHOOK_VERIFY=false` is staging-only. Exclude `plorea/webhook` from CSRF verification.
 
 Plorea's catalogue (confirmed 2026-09-09) has four types, with more planned: `payment.authorised`, `payment.failed`, `payment.refunded` → `PaymentStatusUpdated`; `subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. Everything else arrives as `WebhookReceived` only.
+
+Every event carries `$event->eventId` and `$event->type`, read from the request **body**. Deduplicate on `$event->eventId` — the signature covers the raw body only, so the `x-plorea-event-id` header can be rewritten on an otherwise valid delivery and keying on it would let a replay through twice.
 
 Treat webhooks as pings — re-fetch the authoritative state:
 
@@ -185,7 +215,7 @@ Verified from real deliveries (2026-09-04). A **scheduler** charge emits
 confirmed on 2026-09-09 that nothing is emitted for card setup (success or
 failure), cancel, reactivate, or a **failed** scheduler charge — those are
 poll-only. A failed recurring charge never announces itself, so poll
-`subscriptions()->find()` if you need dunning.
+`subscriptions()->needingAttention()` if you need dunning.
 
 ```php
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
@@ -230,3 +260,5 @@ The fake mirrors the real API: a reference it has created a link for reports an 
 ## Errors
 
 All exceptions extend `MemberFlow\Plorea\Exceptions\PloreaException`: `ValidationException` (400), `AuthenticationException` (401/403), `ChargeFailedException` (402), `NotFoundException` (404), `ServerException` (5xx), `ConnectionException`, `PaymentAlreadyPaidException`. HTTP errors expose `$e->status` and `$e->response?->json()`. Never log the API key or `Authorization` headers.
+
+**A 401 is not always about the key.** The `X-Environment` header selects which Adyen credentials Plorea uses; omit it on `POST payments/refund` and the call routes to **live** credentials and returns `401` with `errorType: "security"`, with nothing in the body pointing at the environment (observed 2026-09-10). The SDK sets the header on every request, so this only bites raw `curl` reproductions — which is exactly what you reach for when a 401 has you doubting your key. Check the header before rotating anything.

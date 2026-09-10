@@ -71,7 +71,16 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * All subscriptions matching an external reference (e.g. a workspace ID).
+     * Subscriptions matching an external reference (e.g. a workspace ID).
+     *
+     * The response is {externalId, count, items} with no cursor, page or
+     * hasMore key, and every capture so far has held a single item, so
+     * whether "count" is the total or just what was returned is unverified
+     * and the endpoint has never been seen to paginate. The SDK sends no
+     * paging parameters, because guessing their names would be worse than
+     * not sending them. If you hold more than a handful of subscriptions
+     * against one external id, verify the count against your own records
+     * before trusting this to be exhaustive.
      *
      * @return Collection<int, Subscription>
      */
@@ -88,6 +97,51 @@ class SubscriptionResource extends Resource
         return new Collection($items)
             ->filter(fn (mixed $item): bool => is_array($item))
             ->map(fn (array $item): Subscription => Subscription::fromArray($item))
+            ->values();
+    }
+
+    /**
+     * Subscriptions for an external reference that look like they need a
+     * human — the polling half of dunning.
+     *
+     * A failed scheduler charge emits no webhook (confirmed by Plorea
+     * 2026-09-09), so the only way to notice one is to ask. Run this on a
+     * schedule for each of your billed entities.
+     *
+     * A subscription is returned when it reports the payment_failed status,
+     * or when its nextChargeAt is more than $graceMinutes in the past. The
+     * second test is the one that carries the weight: payment_failed is
+     * modelled from Plorea's documentation and has never been observed,
+     * because no test card can store successfully and then decline, while an
+     * overdue nextChargeAt is derived from fields captured on the wire. If
+     * Plorea's failure shape turns out to differ from the documentation, the
+     * overdue check still fires.
+     *
+     * This tells you which subscriptions to look at, not what went wrong.
+     * Read charges() for that — a scheduler charge cannot be resolved
+     * through payments()->status().
+     *
+     * ```php
+     * foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
+     *     $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+     *
+     *     if ($latest?->isAuthorised() !== true) {
+     *         // Prompt for a new card. Do not branch on failureReason — it
+     *         // is null even for a genuine refusal.
+     *     }
+     * }
+     * ```
+     *
+     * @return Collection<int, Subscription>
+     */
+    public function needingAttention(
+        string $externalId,
+        ?string $tenantId = null,
+        int $graceMinutes = 60,
+    ): Collection {
+        return $this->forExternalId($externalId, $tenantId)
+            ->filter(fn (Subscription $subscription): bool => $subscription->hasPaymentFailure()
+                || $subscription->isOverdue($graceMinutes))
             ->values();
     }
 
@@ -117,7 +171,12 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * All recorded charges for a subscription, newest first.
+     * Recorded charges for a subscription, newest first.
+     *
+     * The response is {subscriptionId, items} — no count and no paging keys
+     * of any kind, so a truncated history would be indistinguishable from a
+     * complete one. The longest capture holds two items. Treat a long-lived
+     * monthly subscription's history as unverified territory.
      *
      * @return Collection<int, SubscriptionCharge>
      */

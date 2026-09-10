@@ -54,13 +54,17 @@ All classes live under `MemberFlow\Plorea\`.
 | `find(string $subscriptionId)` | `Data\Subscription` |
 | `update(string $subscriptionId)` | `PendingSubscriptionUpdate` |
 | `forExternalId(string $externalId, ?string $tenantId = null, ?string $status = null)` | `Collection<Data\Subscription>` |
+| `needingAttention(string $externalId, ?string $tenantId = null, int $graceMinutes = 60)` | `Collection<Data\Subscription>` |
 | `charge(string $subscriptionId, ?Amount $amount = null, ?string $reason = null, ?float $vatRate = null, ?int $vatAmount = null)` | `Data\SubscriptionCharge` |
 | `charges(string $subscriptionId)` | `Collection<Data\SubscriptionCharge>` |
 | `cancel(string $subscriptionId, ?string $reason = null)` | `Data\SubscriptionCancellation` |
 | `reactivate(string $subscriptionId)` | `Data\Subscription` |
 
 `charges()` is newest-first. `charge()` charges the subscription amount when
-`$amount` is omitted.
+`$amount` is omitted. `needingAttention()` is the polling half of dunning — see
+[the dunning gap](subscriptions.md#the-dunning-gap). Neither list method has
+been observed to paginate, and neither sends paging parameters; see
+[the open question](api-behaviour.md#-neither-list-endpoint-has-been-seen-to-paginate).
 
 ### `PayByLinkResource` — `Plorea::payByLink()`
 
@@ -264,7 +268,10 @@ Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `is(string $status)`.
 | `$metadata`, `$createdAt`, `$updatedAt`, `$raw` | |
 
 Helpers: `isActive()`, `isTrialing()`, `isCanceled()`, `hasPaymentFailure()`,
-`is(string $status)`.
+`is(string $status)`, and
+`isOverdue(int $graceMinutes = 60, ?DateTimeInterface $now = null)` — a
+scheduled charge that has not landed. A canceled subscription is never
+overdue.
 
 ### `SubscriptionCharge`
 
@@ -275,6 +282,9 @@ Helpers: `isActive()`, `isTrialing()`, `isCanceled()`, `hasPaymentFailure()`,
 
 On the immediate response `status` is `charge_created` and `resultCode` holds
 Adyen's answer; in `charges()` history `status` is the settled value.
+
+Helpers: `is(string $status)`, `isAuthorised()`. A freshly created charge is
+not authorised yet — read it back from `charges()`.
 
 ### `SubscriptionCancellation`
 
@@ -296,13 +306,18 @@ Adyen's answer; in `charges()` history `status` is the settled value.
 
 | Event | Properties |
 | --- | --- |
-| `Events\PaymentStatusUpdated` | `$reference`, `$status`, `$payload` |
-| `Events\SubscriptionChargeSucceeded` | `$subscriptionId`, `$chargeId`, `$reference`, `$externalId`, `$payload` |
-| `Events\WebhookReceived` | `$payload` — dispatched for **every** delivery |
+| `Events\PaymentStatusUpdated` | `$reference`, `$status`, `$payload`, `$eventId`, `$type` |
+| `Events\SubscriptionChargeSucceeded` | `$subscriptionId`, `$chargeId`, `$reference`, `$externalId`, `$payload`, `$eventId`, `$type` |
+| `Events\WebhookReceived` | `$payload`, `$eventId`, `$type` — dispatched for **every** delivery |
 | `Events\RequestSent` | `$method`, `$uri`, `$payload` |
 | `Events\ResponseReceived` | `$method`, `$uri`, `$payload`, `$status`, `$response`, `$durationMs` |
 
 No event carries the API key or any headers.
+
+`$eventId` and `$type` on the three webhook events are read from the request
+**body**, which is the only part the signature covers. Deduplicate on
+`$event->eventId`, never on the `x-plorea-event-id` header — see
+[Webhooks](webhooks.md#payload-shape).
 
 ---
 

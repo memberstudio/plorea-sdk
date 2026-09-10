@@ -464,6 +464,18 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($subscriptions->first()->vatRate);
         $this->assertNull($subscriptions->first()->retryPolicy);
         $this->assertNull($subscriptions->first()->lastPaymentReference);
+
+        // A pagination tripwire. The envelope is {externalId, count, items}
+        // with no cursor, page or hasMore key, and the only capture has a
+        // single item — too few to tell whether "count" is the total number
+        // of matches or the number returned. While the two agree the SDK's
+        // "return everything" reading holds. A future capture where they
+        // diverge proves the response is a page and that forExternalId()
+        // truncates, and it will fail here rather than in production.
+        $envelope = $this->fixture('subscription-list');
+
+        $this->assertSame(['externalId', 'count', 'items'], array_keys($envelope));
+        $this->assertSame($envelope['count'], count($envelope['items']));
     }
 
     public function test_it_parses_a_real_subscription_update_response(): void
@@ -532,6 +544,13 @@ class GoldenFixturesTest extends TestCase
 
         // History items carry no resultCode — that is a create-time field.
         $this->assertNull($charges->first()->resultCode);
+
+        // The charge envelope carries no count at all, and no cursor, page or
+        // hasMore key either, so there is nothing in the response that would
+        // reveal a truncated history. A capture from a subscription with a
+        // long history is what would settle it; see the pagination note in
+        // docs/api-behaviour.md.
+        $this->assertSame(['subscriptionId', 'items'], array_keys($this->fixture('subscription-charges')));
     }
 
     public function test_it_parses_a_real_subscription_cancel_response(): void

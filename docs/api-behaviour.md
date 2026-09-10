@@ -188,6 +188,49 @@ is specifically manual versus scheduled.
 
 Reported to Plorea. Read scheduled outcomes from `charges()`.
 
+### ❓ Neither list endpoint has been seen to paginate — probed 2026-09-10
+
+`GET subscriptions` returns `{count, items}` plus an echo of whichever filter
+you queried by: `externalId` when listing by external id, `tenantId` when
+listing by tenant. `GET subscriptions/{id}/charges` returns
+`{subscriptionId, items}`. Neither carries a cursor, page, offset or `hasMore`
+key, and no paging parameters have been documented.
+
+A deliberate probe on 2026-09-10 confirmed both shapes and settled nothing
+else. Listing by tenant returned `count: 3` against 3 items, and the longest
+charge history available — a daily-interval subscription running since
+2026-09-04 — held 3 charges. At n=3 `count` agreeing with the number of items
+is what you would see under either reading, so nothing distinguishes "this is
+everything" from "this is the first page".
+
+The charge endpoint is the more exposed of the two: with no count at all, a
+truncated history is indistinguishable from a complete one, and a monthly
+subscription accumulates history indefinitely.
+
+The SDK sends no paging parameters, because inventing names for them would be
+worse than not sending any, and both methods say so in their docblocks. A
+tripwire in `GoldenFixturesTest` asserts `count === count($items)` on the list
+fixture, so a future capture where they diverge fails the build.
+
+**To settle it:** a page-crossing dataset cannot be manufactured on demand
+without spamming real Adyen test subscriptions. The cheap path is to leave one
+daily-interval subscription running — it accumulates roughly 30 charges a
+month unattended — and read its charges once the history is long enough to
+cross any plausible page size. That is a wait, not a probe.
+
+### ✅ A refund without `X-Environment` hits live credentials — 2026-09-10
+
+`POST payments/refund` sent without the `X-Environment` header routes to
+Plorea's **live** Adyen credentials and answers a bare `401` with
+`errorType: "security"`. Nothing in the response suggests that environment
+routing is what went wrong, so it reads as a bad API key.
+
+`PloreaClient` sets the header on every request from a single place, so no
+call made through this SDK can hit it. It is a trap for anyone reproducing a
+call with raw `curl` — including debugging a refund against a copied request.
+`test_it_requests_a_refund` pins the header on the endpoint where getting it
+wrong is most expensive.
+
 ---
 
 ## Webhooks
@@ -203,6 +246,11 @@ No `Authorization` header. Instead:
 | `x-plorea-event` | the type |
 
 Payload: `{eventId, createdAt, tenantId, type, data: {...}}`.
+
+The signature covers the **raw body only**. The headers are outside it, so
+`x-plorea-event-id` and `x-plorea-event` can be rewritten on an otherwise valid
+delivery without breaking verification. Deduplicate on the body's `eventId`,
+which the SDK exposes as `$event->eventId`.
 
 ### ✅ Subscription deliveries — captured 2026-09-04
 
@@ -229,8 +277,8 @@ payment above.
 
 - The type is `payment.failed` in **both** the `x-plorea-event` header and
   `body.type`. Never `payment.refused`.
-- `eventId` is duplicated in the `x-plorea-event-id` header — an idempotency
-  key you can read without parsing the body.
+- `eventId` is duplicated in the `x-plorea-event-id` header. Use the body copy
+  as your idempotency key — only that one is signed.
 - The body carries `eventCode: "AUTHORISATION"` with `success: false`,
   mirroring the `webhookEventCode` / `webhookSuccess` pair the status endpoint
   exposes afterwards. No refusal-reason field of any shape.

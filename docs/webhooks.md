@@ -136,14 +136,22 @@ payment itself. The top-level `createdAt` is the *event's*. On a failure the
 body carries `eventCode: "AUTHORISATION"` with `success: false` and no
 refusal-reason field of any shape, mirroring the status endpoint exactly.
 
-`eventId` appears both in the body and in the `x-plorea-event-id` header, so
-you can deduplicate deliveries without parsing the body at all:
+`eventId` appears both in the body and in the `x-plorea-event-id` header. Every
+SDK event exposes it as `$event->eventId`, alongside `$event->type`:
 
 ```php
-if (Cache::add("plorea:webhook:{$request->header('x-plorea-event-id')}", true, now()->addDay()) === false) {
+if (Cache::add("plorea:webhook:{$event->eventId}", true, now()->addDay()) === false) {
     return;  // already handled
 }
 ```
+
+> [!WARNING]
+> Deduplicate on `$event->eventId`, not on the header. The signature is
+> computed over the raw body and covers nothing else, so the headers are the
+> one part of an otherwise valid delivery an attacker can rewrite freely. A
+> replay carrying a genuine body, a genuine signature and a fresh
+> `x-plorea-event-id` passes verification and would be processed twice by any
+> app keyed on the header. The body copy is signed; use it.
 
 The controller extracts the reference and status defensively — nested `data.*`
 first, then flat fallbacks — but the extracted values are only used to *address*
@@ -168,6 +176,10 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
 `$event->status` and `$event->payload` are available, but treat them as hints.
 Compare `$status->amount` against your local expectation before booking money.
 
+`$event->eventId` and `$event->type` carry the delivery's own identity — the
+catalogue type (`payment.authorised`, `payment.failed`, `payment.refunded`) and
+the id to deduplicate on. Both are read from the signed body.
+
 ## Subscriptions
 
 Captured from real deliveries on 2026-09-04:
@@ -188,6 +200,7 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $event->chargeId;
     $event->reference;   // "{subId}-{chgId}"
     $event->externalId;  // your own entity id
+    $event->eventId;     // deduplicate on this
 
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
 

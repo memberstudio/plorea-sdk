@@ -6,7 +6,7 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | Exception | Thrown when |
 | --- | --- |
 | `ValidationException` | 400 — invalid request data, or an operation the current state does not allow |
-| `AuthenticationException` | 401 / 403 — invalid or missing API key, or a tenant mismatch |
+| `AuthenticationException` | 401 / 403 — invalid or missing API key, a tenant mismatch, or a request that reached the wrong environment |
 | `ChargeFailedException` | 402 — a subscription charge was declined by the acquirer |
 | `NotFoundException` | 404 — unknown reference or id |
 | `ServerException` | 5xx — Plorea-side error |
@@ -27,6 +27,19 @@ try {
     $e->getMessage();
 }
 ```
+
+## A 401 that is not about the API key
+
+Requests carry an `X-Environment` header that tells Plorea which set of Adyen
+credentials to use. Omit it on `POST payments/refund` and the call routes to
+**live** credentials and comes back `401` with `errorType: "security"` —
+nothing in the body suggests the environment is what went wrong, so it reads
+as a bad key (observed 2026-09-10).
+
+This cannot happen through the SDK. `PloreaClient` sets the header on every
+request from one place. It is a trap for raw `curl` reproductions, which is
+exactly what you reach for when a 401 has you doubting your key. Check the
+header before you rotate anything.
 
 ## Reading the message
 

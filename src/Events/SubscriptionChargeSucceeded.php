@@ -14,6 +14,10 @@ namespace MemberFlow\Plorea\Events;
  * payments()->status() — a scheduler-created charge does not resolve there
  * (403 "Tenant mismatch" on 2026-09-04, 404 "Payment not found" when
  * retested 2026-09-09). Read the charge from subscriptions()->charges().
+ *
+ * $eventId is Plorea's identifier for the delivery and is what you should
+ * deduplicate on. Both it and $type come from the request body rather than
+ * the headers, because the signature covers the body only.
  */
 class SubscriptionChargeSucceeded
 {
@@ -26,5 +30,7 @@ class SubscriptionChargeSucceeded
         public ?string $reference,
         public ?string $externalId,
         public array $payload,
+        public ?string $eventId = null,
+        public ?string $type = null,
     ) {}
 }

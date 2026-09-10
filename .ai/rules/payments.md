@@ -95,3 +95,15 @@ credential problem.
 Needs Plorea to whitelist origins or issue a key. **No SDK change**: the DTO
 exposes `clientKey` because the response has the field, not because it is
 usable.
+
+## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
+
+`POST payments/refund` sent without the `X-Environment` header routes to
+Plorea's **live** Adyen credentials and answers a bare `401` with
+`errorType: "security"`. Nothing in the body hints that environment routing is
+the problem, so it reads as a bad API key and sends you hunting the wrong bug.
+
+`PloreaClient::request()` sets the header on every request from one place, so
+no call through the SDK can hit it — **do not move that header to individual
+resources.** The trap is for raw `curl` reproductions of an SDK request.
+`test_it_requests_a_refund` pins it.

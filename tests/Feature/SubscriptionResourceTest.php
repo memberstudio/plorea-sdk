@@ -120,6 +120,62 @@ class SubscriptionResourceTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456&status=active');
     }
 
+    /**
+     * The polling half of dunning. A failed scheduler charge emits no
+     * webhook, so the helper catches both the documented-but-never-observed
+     * payment_failed status and the overdue nextChargeAt that a real decline
+     * would leave behind whatever Plorea names the status.
+     */
+    public function test_it_lists_subscriptions_needing_attention(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions?*' => Http::response([
+                'externalId' => 'ws_acme_456',
+                'count' => 4,
+                'items' => [
+                    // Healthy: the scheduler has already moved the date on.
+                    ['subscriptionId' => 'sub_ok', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    // The documented failure status.
+                    ['subscriptionId' => 'sub_failed', 'status' => 'payment_failed', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    // Still active, but the charge that was due never landed.
+                    ['subscriptionId' => 'sub_stuck', 'status' => 'active', 'nextChargeAt' => '2020-01-01T00:00:00Z'],
+                    // Canceled subscriptions keep a stale date and are not overdue.
+                    ['subscriptionId' => 'sub_canceled', 'status' => 'canceled', 'nextChargeAt' => '2020-01-01T00:00:00Z'],
+                ],
+            ]),
+        ]);
+
+        $needsAttention = Plorea::subscriptions()->needingAttention('ws_acme_456');
+
+        $this->assertSame(['sub_failed', 'sub_stuck'], $needsAttention->pluck('id')->all());
+
+        // The status filter is deliberately not sent: payment_failed has
+        // never been observed, so filtering server-side on it could drop the
+        // overdue subscriptions this exists to find.
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456');
+    }
+
+    public function test_the_overdue_grace_period_is_configurable(): void
+    {
+        $subscription = Subscription::fromArray([
+            'subscriptionId' => 'sub_1',
+            'status' => 'active',
+            'nextChargeAt' => '2026-09-09T12:00:00Z',
+        ]);
+
+        $now = new \DateTimeImmutable('2026-09-09T12:30:00+00:00');
+
+        $this->assertFalse($subscription->isOverdue(now: $now));
+        $this->assertTrue($subscription->isOverdue(graceMinutes: 10, now: $now));
+    }
+
+    public function test_a_subscription_without_a_next_charge_is_never_overdue(): void
+    {
+        $subscription = Subscription::fromArray(['subscriptionId' => 'sub_1', 'status' => 'active']);
+
+        $this->assertFalse($subscription->isOverdue());
+    }
+
     public function test_it_charges_a_subscription(): void
     {
         Http::fake([
