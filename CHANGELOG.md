@@ -4,6 +4,10 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
+Nothing yet.
+
+## v0.2.1 - 2026-09-10
+
 ### Added
 
 - **Webhook events carry the delivery's identity.** `PaymentStatusUpdated`,
