@@ -78,7 +78,9 @@ dead one, and throws `PaymentAlreadyPaidException` for a settled reference.
 **Webhooks are pings, not truth.** Re-fetch authoritative state in every
 listener. Delivery is best-effort, and several important transitions — card
 setup, cancellation, reactivation, and a **failed** recurring charge — emit no
-webhook at all. If you need dunning, you must poll.
+webhook at all. If you need dunning, poll `subscriptions()->needingAttention()`.
+Deduplicate on `$event->eventId`, never on the `x-plorea-event-id` header — the
+signature covers the body alone.
 → [Webhooks](docs/webhooks.md#what-is-not-sent)
 
 **Status strings do not always say what you would guess.** A refused payment

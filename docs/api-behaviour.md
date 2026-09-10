@@ -188,6 +188,29 @@ is specifically manual versus scheduled.
 
 Reported to Plorea. Read scheduled outcomes from `charges()`.
 
+### ❓ Neither list endpoint has been seen to paginate
+
+`GET subscriptions` returns `{externalId, count, items}`. `GET
+subscriptions/{id}/charges` returns `{subscriptionId, items}`. Neither carries
+a cursor, page, offset or `hasMore` key, and no documentation of paging
+parameters has been supplied.
+
+Every capture is small — one subscription, two charges — so `count` and the
+length of `items` agree, and nothing distinguishes "this is everything" from
+"this is the first page". The charge endpoint is the more exposed of the two:
+with no count at all, a truncated history is indistinguishable from a complete
+one, and a monthly subscription accumulates history indefinitely.
+
+The SDK sends no paging parameters, because inventing names for them would be
+worse than not sending any, and both methods say so in their docblocks. A
+tripwire in `GoldenFixturesTest` asserts `count === count($items)` on the list
+fixture, so a future capture where they diverge fails the build.
+
+**To settle it:** list an external id holding more subscriptions than a page
+would plausibly hold, and read the charges of a subscription with a long
+history. Report the top-level keys and whether `count` exceeds the number of
+items returned.
+
 ---
 
 ## Webhooks
@@ -203,6 +226,11 @@ No `Authorization` header. Instead:
 | `x-plorea-event` | the type |
 
 Payload: `{eventId, createdAt, tenantId, type, data: {...}}`.
+
+The signature covers the **raw body only**. The headers are outside it, so
+`x-plorea-event-id` and `x-plorea-event` can be rewritten on an otherwise valid
+delivery without breaking verification. Deduplicate on the body's `eventId`,
+which the SDK exposes as `$event->eventId`.
 
 ### ✅ Subscription deliveries — captured 2026-09-04
 
@@ -229,8 +257,8 @@ payment above.
 
 - The type is `payment.failed` in **both** the `x-plorea-event` header and
   `body.type`. Never `payment.refused`.
-- `eventId` is duplicated in the `x-plorea-event-id` header — an idempotency
-  key you can read without parsing the body.
+- `eventId` is duplicated in the `x-plorea-event-id` header. Use the body copy
+  as your idempotency key — only that one is signed.
 - The body carries `eventCode: "AUTHORISATION"` with `success: false`,
   mirroring the `webhookEventCode` / `webhookSuccess` pair the status endpoint
   exposes afterwards. No refusal-reason field of any shape.

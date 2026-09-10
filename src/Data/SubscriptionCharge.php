@@ -63,4 +63,25 @@ final readonly class SubscriptionCharge
             raw: $data,
         );
     }
+
+    /**
+     * Whether the charge status matches the given value.
+     */
+    public function is(string $status): bool
+    {
+        return $this->status !== null && strcasecmp($this->status, $status) === 0;
+    }
+
+    /**
+     * Whether the charge went through.
+     *
+     * History items for a settled charge report "authorised" (verified
+     * 2026-09-04). Creating a manual charge returns "charge_created"
+     * instead, so a freshly created charge is not authorised yet — read it
+     * back from charges() to find out how it landed.
+     */
+    public function isAuthorised(): bool
+    {
+        return $this->is('authorised');
+    }
 }

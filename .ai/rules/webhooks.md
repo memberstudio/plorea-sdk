@@ -23,8 +23,16 @@ See `tests/Fixtures/webhook-payment-authorised.json`.
 `merchantAccount` / `balanceAccountId` / `store`, no `lastRefund*` /
 `lastCancel*`, and the only `createdAt` is the event's own.
 
-`eventId` is duplicated in the `x-plorea-event-id` header, so consumers can
-deduplicate **without parsing the body**.
+`eventId` is duplicated in the `x-plorea-event-id` header, but **the signature
+covers the raw body only** — the headers sit outside it, so they are the one
+part of an otherwise valid delivery an attacker can rewrite. A replay with a
+genuine body, a genuine signature and a fresh header value verifies fine and
+would be double-processed by anything keyed on the header.
+
+All three webhook events therefore expose `$event->eventId` and `$event->type`
+read from the **body**. Deduplicate on those. Do not "simplify" the controller
+to read the headers instead; `test_it_reads_the_event_id_from_the_signed_body_not_the_header`
+pins it.
 
 Still treat webhooks as pings and re-fetch `payments/status/{reference}`.
 

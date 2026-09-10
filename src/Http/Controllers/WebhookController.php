@@ -35,6 +35,12 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * payments()->status(). Every delivery also dispatches the catch-all
  * WebhookReceived, which is how consumers handle types this controller
  * does not know about.
+ *
+ * Every event carries the delivery's eventId and type, read from the
+ * *body*. Plorea duplicates both in the x-plorea-event-id and x-plorea-event
+ * headers, but the signature is computed over the raw body alone, so the
+ * headers are the one part of a verified delivery an attacker can still
+ * rewrite. Deduplicate on $event->eventId, never on the header.
  */
 class WebhookController
 {
@@ -45,12 +51,13 @@ class WebhookController
         /** @var array<string, mixed> $payload */
         $payload = $request->json()->all();
 
-        $this->events->dispatch(new WebhookReceived($payload));
-
         $type = is_string($payload['type'] ?? null) ? $payload['type'] : '';
+        $eventId = $this->stringOrNull($payload['eventId'] ?? null);
+
+        $this->events->dispatch(new WebhookReceived($payload, $eventId, $type === '' ? null : $type));
 
         if (str_starts_with($type, 'subscription.')) {
-            $this->dispatchSubscriptionEvent($type, $payload);
+            $this->dispatchSubscriptionEvent($type, $payload, $eventId);
 
             // Always acknowledge — an unparseable payload has nothing to retry.
             return new Response('[accepted]');
@@ -63,6 +70,8 @@ class WebhookController
                 $reference,
                 $this->status($payload),
                 $payload,
+                $eventId,
+                $type === '' ? null : $type,
             ));
         }
 
@@ -89,7 +98,7 @@ class WebhookController
      *
      * @param  array<string, mixed>  $payload
      */
-    protected function dispatchSubscriptionEvent(string $type, array $payload): void
+    protected function dispatchSubscriptionEvent(string $type, array $payload, ?string $eventId): void
     {
         if ($type !== 'subscription.charge_succeeded') {
             return;
@@ -109,6 +118,8 @@ class WebhookController
             $this->stringOrNull($data['reference'] ?? null),
             $this->stringOrNull($data['externalId'] ?? null),
             $payload,
+            $eventId,
+            $type,
         ));
     }
 

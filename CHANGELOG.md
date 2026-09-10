@@ -4,7 +4,57 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- **Webhook events carry the delivery's identity.** `PaymentStatusUpdated`,
+  `SubscriptionChargeSucceeded` and `WebhookReceived` now expose `$eventId`
+  and `$type`, so consumers can deduplicate and branch without reaching into
+  `$payload`. Both are appended to the constructors with null defaults, so
+  existing positional construction is unaffected.
+- **Deduplicate on `$event->eventId`, not on the `x-plorea-event-id` header.**
+  The signature is computed over the raw body and covers nothing else, which
+  makes the headers the one part of an otherwise valid delivery an attacker
+  can rewrite: a replay carrying a genuine body, a genuine signature and a
+  fresh header value verifies successfully and would be processed twice by any
+  app keyed on the header. The events therefore read the signed body copy, and
+  a test posts a signed body alongside a contradictory header to pin it. The
+  previous documentation recommended the header, which was the unsafe half of
+  a true statement — the id is duplicated there, but only one copy is signed.
+  No middleware change; verification was never affected.
+- **`subscriptions()->needingAttention()`** — the polling half of dunning.
+  Returns subscriptions for an external id that report the `payment_failed`
+  status **or** whose `nextChargeAt` is more than `$graceMinutes` (default 60)
+  in the past. A failed scheduler charge emits no webhook, so this is the only
+  way to notice one.
+- **`Subscription::isOverdue(int $graceMinutes = 60, ?DateTimeInterface $now = null)`**
+  — whether a scheduled charge is late. Plorea's scheduler charges within
+  seconds of `nextChargeAt` and moves the date forward as it does, so a date
+  still in the past means the cycle did not complete. A canceled subscription
+  is never overdue: it keeps whatever `nextChargeAt` it had when scheduling
+  stopped. This is derived entirely from fields captured on the wire, which is
+  why `needingAttention()` leans on it rather than on the never-observed
+  `payment_failed` status — if Plorea's documented failure shape turns out to
+  differ, the overdue check still fires.
+- `SubscriptionCharge::is()` and `isAuthorised()`. A freshly created charge
+  reports `charge_created`, not `authorised` — read it back from `charges()`
+  to find out how it landed.
+
+### Changed
+
+- `forExternalId()` and `charges()` no longer claim to return *all* records.
+  Neither endpoint carries a cursor, page, offset or `hasMore` key, no paging
+  parameters have been documented, and every capture is too small to tell
+  whether the response is complete: one subscription, two charges. The list
+  envelope's `count` agrees with the number of items returned at that size,
+  which settles nothing. `charges()` is the more exposed of the two, having no
+  count at all, so a truncated history would be indistinguishable from a
+  complete one — and a monthly subscription accumulates history indefinitely.
+  The SDK sends no paging parameters, because inventing names for them would
+  be worse than sending none. `GoldenFixturesTest` now asserts
+  `count === count($items)` on the list fixture and pins both envelopes' key
+  sets, so a future capture that paginates fails the build rather than
+  silently truncating. Verify large result sets against your own records until
+  this is settled.
 
 ## v0.2.0 - 2026-09-09
 

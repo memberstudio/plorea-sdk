@@ -227,23 +227,46 @@ Read this before building retry logic.
   observed** — no test-environment card can store successfully and then
   decline. See [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
 
-So dunning must poll, and must not assume the shape of what it finds:
+So dunning must poll, and must not assume the shape of what it finds.
+`needingAttention()` is the polling half:
 
 ```php
-// Scheduled, e.g. hourly for subscriptions whose nextChargeAt has passed.
-$subscription = Plorea::subscriptions()->find($id);
+// Scheduled, e.g. hourly, per billed entity.
+foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
+    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
 
-if ($subscription->hasPaymentFailure()) {
-    // Prompt for a new card. Do not branch on failureReason — it may be null.
-}
-
-// Belt and braces: compare the charge history against the expected cadence.
-$latest = Plorea::subscriptions()->charges($id)->first();
-
-if ($latest?->status !== 'authorised') {
-    // Something went wrong on the last cycle.
+    if ($latest?->isAuthorised() !== true) {
+        // Prompt for a new card. Do not branch on failureReason — it is null
+        // even for a genuine refusal.
+    }
 }
 ```
+
+It returns a subscription when either test fires:
+
+| Test | Basis |
+| --- | --- |
+| `hasPaymentFailure()` — status is `payment_failed` | Modelled from Plorea's documentation, **never observed** |
+| `isOverdue()` — `nextChargeAt` is more than an hour in the past | Derived from fields captured on the wire |
+
+The second test is the one carrying the weight. Plorea's scheduler charges
+within seconds of `nextChargeAt` and moves the date forward as it does, so a
+date still in the past means the cycle did not complete — whatever Plorea ends
+up calling the status. If the documented failure shape turns out to be wrong,
+the overdue check still fires.
+
+Tune the grace period for your billing cadence, and pass a fixed clock in tests:
+
+```php
+Plorea::subscriptions()->needingAttention($externalId, graceMinutes: 15);
+
+$subscription->isOverdue(graceMinutes: 15, now: $this->knownTime);
+```
+
+A canceled subscription is never overdue — it keeps whatever `nextChargeAt` it
+had when scheduling stopped. Being overdue tells you the cycle did not
+complete, not why; read `charges()` for that, never `payments()->status()`,
+which cannot resolve a scheduler charge at all.
 
 ## A complete flow
 

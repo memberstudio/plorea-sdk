@@ -65,6 +65,44 @@ Reported to Plorea 2026-09-04. `payments/status/{subId}-{chgId}` fails for
 Read scheduled outcomes from `charges()`. **Dunning must poll that, never
 `payments()->status()`.**
 
+## Dunning: `needingAttention()` leans on overdue, not on `payment_failed`
+
+`subscriptions()->needingAttention($externalId)` returns a subscription when it
+reports `payment_failed` **or** when `Subscription::isOverdue()` fires —
+`nextChargeAt` more than `$graceMinutes` (default 60) in the past, canceled
+subscriptions excluded because they keep a stale date.
+
+The overdue test is the load-bearing one **on purpose**. `payment_failed` is
+modelled from Plorea's documentation and has never been observed (see the dead
+end below), while `nextChargeAt` is captured. The scheduler charges within
+seconds of the due time and moves the date forward as it does, so a date still
+in the past means the cycle did not complete whatever Plorea names the status.
+If the documented failure shape turns out to be wrong, the overdue check still
+fires. **Do not reduce this to a status check.**
+
+It deliberately sends no `status` filter to the list endpoint: filtering
+server-side on a never-observed value could drop the overdue subscriptions the
+helper exists to find.
+
+It says *which* subscriptions to look at, never *why*. Read `charges()` for
+that — `SubscriptionCharge::isAuthorised()` is the predicate.
+
+## Neither list endpoint has been seen to paginate — OPEN
+
+`GET subscriptions` → `{externalId, count, items}`; `GET
+subscriptions/{id}/charges` → `{subscriptionId, items}`. No cursor, page,
+offset or `hasMore` key on either, and no paging parameters documented.
+
+Every capture is small (1 subscription, 2 charges), so `count` and
+`count($items)` agree and nothing distinguishes "everything" from "page one".
+The charges endpoint is the more exposed: with no count at all a truncated
+history is invisible, and a monthly subscription accumulates history forever.
+
+**Do not invent paging parameter names.** The SDK sends none, both docblocks
+say the claim is unverified, and `GoldenFixturesTest` asserts
+`count === count($items)` as a tripwire — a future capture where they diverge
+fails the build.
+
 ## Dead end — do NOT retry (verified 2026-09-08)
 
 **There is no way to produce a failing subscription charge in test.**

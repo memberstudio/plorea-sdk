@@ -102,9 +102,76 @@ class WebhookTest extends TestCase
         $this->assertArrayNotHasKey('failureReason', $payload['data']);
         $this->assertArrayNotHasKey('refusalReason', $payload['data']);
 
-        // The event id is duplicated in the x-plorea-event-id header, so
-        // consumers can deduplicate without parsing the body.
+        // The event id is duplicated in the x-plorea-event-id header, but
+        // only the body copy is covered by the signature — see
+        // test_it_reads_the_event_id_from_the_signed_body_not_the_header.
         $this->assertSame('evt_00000000000000000000000000000009', $payload['eventId']);
+    }
+
+    /**
+     * Every event carries the delivery's own identity, so consumers can
+     * deduplicate and branch on the type without reaching into the payload
+     * array.
+     */
+    public function test_it_exposes_the_event_id_and_type_on_every_webhook_event(): void
+    {
+        Event::fake([WebhookReceived::class, PaymentStatusUpdated::class]);
+
+        $this->postSignedWebhook($this->fixture('webhook-payment-authorised'))->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class, fn (WebhookReceived $event): bool => $event->eventId === 'evt_00000000000000000000000000000001'
+            && $event->type === 'payment.authorised');
+
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->eventId === 'evt_00000000000000000000000000000001'
+            && $event->type === 'payment.authorised');
+    }
+
+    public function test_it_exposes_the_event_id_and_type_on_subscription_charge_events(): void
+    {
+        Event::fake([SubscriptionChargeSucceeded::class]);
+
+        $this->postSignedWebhook($this->fixture('webhook-subscription-charge-succeeded'))->assertOk();
+
+        Event::assertDispatched(SubscriptionChargeSucceeded::class, fn (SubscriptionChargeSucceeded $event): bool => $event->eventId === 'evt_00000000000000000000000000000002'
+            && $event->type === 'subscription.charge_succeeded');
+    }
+
+    /**
+     * The signature covers the raw body and nothing else, so the
+     * x-plorea-event-id header is the one part of an otherwise valid
+     * delivery an attacker can still rewrite. Deduplicating on the header
+     * would let a replay with a fresh header value be processed twice while
+     * the signature still verified, so the events read the body copy.
+     *
+     * This posts a genuinely signed body alongside a contradictory header:
+     * the request is accepted, and the body value is what reaches consumers.
+     */
+    public function test_it_reads_the_event_id_from_the_signed_body_not_the_header(): void
+    {
+        Event::fake([PaymentStatusUpdated::class]);
+
+        $payload = $this->fixture('webhook-payment-authorised');
+
+        $this->postJson('/plorea/webhook', $payload, [
+            'X-Plorea-Signature' => $this->signatureFor($payload),
+            'x-plorea-event-id' => 'evt_attacker_supplied_value',
+            'x-plorea-event' => 'payment.refunded',
+        ])->assertOk();
+
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->eventId === 'evt_00000000000000000000000000000001'
+            && $event->type === 'payment.authorised');
+    }
+
+    public function test_it_leaves_the_event_id_and_type_null_when_the_body_omits_them(): void
+    {
+        Event::fake([WebhookReceived::class, PaymentStatusUpdated::class]);
+
+        $this->postSignedWebhook([
+            'data' => ['reference' => 'GOLDEN-2026-001', 'status' => 'authorised'],
+        ])->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class, fn (WebhookReceived $event): bool => $event->eventId === null && $event->type === null);
+        Event::assertDispatched(PaymentStatusUpdated::class, fn (PaymentStatusUpdated $event): bool => $event->eventId === null && $event->type === null);
     }
 
     /**

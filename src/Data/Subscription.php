@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MemberFlow\Plorea\Data;
 
 use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use MemberFlow\Plorea\Data\Concerns\ParsesResponseData;
 use MemberFlow\Plorea\Enums\RecurringType;
 
@@ -119,5 +120,34 @@ final readonly class Subscription
     public function hasPaymentFailure(): bool
     {
         return $this->is('payment_failed');
+    }
+
+    /**
+     * Whether a scheduled charge is late.
+     *
+     * Plorea's scheduler charges within seconds of nextChargeAt and moves the
+     * date forward as it does, so a nextChargeAt still in the past after the
+     * grace period means the cycle did not complete — a decline, a retry in
+     * progress, or a subscription stuck for some other reason. This is
+     * derived entirely from observed fields, which is why dunning should lean
+     * on it rather than on the never-observed payment_failed status.
+     *
+     * A canceled subscription is never overdue: it keeps whatever
+     * nextChargeAt it had when scheduling stopped.
+     *
+     * Being overdue says the cycle did not complete, not why. Read
+     * subscriptions()->charges() for that.
+     */
+    public function isOverdue(int $graceMinutes = 60, ?DateTimeInterface $now = null): bool
+    {
+        if (! $this->nextChargeAt instanceof CarbonImmutable || $this->isCanceled()) {
+            return false;
+        }
+
+        $reference = $now instanceof DateTimeInterface
+            ? CarbonImmutable::instance($now)
+            : CarbonImmutable::now();
+
+        return $this->nextChargeAt->addMinutes($graceMinutes)->isBefore($reference);
     }
 }
