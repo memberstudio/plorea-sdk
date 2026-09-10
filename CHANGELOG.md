@@ -54,7 +54,22 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   `count === count($items)` on the list fixture and pins both envelopes' key
   sets, so a future capture that paginates fails the build rather than
   silently truncating. Verify large result sets against your own records until
-  this is settled.
+  this is settled. A probe on 2026-09-10 confirmed both envelopes and settled
+  nothing else: listing by tenant returned `count: 3` against 3 items, and the
+  longest charge history available held 3 charges, which agrees under either
+  reading. It also showed the list envelope echoes whichever filter you
+  queried by, `externalId` or `tenantId`.
+
+### Documented
+
+- **A refund sent without the `X-Environment` header routes to Plorea's live
+  Adyen credentials** and answers a bare `401` with `errorType: "security"`,
+  carrying nothing that points at environment routing — so it reads as a bad
+  API key (observed 2026-09-10). No call made through this SDK can hit it:
+  `PloreaClient` sets the header on every request from one place, and
+  `test_it_requests_a_refund` now pins that for the endpoint where getting it
+  wrong is most expensive. The trap is for raw `curl` reproductions, which is
+  what you reach for when a 401 has you doubting your key.
 
 ## v0.2.0 - 2026-09-09
 

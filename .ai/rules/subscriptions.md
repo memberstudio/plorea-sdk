@@ -87,21 +87,28 @@ helper exists to find.
 It says *which* subscriptions to look at, never *why*. Read `charges()` for
 that — `SubscriptionCharge::isAuthorised()` is the predicate.
 
-## Neither list endpoint has been seen to paginate — OPEN
+## Neither list endpoint has been seen to paginate — OPEN, probed 2026-09-10
 
-`GET subscriptions` → `{externalId, count, items}`; `GET
-subscriptions/{id}/charges` → `{subscriptionId, items}`. No cursor, page,
-offset or `hasMore` key on either, and no paging parameters documented.
+`GET subscriptions` → `{count, items}` plus an echo of the filter you queried
+by (`externalId` or `tenantId`); `GET subscriptions/{id}/charges` →
+`{subscriptionId, items}`. No cursor, page, offset or `hasMore` key on either,
+and no paging parameters documented.
 
-Every capture is small (1 subscription, 2 charges), so `count` and
-`count($items)` agree and nothing distinguishes "everything" from "page one".
-The charges endpoint is the more exposed: with no count at all a truncated
-history is invisible, and a monthly subscription accumulates history forever.
+A deliberate probe confirmed both shapes and settled nothing else: listing by
+tenant gave `count: 3` against 3 items, and the longest available history was 3
+charges. At n=3 the two agree under either reading. The charges endpoint is the
+more exposed: with no count at all a truncated history is invisible, and a
+monthly subscription accumulates history forever.
 
 **Do not invent paging parameter names.** The SDK sends none, both docblocks
 say the claim is unverified, and `GoldenFixturesTest` asserts
 `count === count($items)` as a tripwire — a future capture where they diverge
 fails the build.
+
+Settling it needs a page-crossing dataset, which cannot be manufactured without
+spamming real Adyen test subscriptions. Cheapest path: leave one daily-interval
+subscription running (~30 charges/month unattended) and read its charges later.
+**A wait, not a probe — do not burn time trying to force it.**
 
 ## Dead end — do NOT retry (verified 2026-09-08)
 

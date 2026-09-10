@@ -260,3 +260,5 @@ The fake mirrors the real API: a reference it has created a link for reports an 
 ## Errors
 
 All exceptions extend `MemberFlow\Plorea\Exceptions\PloreaException`: `ValidationException` (400), `AuthenticationException` (401/403), `ChargeFailedException` (402), `NotFoundException` (404), `ServerException` (5xx), `ConnectionException`, `PaymentAlreadyPaidException`. HTTP errors expose `$e->status` and `$e->response?->json()`. Never log the API key or `Authorization` headers.
+
+**A 401 is not always about the key.** The `X-Environment` header selects which Adyen credentials Plorea uses; omit it on `POST payments/refund` and the call routes to **live** credentials and returns `401` with `errorType: "security"`, with nothing in the body pointing at the environment (observed 2026-09-10). The SDK sets the header on every request, so this only bites raw `curl` reproductions — which is exactly what you reach for when a 401 has you doubting your key. Check the header before rotating anything.

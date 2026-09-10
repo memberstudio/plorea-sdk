@@ -131,11 +131,18 @@ class PaymentResourceTest extends TestCase
         $this->assertSame('refund_requested', $refund->status);
         $this->assertSame(450000, $refund->amount?->value);
 
+        // The X-Environment assertion is not incidental: refunding without
+        // that header routes to Plorea's *live* Adyen credentials and answers
+        // a bare 401 with errorType "security", carrying nothing to suggest
+        // the environment is what went wrong (observed against staging
+        // 2026-09-10). PloreaClient sets it on every request from one place,
+        // so SDK callers cannot hit it — this pins that for the endpoint
+        // where getting it wrong is most expensive.
         Http::assertSent(fn (Request $request): bool => $request->data() === [
             'reference' => 'FIN-2026-00123',
             'modificationReference' => 'FIN-2026-00123-refund-1',
             'reason' => 'Customer requested refund',
-        ]);
+        ] && $request->header('X-Environment') === ['test']);
     }
 
     public function test_it_requests_a_cancellation(): void
