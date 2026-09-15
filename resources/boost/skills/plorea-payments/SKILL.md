@@ -38,7 +38,7 @@ $link->expiresAt; // store this — expiry is judged from it, not from status
 The create response does not echo the merchant back; the org number only
 reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
 
-Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible.
+Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible. The lookup walks the whole suffix chain before reusing anything — a superseded base reference stays `created` forever, so an open link is only returned once no later suffix is found paid. Budget one extra status request per call, and read `$e->status->reference` on the exception: it may name a suffixed reference rather than the one you passed in.
 
 ## Status
 
@@ -255,7 +255,7 @@ Plorea::fake([
 ]);
 ```
 
-The fake mirrors the real API: a reference it has created a link for reports an open status (so `firstOrCreate()` works); unknown references throw `NotFoundException`. Never put real API keys in tests or fixtures.
+The fake mirrors the real API: a reference it has created a link for reports an open status (so `firstOrCreate()` works); unknown references throw `NotFoundException`; a creation whose stub threw is visible to `assertSent()` but does not make the reference findable. Defaults echo the request — a future `trialEndsAt` reports `trialing`, a filtered list applies your `tenantId` / `status`, a manual charge echoes your amount and VAT. Never put real API keys in tests or fixtures.
 
 ## Errors
 

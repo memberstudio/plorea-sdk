@@ -14,6 +14,25 @@ or exception output.
   check needs one, it runs in the consuming app and only a match/no-match
   verdict comes back.
 
+## Two paths carry the key out of the SDK
+
+Both are closed, and both must stay closed.
+
+- **The response path.** `RequestException::fromResponse()` nulls the
+  response's `transferStats` before the exception is built, because those stats
+  hold the outbound request and its `Authorization` header.
+- **The connection path.** Illuminate wraps Guzzle's transfer exception, which
+  keeps the PSR-7 request — header included — reachable through two
+  `getPrevious()` calls. `ConnectionException::from()` walks the chain and
+  rewrites each request with a redacted header. PSR-7 requests are immutable
+  and Guzzle's `request` property is private, so reflection is the only way to
+  write the copy back; that is deliberate, not a shortcut. When a link in the
+  chain cannot be redacted, **the chain is dropped rather than rethrown** — a
+  lost stack trace is cheaper than a leaked credential.
+
+`tests/Unit/ConnectionExceptionTest.php` proves both outcomes. Do not relax
+the drop-the-chain fallback into a best-effort redaction.
+
 ## Why there is no golden fixture for signature verification
 
 A test proving signature verification would have to contain a real signature

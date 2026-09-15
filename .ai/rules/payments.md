@@ -61,6 +61,16 @@ reuse/suffix strategy; an already-paid reference must fail loudly with
 `PaymentAlreadyPaidException`. The check-then-create is not atomic — consuming
 apps should wrap it in a per-reference lock if double submits are possible.
 
+**The walk runs the whole suffix chain, not just up to the first reusable
+link.** A superseded base reference stays `created` forever — nothing flips it
+when the customer pays the `-1` link instead — so stopping at the first open
+link would hand back a payable link for an invoice that was already settled
+under a later suffix. Every suffix is probed until a 404 ends the chain; the
+first reusable link found is held and returned only once the walk proves no
+later suffix was paid. Cost is one extra status request per call, and
+`PaymentAlreadyPaidException` can now carry the status of a *suffixed*
+reference rather than only the base one.
+
 ## `merchantOrgNr` is contractually required
 
 Stated by Plorea 2026-08-30. Always the invoice issuer's (client's) org nr,

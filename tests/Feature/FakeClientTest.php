@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Tests\Feature;
 
+use Carbon\CarbonImmutable;
 use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Data\BillingInterval;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\ChargeFailedException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
+use MemberFlow\Plorea\Exceptions\ServerException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Testing\RecordedRequest;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -44,6 +47,27 @@ class FakeClientTest extends TestCase
         $this->assertSame('chg_fake_charge', $charge->id);
 
         Plorea::assertSentCount(5);
+    }
+
+    /**
+     * Pins the request count the testing docs quote for the fake's
+     * firstOrCreate example. The walk always probes one suffix past the
+     * reusable link, so this is create + status + pay page + status-1.
+     */
+    public function test_first_or_create_against_the_fake_costs_four_requests(): void
+    {
+        Plorea::fake();
+
+        $pending = Plorea::payments()
+            ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
+            ->merchant(orgNr: '912650774');
+
+        $pending->create();
+        $again = $pending->firstOrCreate();
+
+        $this->assertSame('ref-1', $again->reference);
+
+        Plorea::assertSentCount(4);
     }
 
     public function test_status_for_an_unknown_reference_is_a_404(): void
@@ -148,6 +172,82 @@ class FakeClientTest extends TestCase
         $this->expectExceptionMessage('No fake response registered');
 
         $fake->get('some/unknown/endpoint');
+    }
+
+    public function test_a_subscription_created_with_a_future_trial_is_reported_as_trialing(): void
+    {
+        Plorea::fake();
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
+            ->trialUntil(CarbonImmutable::now()->addDays(14))
+            ->save();
+
+        $this->assertTrue($subscription->isTrialing());
+        $this->assertFalse($subscription->isActive());
+    }
+
+    public function test_a_subscription_created_with_a_past_trial_is_reported_as_active(): void
+    {
+        Plorea::fake();
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
+            ->trialUntil(CarbonImmutable::now()->subDay())
+            ->save();
+
+        $this->assertTrue($subscription->isActive());
+    }
+
+    public function test_the_list_applies_the_tenant_and_status_filters(): void
+    {
+        Plorea::fake();
+
+        $subscriptions = Plorea::subscriptions()->forExternalId('ws_1', tenantId: 'other-tenant', status: 'canceled');
+
+        $this->assertCount(1, $subscriptions);
+        $this->assertSame('other-tenant', $subscriptions->first()?->tenantId);
+        $this->assertTrue($subscriptions->first()?->isCanceled());
+    }
+
+    public function test_a_manual_charge_echoes_the_requested_amount_and_vat(): void
+    {
+        Plorea::fake();
+
+        $charge = Plorea::subscriptions()->charge('sub_1', Amount::nok(45000), vatRate: 0.25, vatAmount: 9000);
+
+        $this->assertSame(45000, $charge->amount?->value);
+        $this->assertSame(0.25, $charge->vatRate);
+        $this->assertSame(9000, $charge->vatAmount);
+    }
+
+    /**
+     * The fake reports a status only for references it has seen a link
+     * created for. A creation whose stub threw never created anything, so it
+     * must not make the reference findable — otherwise a consumer's
+     * failed-creation recovery test passes against a fake that succeeded.
+     */
+    public function test_a_creation_that_failed_does_not_make_the_reference_findable(): void
+    {
+        $fake = Plorea::fake([
+            'POST payments/link' => new ServerException('Plorea is down', 500),
+        ]);
+
+        try {
+            Plorea::payments()
+                ->link('ref-failed', 'Product', Amount::nok(50000), 'https://example.test/return')
+                ->merchant(orgNr: '912650774')
+                ->create();
+            $this->fail('Expected ServerException.');
+        } catch (ServerException) {
+            // Expected — the link was never created.
+        }
+
+        $fake->assertSent('POST payments/link');
+
+        $this->expectException(NotFoundException::class);
+
+        Plorea::payments()->status('ref-failed');
     }
 
     public function test_assertions_require_the_fake(): void

@@ -93,6 +93,12 @@ With no stub, the fake answers these routes:
 Anything else throws `PloreaException` naming the route, so a typo or a new
 endpoint fails loudly instead of silently returning nothing.
 
+Defaults echo what you asked for rather than a fixed body: a subscription with
+a future `trialEndsAt` comes back `trialing`, a filtered subscription list
+applies your `tenantId` / `status` query to the item it returns, and a manual
+charge reports the amount and VAT you sent. Stub the route when you need a
+state the defaults would not produce.
+
 ### Status lookups mirror the real API
 
 This is the one piece of stateful behaviour, and it exists so `firstOrCreate()`
@@ -101,6 +107,9 @@ works out of the box:
 - A reference the fake has **seen a link created for** reports an open
   (`active`) status echoing that link's amount and tenant.
 - Any **other** reference throws `NotFoundException`, exactly like a live 404.
+- A creation whose stub **threw** does not count as seen. The request is still
+  visible to `assertSent()`, but the reference stays a 404, so a failed create
+  cannot look like a successful one.
 
 ```php
 Plorea::fake();
@@ -109,8 +118,12 @@ $pending = Plorea::payments()->link('ref-1', 'P', Amount::nok(50000), 'https://x
 $pending->create();
 $again = $pending->firstOrCreate();   // reuses the open link — no second create
 
-Plorea::assertSentCount(3);           // create, status, pay-page expiry check
+Plorea::assertSentCount(4);           // create, status, pay-page expiry check, status for ref-1-1
 ```
+
+The fourth request is the suffix walk: `firstOrCreate()` probes one reference
+past the reusable link to prove no later suffix was paid. See
+[Payments](payments.md).
 
 Stub `payments/status/*` to simulate a refusal, or any other state:
 

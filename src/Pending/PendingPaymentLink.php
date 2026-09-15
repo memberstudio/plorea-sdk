@@ -192,6 +192,14 @@ class PendingPaymentLink
      * "-2", ...). A reference that has already been paid throws, since a
      * fresh link for a settled invoice would be payable again.
      *
+     * The whole suffix chain is walked before any link is handed back, not
+     * just up to the first reusable one. An open base link can sit in front
+     * of a suffix that was already paid — base open at 100, an amount change
+     * mints "-1" at 200, the customer pays "-1" — and returning the base on
+     * sight would hand out a payable link for a settled invoice. The walk
+     * ends at the first reference Plorea does not know, which is where a new
+     * link is created.
+     *
      * Two calls racing on the same new reference can still both create a
      * link — Plorea offers no server-side guard, so serialize concurrent
      * calls per reference in your application (e.g. `Cache::lock()`) if
@@ -204,6 +212,7 @@ class PendingPaymentLink
     public function firstOrCreate(int $maxAttempts = 10): PaymentLinkCreated
     {
         $base = $this->reference;
+        $reusable = null;
 
         try {
             for ($attempt = 0; $attempt <= $maxAttempts; $attempt++) {
@@ -214,16 +223,27 @@ class PendingPaymentLink
                         $this->client->get('payments/status/'.rawurlencode($this->reference)),
                     );
                 } catch (NotFoundException) {
-                    return $this->create();
+                    // The end of the chain. Nothing beyond this suffix can
+                    // have been paid, so an earlier reusable link is safe.
+                    return $reusable instanceof PaymentStatus
+                        ? PaymentLinkCreated::fromArray($reusable->raw)
+                        : $this->create();
                 }
 
                 if ($status->isPaid()) {
                     throw new PaymentAlreadyPaidException($status);
                 }
 
-                if ($this->isReusable($status)) {
-                    return PaymentLinkCreated::fromArray($status->raw);
+                // Only the first reusable link is kept — the walk continues
+                // to prove no later suffix was paid, and checking expiry on
+                // the rest would cost a pay-page request each.
+                if (! $reusable instanceof PaymentStatus && $this->isReusable($status)) {
+                    $reusable = $status;
                 }
+            }
+
+            if ($reusable instanceof PaymentStatus) {
+                return PaymentLinkCreated::fromArray($reusable->raw);
             }
 
             throw new PloreaException(

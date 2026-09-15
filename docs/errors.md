@@ -121,7 +121,11 @@ A timeout is not a failure — it is an unknown. Re-read state before deciding.
 
 The SDK strips transfer stats from failed responses so exception output cannot
 carry the `Authorization` header, and `RequestSent` / `ResponseReceived` carry
-no headers at all. Keep that property when you log:
+no headers at all. A connection failure is redacted the same way: Guzzle's
+exception keeps the outbound request, so `ConnectionException` rewrites the
+header in the wrapped chain before it reaches you — and drops the chain
+entirely if it cannot. That is why `$e->getPrevious()` is occasionally null on
+a transport failure. Keep that property when you log:
 
 ```php
 report($e);                      // fine
