@@ -92,21 +92,26 @@ a Plorea-side KYC bug, fixed 2026-08-30 (verified:
 
 ## `platform` goes on every request body — 2026-09-15
 
-Stated by Plorea (Bendik). `platform` is **internal logging and reporting
+Stated by Plorea. `platform` is **internal logging and reporting
 only** — no functional effect on any endpoint. Send it on all calls, not just
 payment-link creation.
 
 `PloreaClient::post()` / `patch()` stamp it from `plorea.platform`, which has
-**no default** — the package is public, and a third-party consumer must not
-report itself as `memberflow`. MemberFlow's own apps set `PLOREA_PLATFORM` in
-their env. A value already in the payload wins, which is what
-`PendingPaymentLink::platform()` relies on. `FakeClient` mirrors this so a
-payload assertion that passes under the fake describes a real request.
+**no default and must never gain one**. This is a public package: a default
+would make every app that installs it report itself under a name it did not
+choose, and Plorea's reporting would attribute that traffic to the wrong
+integrator. Unset, the field is omitted entirely; each consuming app sets
+`PLOREA_PLATFORM` to its own identifier. A value already in the payload wins,
+which is what `PendingPaymentLink::platform()` relies on. `FakeClient` mirrors
+this so a payload assertion that passes under the fake describes a real
+request.
 
 **Bodies only.** A GET has no payload, and Plorea only ever described
-`platform` as a body field — appending it to the query string would rewrite the
-URL of every read endpoint on our own initiative. `PlatformFieldTest` pins both
-halves.
+`platform` as a body field — appending it to the query string would rewrite
+the URL of every read endpoint on the SDK's own initiative, for a value no
+endpoint is documented to read there. `PlatformFieldTest` pins both halves.
+**Open question to Plorea:** whether reads want it too. Until they answer,
+reads stay untouched.
 
 It was **not** the cause of the refund/cancel `401`. That was an Adyen
 credentials problem in Plorea's test environment, which they fixed; the same
@@ -118,8 +123,8 @@ re-litigate the platform A/B.
 Stated by Plorea 2026-09-15. Capture runs through AmendoPOS, typically minutes
 after authorization. **A manual capture endpoint is on their roadmap and does
 not exist today**, so do not add a `capture()` method or model a pending-capture
-state. `authorised` is the terminal success state from our side — which is
-already how `isPaid()` treats it.
+state. `authorised` is the terminal success state an integrator can observe —
+which is already how `isPaid()` treats it.
 
 ## Embedded checkout is blocked on a client key
 
@@ -137,21 +142,21 @@ Needs Plorea to whitelist origins or issue a key. **No SDK change**: the DTO
 exposes `clientKey` because the response has the field, not because it is
 usable.
 
-**Update 2026-09-15 — unblocked, pending credentials.** Plorea confirmed the
-flow is supported and will share `ADYEN_CLIENT_KEY_TEST` / `_LIVE` and whitelist
-`https://*.memberflow.no`, the staging domains and `http://localhost:*` once we
-send the final origin list. The key comes from Plorea out of band and belongs in
-the consuming app's env — **never in this repo**. Nothing here changes until
-the origins are live and a session has been mounted successfully.
+**Update 2026-09-15 — supported, gated on credentials.** Plorea confirmed the
+flow is supported: on request they issue the integrator an Adyen client key
+(test and live) and whitelist that integrator's origins, including
+`http://localhost:*` for development. The key is issued out of band and lives
+in the consuming app's environment — **never in this repo, and never a config
+default here**. Nothing in the SDK changes until an origin-whitelisted session
+has been mounted successfully and the shape is observed.
 
 Native mobile is the same endpoint with one extra field: `channel` of `iOS` or
 `Android` on `POST payments/session` makes the response carry the `clientKey`
-the native Adyen SDK needs, and requires the bundle-id / package-name
-(`no.memberflow.android`, `no.memberflow.xt`; iOS TBD) whitelisted in Plorea's
-Adyen Customer Area. Today's working path needs none of it: a WebView on the
-hosted pay page is `channel: "Web"` and already works. The SDK sends no
-`channel` today — do not add one until an origin-whitelisted session proves the
-shape.
+the native Adyen SDK needs, and requires the app's bundle id / package name
+whitelisted in Plorea's Adyen Customer Area. Today's working path needs none of
+it: a WebView on the hosted pay page is `channel: "Web"` and already works. The
+SDK sends no `channel` today — do not add one until an origin-whitelisted
+session proves the shape.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 

@@ -293,8 +293,11 @@ externalId, amount: {value, currency}, pspReference, nextChargeAt,
 environment}`. A **manual** `charge()` emits `payment.authorised` with the
 ordinary flat payment shape.
 
-Plorea's registered webhook URL points at **production**, not staging — which
-is why an earlier staging run saw nothing at all.
+Webhook registration is manual and **per tenant**: Plorea delivers to the one
+URL you gave them, with no per-environment routing. The tenant these captures
+came from had production registered, which is why an earlier staging run saw
+nothing at all. If deliveries are missing, confirm which URL is registered
+before suspecting your listener.
 
 ### 📋 The catalogue is four types — Plorea, 2026-09-09
 

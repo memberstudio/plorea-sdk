@@ -118,8 +118,8 @@ Adyen has no amount-based refusal triggering for ecom cards — that mechanism i
 in-person/terminal only. The only documented levers are a magic
 `paymentMethod.holderName` or `additionalData.RequestedTestAcquirerResponseCode`,
 and both must ride on the `/payments` request, i.e. at setup time. Plorea's
-scheduler charges the stored PM server-side with no passthrough for either, and
-we control only the amount.
+scheduler charges the stored PM server-side with no passthrough for either —
+the amount is the only lever a caller has.
 
 Empirically confirmed: the holderName `NOT_ENOUGH_BALANCE` trick refuses the
 setup verification itself, so the PM never activates
