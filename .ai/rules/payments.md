@@ -87,8 +87,8 @@ once a merchant is attached.
 
 First payment for a new org nr auto-starts KYC; payout is released on approval
 (1–5 business days). The earlier "Invalid Store" / 422-at-session regression was
-a Plorea-side KYC bug, fixed 2026-08-30 (verified:
-`SDK-KYC-RETEST-20260830104706` created + session OK).
+a Plorea-side KYC bug, fixed 2026-08-30 (verified the same day: a retest link
+on a fresh org nr created, and a session issued for it).
 
 ## `platform` goes on every request body — 2026-09-15
 
