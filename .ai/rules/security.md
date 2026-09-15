@@ -49,3 +49,9 @@ Every fixture is an anonymised capture. Before a captured body enters
 payment link ids, card last4, and real email addresses. Keep the *shape*
 exactly — key names, ordering, and null-vs-absent — because that is the whole
 point of the fixture.
+
+**This applies to prose, not only to fixtures.** Citing a real reference as
+evidence in a rule or a doc puts the same identifier in the same public repo,
+just outside `tests/Fixtures/` where nobody thinks to look for it. Describe
+what was created and when; do not quote the reference. The date and the
+outcome are the evidence — the identifier never was.
