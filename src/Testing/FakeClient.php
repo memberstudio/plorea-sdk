@@ -57,7 +57,7 @@ class FakeClient implements Client
 
     public function get(string $uri, array $query = []): array
     {
-        return $this->record(new RecordedRequest('get', $uri, $query));
+        return $this->record(new RecordedRequest('get', $uri, $this->withPlatform($query)));
     }
 
     public function post(string $uri, array $payload = []): array
@@ -71,8 +71,8 @@ class FakeClient implements Client
     }
 
     /**
-     * PloreaClient stamps the configured platform onto every request body, so
-     * the fake does too — an assertion that passes here has to describe a
+     * PloreaClient stamps the configured platform onto every request, so the
+     * fake does too — an assertion that passes here has to describe a
      * payload the real client would actually have sent.
      *
      * @param  array<string, mixed>  $payload

@@ -59,7 +59,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_open_payment_status_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-001' => Http::response($this->fixture('payment-status-open')),
+            'payments.plorea.no/payments/status/GOLDEN-2026-001?*' => Http::response($this->fixture('payment-status-open')),
         ]);
 
         $status = Plorea::payments()->status('GOLDEN-2026-001');
@@ -88,7 +88,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_paid_payment_status_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-001' => Http::response($this->fixture('payment-status-paid')),
+            'payments.plorea.no/payments/status/GOLDEN-2026-001?*' => Http::response($this->fixture('payment-status-paid')),
         ]);
 
         $status = Plorea::payments()->status('GOLDEN-2026-001');
@@ -122,7 +122,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_refused_payment_status_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-REFUSED-001' => Http::response($this->fixture('payment-status-refused')),
+            'payments.plorea.no/payments/status/GOLDEN-2026-REFUSED-001?*' => Http::response($this->fixture('payment-status-refused')),
         ]);
 
         $status = Plorea::payments()->status('GOLDEN-2026-REFUSED-001');
@@ -182,7 +182,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_refund_requested_status_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-001' => Http::response($this->fixture('payment-status-refund-requested')),
+            'payments.plorea.no/payments/status/GOLDEN-2026-001?*' => Http::response($this->fixture('payment-status-refund-requested')),
         ]);
 
         $status = Plorea::payments()->status('GOLDEN-2026-001');
@@ -203,7 +203,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_cancel_requested_status_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-002' => Http::response($this->fixture('payment-status-cancel-requested')),
+            'payments.plorea.no/payments/status/GOLDEN-2026-002?*' => Http::response($this->fixture('payment-status-cancel-requested')),
         ]);
 
         $status = Plorea::payments()->status('GOLDEN-2026-002');
@@ -222,7 +222,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_pay_page_response(): void
     {
         Http::fake([
-            'payments.plorea.no/pay/pl_test_golden_link' => Http::response($this->fixture('pay-page')),
+            'payments.plorea.no/pay/pl_test_golden_link?*' => Http::response($this->fixture('pay-page')),
         ]);
 
         $link = Plorea::payByLink()->find('pl_test_golden_link');
@@ -247,7 +247,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_maps_a_real_unknown_reference_response_to_not_found(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-UNKNOWN' => Http::response($this->fixture('payment-status-not-found'), 404),
+            'payments.plorea.no/payments/status/GOLDEN-2026-UNKNOWN?*' => Http::response($this->fixture('payment-status-not-found'), 404),
         ]);
 
         try {
@@ -314,7 +314,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_pending_payment_method_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-pending')),
+            'payments.plorea.no/payment-methods/pm_test_golden_method?*' => Http::response($this->fixture('payment-method-pending')),
         ]);
 
         $method = Plorea::paymentMethods()->find('pm_test_golden_method');
@@ -333,7 +333,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_active_payment_method_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-active')),
+            'payments.plorea.no/payment-methods/pm_test_golden_method?*' => Http::response($this->fixture('payment-method-active')),
         ]);
 
         $method = Plorea::paymentMethods()->find('pm_test_golden_method');
@@ -352,7 +352,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_failed_payment_method_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payment-methods/pm_test_golden_failed' => Http::response($this->fixture('payment-method-failed')),
+            'payments.plorea.no/payment-methods/pm_test_golden_failed?*' => Http::response($this->fixture('payment-method-failed')),
         ]);
 
         $method = Plorea::paymentMethods()->find('pm_test_golden_failed');
@@ -408,7 +408,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_active_subscription_response(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-active')),
+            'payments.plorea.no/subscriptions/sub_test_golden?*' => Http::response($this->fixture('subscription-active')),
         ]);
 
         $subscription = Plorea::subscriptions()->find('sub_test_golden');
@@ -431,7 +431,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_canceled_subscription_response(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-canceled')),
+            'payments.plorea.no/subscriptions/sub_test_golden?*' => Http::response($this->fixture('subscription-canceled')),
         ]);
 
         $subscription = Plorea::subscriptions()->find('sub_test_golden');
@@ -450,7 +450,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_subscription_list_response(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions?externalId=GOLDEN-EXT-001' => Http::response($this->fixture('subscription-list')),
+            'payments.plorea.no/subscriptions?externalId=GOLDEN-EXT-001*' => Http::response($this->fixture('subscription-list')),
         ]);
 
         $subscriptions = Plorea::subscriptions()->forExternalId('GOLDEN-EXT-001');
@@ -481,7 +481,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_subscription_update_response(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-updated')),
+            'payments.plorea.no/subscriptions/sub_test_golden*' => Http::response($this->fixture('subscription-updated')),
         ]);
 
         $subscription = Plorea::subscriptions()->update('sub_test_golden')
@@ -525,7 +525,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_charge_history_response(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_test_golden/charges' => Http::response($this->fixture('subscription-charges')),
+            'payments.plorea.no/subscriptions/sub_test_golden/charges?*' => Http::response($this->fixture('subscription-charges')),
         ]);
 
         $charges = Plorea::subscriptions()->charges('sub_test_golden');
@@ -614,7 +614,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_maps_a_real_not_active_payment_method_update_to_validation_error(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response(
+            'payments.plorea.no/subscriptions/sub_test_golden*' => Http::response(
                 $this->fixture('subscription-update-payment-method-not-active'),
                 400,
             ),
@@ -806,7 +806,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_trialing_subscription_response(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_test_golden_trial' => Http::response($this->fixture('subscription-trialing')),
+            'payments.plorea.no/subscriptions/sub_test_golden_trial?*' => Http::response($this->fixture('subscription-trialing')),
         ]);
 
         $subscription = Plorea::subscriptions()->find('sub_test_golden_trial');
@@ -866,7 +866,7 @@ class GoldenFixturesTest extends TestCase
     public function test_it_parses_a_real_pay_page_carrying_the_merchant(): void
     {
         Http::fake([
-            'payments.plorea.no/pay/pl_test_golden_orgnr_link' => Http::response($this->fixture('pay-page-with-merchant')),
+            'payments.plorea.no/pay/pl_test_golden_orgnr_link?*' => Http::response($this->fixture('pay-page-with-merchant')),
         ]);
 
         $link = Plorea::payByLink()->find('pl_test_golden_orgnr_link');

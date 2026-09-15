@@ -106,12 +106,14 @@ because a link that cannot be paid out is worse than a loud failure. An earlier
 "Invalid Store" / 422-at-session regression was a Plorea-side KYC bug, fixed
 2026-08-30 and verified the same day.
 
-### 📋 `platform` belongs on every request body — Plorea, 2026-09-15
+### 📋 `platform` belongs on every request — Plorea, 2026-09-15
 
 Internal logging and reporting on Plorea's side, with no functional effect on
 any endpoint. The SDK adds it to every `POST` and `PATCH` body from
-`plorea.platform`. It is **not** sent as a query parameter on reads: Plorea
-described it as a body field, and a GET has no body.
+`plorea.platform`: in the body on `POST` and `PATCH`, and in the query string
+on `GET`, which has no body to carry it. Reads therefore have a different URL
+than they did before — `payments/status/FIN-1?platform=...` — which matters if
+you assert exact URLs anywhere.
 
 It was also **not** the cause of the `401` on refund and cancel. That turned out
 to be an Adyen credentials problem inside Plorea's test environment — the same

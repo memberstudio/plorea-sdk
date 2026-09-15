@@ -59,7 +59,7 @@ class ClientEventsTest extends TestCase
         Event::fake([RequestSent::class, ResponseReceived::class]);
 
         Http::fake([
-            'payments.plorea.no/payments/status/unknown' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/unknown?*' => Http::response(['error' => 'Not found'], 404),
         ]);
 
         try {

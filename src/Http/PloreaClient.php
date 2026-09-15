@@ -31,7 +31,7 @@ final readonly class PloreaClient implements Client
 
     public function get(string $uri, array $query = []): array
     {
-        return $this->send('get', $uri, $query);
+        return $this->send('get', $uri, $this->withPlatform($query));
     }
 
     public function post(string $uri, array $payload = []): array
@@ -83,15 +83,14 @@ final readonly class PloreaClient implements Client
     }
 
     /**
-     * Plorea tags every request body with the platform that sent it. It is
+     * Plorea tags every request with the platform that sent it. It is
      * internal logging and reporting on their side with no functional effect
      * (confirmed by Plorea 2026-09-15), which is why it is set here rather
      * than threaded through each resource — one place means no endpoint can
      * be missed.
      *
-     * Bodies only. A GET carries no payload, and appending the field to the
-     * query string would rewrite the URL of every read endpoint for a value
-     * Plorea only ever described as a body field.
+     * Every request, reads included — on a GET it rides in the query string,
+     * since there is no body to carry it.
      *
      * A value already in the payload wins; that is what
      * PendingPaymentLink::platform() relies on.

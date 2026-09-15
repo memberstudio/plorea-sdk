@@ -68,14 +68,43 @@ class PlatformFieldTest extends TestCase
      * rewrite the URL of every read endpoint for a value Plorea only ever
      * described as a body field — so reads are left exactly as they were.
      */
-    public function test_it_does_not_touch_the_query_string_of_a_read(): void
+    /**
+     * A read has no body to carry the field, so it rides in the query string.
+     * This changes the URL of every read the SDK makes — pinned here because
+     * a consuming app asserting exact GET URLs will see it.
+     */
+    public function test_it_adds_the_configured_platform_to_the_query_string_of_a_read(): void
     {
         Http::fake(['payments.plorea.no/*' => Http::response(['reference' => 'FIN-1', 'status' => 'active'])]);
 
         Plorea::payments()->status('FIN-1');
 
         Http::assertSent(
+            fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payments/status/FIN-1?platform=memberflow',
+        );
+    }
+
+    public function test_an_unset_platform_leaves_a_read_url_untouched(): void
+    {
+        config(['plorea.platform' => null]);
+
+        Http::fake(['payments.plorea.no/*' => Http::response(['reference' => 'FIN-1', 'status' => 'active'])]);
+
+        Plorea::payments()->status('FIN-1');
+
+        Http::assertSent(
             fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payments/status/FIN-1',
+        );
+    }
+
+    public function test_a_read_keeps_its_own_query_alongside_the_platform(): void
+    {
+        Http::fake(['payments.plorea.no/*' => Http::response(['count' => 0, 'items' => []])]);
+
+        Plorea::subscriptions()->forExternalId('ws_1');
+
+        Http::assertSent(
+            fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_1&platform=memberflow',
         );
     }
 }

@@ -89,7 +89,7 @@ class PaymentResourceTest extends TestCase
     public function test_it_fetches_payment_status(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/FIN-2026-00123' => Http::response([
+            'payments.plorea.no/payments/status/FIN-2026-00123?*' => Http::response([
                 'reference' => 'FIN-2026-00123',
                 'status' => 'authorised',
                 'pspReference' => 'KZN8ZJVSMQR3JM65',

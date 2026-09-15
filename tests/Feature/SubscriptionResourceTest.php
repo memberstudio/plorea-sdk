@@ -66,7 +66,7 @@ class SubscriptionResourceTest extends TestCase
     public function test_it_updates_a_subscription(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_1' => Http::response([
+            'payments.plorea.no/subscriptions/sub_1*' => Http::response([
                 'subscriptionId' => 'sub_1',
                 'amount' => ['value' => 39900, 'currency' => 'NOK'],
                 'quantity' => 10,
@@ -119,7 +119,7 @@ class SubscriptionResourceTest extends TestCase
         $this->assertContainsOnlyInstancesOf(Subscription::class, $subscriptions);
         $this->assertSame('sub_1', $subscriptions[0]->id);
 
-        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456&status=active');
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456&status=active&platform=memberflow');
     }
 
     /**
@@ -154,7 +154,7 @@ class SubscriptionResourceTest extends TestCase
         // The status filter is deliberately not sent: payment_failed has
         // never been observed, so filtering server-side on it could drop the
         // overdue subscriptions this exists to find.
-        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456');
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456&platform=memberflow');
     }
 
     public function test_the_overdue_grace_period_is_configurable(): void
@@ -217,7 +217,7 @@ class SubscriptionResourceTest extends TestCase
     public function test_it_lists_charges(): void
     {
         Http::fake([
-            'payments.plorea.no/subscriptions/sub_1/charges' => Http::response([
+            'payments.plorea.no/subscriptions/sub_1/charges?*' => Http::response([
                 'subscriptionId' => 'sub_1',
                 'items' => [
                     [

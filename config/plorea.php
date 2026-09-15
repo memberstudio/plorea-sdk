@@ -54,9 +54,12 @@ return [
     | Platform
     |--------------------------------------------------------------------------
     |
-    | The platform identifier sent with every API call. Plorea uses it for
-    | internal logging and reporting only — it has no functional effect.
-    | Set it to your own identifier; unset, the field is omitted entirely.
+    | The platform identifier sent with every API call — in the body on
+    | writes, in the query string on reads. Plorea uses it for internal
+    | logging and reporting only; it has no functional effect.
+    |
+    | Set it to your own identifier. Unset, nothing is sent at all, and
+    | request URLs are exactly what they were before this setting existed.
     |
     */
 

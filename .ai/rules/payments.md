@@ -90,7 +90,7 @@ First payment for a new org nr auto-starts KYC; payout is released on approval
 a Plorea-side KYC bug, fixed 2026-08-30 (verified the same day: a retest link
 on a fresh org nr created, and a session issued for it).
 
-## `platform` goes on every request body — 2026-09-15
+## `platform` goes on every request — 2026-09-15
 
 Stated by Plorea. `platform` is **internal logging and reporting
 only** — no functional effect on any endpoint. Send it on all calls, not just
@@ -106,12 +106,25 @@ which is what `PendingPaymentLink::platform()` relies on. `FakeClient` mirrors
 this so a payload assertion that passes under the fake describes a real
 request.
 
-**Bodies only.** A GET has no payload, and Plorea only ever described
-`platform` as a body field — appending it to the query string would rewrite
-the URL of every read endpoint on the SDK's own initiative, for a value no
-endpoint is documented to read there. `PlatformFieldTest` pins both halves.
-**Open question to Plorea:** whether reads want it too. Until they answer,
-reads stay untouched.
+**Every verb, including reads.** A `GET` has no body, so it rides in the
+query string: `payments/status/FIN-1?platform=...`. Plorea documented
+`platform` as a body field and reads were deliberately left out at first; that
+was reversed on 2026-09-15 by Einar's decision to send it everywhere, since the
+field is reporting-only and a read attributed to nobody is a gap in exactly the
+reporting it exists for.
+
+The cost is real and was accepted knowingly: **every read the SDK makes has a
+different URL than it used to.** A consuming app that pins exact `GET` URLs in
+its tests will break on upgrade. Stub on the path with a trailing wildcard
+(`payments/status/FIN-1?*`), not on the bare URL. This repo's own suite had to
+be rewritten that way — see `PlatformFieldTest` and the `?*` keys across
+`tests/Feature/`.
+
+One trap in that rewrite: a stub key must match every verb that hits the URL.
+`subscriptions/sub_1` is both a `GET` (with a query) and a `PATCH` (without
+one), so it needs `sub_1*`, not `sub_1?*`. And never widen a key past the
+segment — `INV-1*` also swallows `INV-1-1`, which silently breaks the
+firstOrCreate suffix walk.
 
 It was **not** the cause of the refund/cancel `401`. That was an Adyen
 credentials problem in Plorea's test environment, which they fixed; the same

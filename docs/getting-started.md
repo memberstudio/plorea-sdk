@@ -48,7 +48,7 @@ switches environment for you — `PLOREA_ENVIRONMENT` is sent as the
 | `PLOREA_ENVIRONMENT` | `plorea.environment` | `test` | Sent as `X-Environment` on every request |
 | `PLOREA_BASE_URL` | `plorea.base_url` | `https://payments.plorea.no` | API base URL |
 | `PLOREA_TENANT_ID` | `plorea.tenant_id` | — | Injected into every request that needs one |
-| `PLOREA_PLATFORM` | `plorea.platform` | — | Added to every request body — Plorea's internal reporting only. Unset, the field is omitted |
+| `PLOREA_PLATFORM` | `plorea.platform` | — | Sent on every request — in the body on writes, in the query string on reads. Plorea's internal reporting only. Unset, nothing is sent |
 | `PLOREA_TIMEOUT` | `plorea.http.timeout` | `30` | Request timeout, seconds |
 | `PLOREA_CONNECT_TIMEOUT` | `plorea.http.connect_timeout` | `10` | Connect timeout, seconds |
 | `PLOREA_RETRY_TIMES` | `plorea.http.retry.times` | `0` | Retries for connection errors and 5xx |
