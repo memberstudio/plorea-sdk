@@ -79,6 +79,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
         Http::fake([
             'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
             'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse()),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
@@ -94,6 +95,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
         Http::fake([
             'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
             'payments.plorea.no/pay/pl_existing' => Http::response(['error' => 'Unavailable'], 500),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
@@ -223,11 +225,58 @@ class FirstOrCreatePaymentLinkTest extends TestCase
         Http::fake([
             'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
             'payments.plorea.no/pay/pl_existing' => fn () => throw new ConnectionException('Connection timed out'),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
 
         $this->assertSame('pl_existing', $link->id);
+    }
+
+    /**
+     * The hazard the full-chain walk exists for: an open base link sitting in
+     * front of a suffix that was already paid. Returning the base on sight
+     * would hand out a payable link for a settled invoice.
+     */
+    public function test_it_refuses_an_open_base_link_when_a_later_suffix_was_paid(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse()),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response($this->statusResponse([
+                'reference' => 'INV-1-1',
+                'status' => 'authorised',
+                'amount' => 70000,
+            ])),
+        ]);
+
+        try {
+            $this->pending()->firstOrCreate();
+            $this->fail('Expected PaymentAlreadyPaidException.');
+        } catch (PaymentAlreadyPaidException $e) {
+            $this->assertSame('INV-1-1', $e->status->reference);
+        }
+
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
+    }
+
+    public function test_it_reuses_the_first_reusable_link_once_the_chain_ends(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse()),
+            'payments.plorea.no/payments/status/INV-1-1' => Http::response($this->statusResponse([
+                'reference' => 'INV-1-1',
+                'amount' => 70000,
+            ])),
+            'payments.plorea.no/payments/status/INV-1-2' => Http::response(['error' => 'Payment not found'], 404),
+        ]);
+
+        $link = $this->pending()->firstOrCreate();
+
+        $this->assertSame('pl_existing', $link->id);
+
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
     }
 
     public function test_it_suffixes_the_reference_when_the_stored_link_no_longer_exists(): void

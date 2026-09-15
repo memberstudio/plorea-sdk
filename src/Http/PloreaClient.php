@@ -58,7 +58,9 @@ final readonly class PloreaClient implements Client
             /** @var Response $response */
             $response = $this->request()->{$method}($uri, $data);
         } catch (IlluminateConnectionException $exception) {
-            throw new ConnectionException("Could not connect to the Plorea API: {$exception->getMessage()}", $exception->getCode(), previous: $exception);
+            // Redacts the API key from the wrapped Guzzle request before the
+            // exception leaves the SDK — see ConnectionException::from().
+            throw ConnectionException::from($exception);
         }
 
         $json = $response->json();

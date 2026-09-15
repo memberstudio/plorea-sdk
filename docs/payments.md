@@ -96,6 +96,18 @@ endpoint exposes no expiry and its status string has never been observed to
 flip to `expired`, so an open-but-expired link would otherwise be handed out
 again.
 
+The lookup walks the **whole** suffix chain before it answers. A superseded
+base reference stays `created` forever — nothing flips it when the customer
+pays the `-1` link instead — so a reusable link is only handed back once every
+later suffix has been checked and none of them was paid. Two consequences for
+you:
+
+- One extra status request per call, since the walk always probes one suffix
+  past the last one that exists.
+- `PaymentAlreadyPaidException` can carry the status of a **suffixed**
+  reference, not just the one you passed in. Read `$e->status->reference` if
+  you need to know which one settled.
+
 ```php
 use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
 

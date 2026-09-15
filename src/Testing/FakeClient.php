@@ -23,6 +23,15 @@ class FakeClient implements Client
     protected array $requests = [];
 
     /**
+     * Requests that actually produced a response. A request whose stub threw
+     * is recorded for assertions but never fulfilled, so the defaults cannot
+     * treat a failed creation as a thing that now exists.
+     *
+     * @var list<RecordedRequest>
+     */
+    protected array $fulfilled = [];
+
+    /**
      * @param  array<string, array<string, mixed>|callable|Throwable>  $stubs  Path patterns
      *                                                                         (optionally prefixed with a method, e.g. "POST payments/link") mapped to a
      *                                                                         response array, a callable receiving the RecordedRequest, or a Throwable.
@@ -63,6 +72,18 @@ class FakeClient implements Client
     {
         $this->requests[] = $request;
 
+        $response = $this->respondTo($request);
+
+        $this->fulfilled[] = $request;
+
+        return $response;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function respondTo(RecordedRequest $request): array
+    {
         foreach ($this->stubs as $pattern => $response) {
             if (! $request->matches($pattern)) {
                 continue;
@@ -84,7 +105,7 @@ class FakeClient implements Client
             return $response;
         }
 
-        return DefaultFixtures::for($request, $this->requests);
+        return DefaultFixtures::for($request, $this->fulfilled);
     }
 
     /**

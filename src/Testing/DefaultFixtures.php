@@ -37,7 +37,7 @@ final class DefaultFixtures
             $method === 'GET' && $path === 'subscriptions' => self::subscriptionList($request),
             $method === 'GET' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription(['subscriptionId' => basename($path)]),
             $method === 'PATCH' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription([...$request->data, 'subscriptionId' => basename($path)]),
-            $method === 'POST' && str_ends_with($path, '/charge') => self::charge($path),
+            $method === 'POST' && str_ends_with($path, '/charge') => self::charge($request),
             $method === 'GET' && str_ends_with($path, '/charges') => self::chargeList($path),
             $method === 'POST' && str_ends_with($path, '/cancel') => self::subscriptionCanceled($path),
             $method === 'POST' && str_ends_with($path, '/reactivate') => self::subscription(['subscriptionId' => basename(dirname($path)), 'status' => 'active']),
@@ -222,12 +222,17 @@ final class DefaultFixtures
     }
 
     /**
+     * A subscription with an unexpired trialEndsAt is reported as trialing,
+     * matching the wire — the API does not report a trialing subscription as
+     * active, and a fake that did would let a consumer's trial branch pass a
+     * test it fails in production. An explicit status override still wins.
+     *
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
      */
     private static function subscription(array $overrides = []): array
     {
-        return [
+        $subscription = [
             'subscriptionId' => 'sub_fake_subscription',
             'tenantId' => 'fake-tenant',
             'paymentMethodId' => 'pm_fake_method',
@@ -238,28 +243,73 @@ final class DefaultFixtures
             'retryCount' => 0,
             ...$overrides,
         ];
+
+        if (! array_key_exists('status', $overrides) && self::isTrialing($subscription)) {
+            $subscription['status'] = 'trialing';
+        }
+
+        return $subscription;
     }
 
     /**
+     * @param  array<string, mixed>  $subscription
+     */
+    private static function isTrialing(array $subscription): bool
+    {
+        $trialEndsAt = $subscription['trialEndsAt'] ?? null;
+
+        if (! is_string($trialEndsAt) || $trialEndsAt === '') {
+            return false;
+        }
+
+        $timestamp = strtotime($trialEndsAt);
+
+        return $timestamp !== false && $timestamp > time();
+    }
+
+    /**
+     * Always one subscription for the external id, but the tenant and status
+     * filters are applied to it rather than ignored — a consumer filtering
+     * for canceled subscriptions must not be handed an active one.
+     *
      * @return array<string, mixed>
      */
     private static function subscriptionList(RecordedRequest $request): array
     {
         $externalId = $request->input('externalId', 'fake-external');
+        $tenantId = $request->input('tenantId');
+        $status = $request->input('status');
+
+        $overrides = ['externalId' => $externalId];
+
+        if (is_string($tenantId) && $tenantId !== '') {
+            $overrides['tenantId'] = $tenantId;
+        }
+
+        if (is_string($status) && $status !== '') {
+            $overrides['status'] = $status;
+        }
+
+        $items = [self::subscription($overrides)];
 
         return [
             'externalId' => $externalId,
-            'count' => 1,
-            'items' => [self::subscription(['externalId' => $externalId])],
+            'count' => count($items),
+            'items' => $items,
         ];
     }
 
     /**
+     * A manual charge echoes the amount and VAT it was asked for. The API
+     * charges what it is sent, so a fake that always answered with the
+     * subscription's own amount would hide a wrong amount in the payload.
+     *
      * @return array<string, mixed>
      */
-    private static function charge(string $path): array
+    private static function charge(RecordedRequest $request): array
     {
-        $subscriptionId = basename(dirname($path));
+        $subscriptionId = basename(dirname($request->path));
+        $amount = $request->input('amount');
 
         return [
             'status' => 'charge_created',
@@ -268,9 +318,9 @@ final class DefaultFixtures
             'reference' => $subscriptionId.'-chg_fake_charge',
             'pspReference' => 'FAKECHARGE123',
             'resultCode' => 'Authorised',
-            'amount' => ['value' => 19900, 'currency' => 'NOK'],
-            'vatRate' => null,
-            'vatAmount' => null,
+            'amount' => is_array($amount) ? $amount : ['value' => 19900, 'currency' => 'NOK'],
+            'vatRate' => $request->input('vatRate'),
+            'vatAmount' => $request->input('vatAmount'),
             'nextChargeAt' => '2099-12-31T12:00:00Z',
         ];
     }
