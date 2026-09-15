@@ -70,7 +70,12 @@ class PloreaManager
      */
     public function fake(array $stubs = []): FakeClient
     {
-        return $this->fake = new FakeClient($stubs);
+        $platform = $this->config()['platform'] ?? null;
+
+        return $this->fake = new FakeClient(
+            $stubs,
+            is_string($platform) && $platform !== '' ? $platform : null,
+        );
     }
 
     /**

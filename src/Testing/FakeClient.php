@@ -35,8 +35,13 @@ class FakeClient implements Client
      * @param  array<string, array<string, mixed>|callable|Throwable>  $stubs  Path patterns
      *                                                                         (optionally prefixed with a method, e.g. "POST payments/link") mapped to a
      *                                                                         response array, a callable receiving the RecordedRequest, or a Throwable.
+     * @param  string|null  $platform  The configured platform identifier, stamped onto
+     *                                 request bodies exactly as PloreaClient does.
      */
-    public function __construct(protected array $stubs = []) {}
+    public function __construct(
+        protected array $stubs = [],
+        protected ?string $platform = null,
+    ) {}
 
     /**
      * Register additional response stubs.
@@ -57,12 +62,29 @@ class FakeClient implements Client
 
     public function post(string $uri, array $payload = []): array
     {
-        return $this->record(new RecordedRequest('post', $uri, $payload));
+        return $this->record(new RecordedRequest('post', $uri, $this->withPlatform($payload)));
     }
 
     public function patch(string $uri, array $payload = []): array
     {
-        return $this->record(new RecordedRequest('patch', $uri, $payload));
+        return $this->record(new RecordedRequest('patch', $uri, $this->withPlatform($payload)));
+    }
+
+    /**
+     * PloreaClient stamps the configured platform onto every request body, so
+     * the fake does too — an assertion that passes here has to describe a
+     * payload the real client would actually have sent.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    protected function withPlatform(array $payload): array
+    {
+        if ($this->platform === null || array_key_exists('platform', $payload)) {
+            return $payload;
+        }
+
+        return [...$payload, 'platform' => $this->platform];
     }
 
     /**

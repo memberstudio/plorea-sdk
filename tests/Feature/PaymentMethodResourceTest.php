@@ -43,6 +43,7 @@ class PaymentMethodResourceTest extends TestCase
             'recurringType' => 'Subscription',
             'returnUrl' => 'https://app.test/return',
             'description' => 'Save card for future charges',
+            'platform' => 'memberflow',
         ]);
     }
 

@@ -40,6 +40,8 @@ reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
 
 Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible. The lookup walks the whole suffix chain before reusing anything — a superseded base reference stays `created` forever, so an open link is only returned once no later suffix is found paid. Budget one extra status request per call, and read `$e->status->reference` on the exception: it may name a suffixed reference rather than the one you passed in.
 
+Capture is automatic (AmendoPOS, minutes after authorization) and there is **no capture API** — `authorised` is the terminal success state, so never build a pending-capture wait or expose a `capture()` method. `platform` is added to every request body when `plorea.platform` (`PLOREA_PLATFORM`) is set; it is Plorea's internal reporting only and is omitted when unset.
+
 ## Status
 
 ```php

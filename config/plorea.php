@@ -54,7 +54,9 @@ return [
     | Platform
     |--------------------------------------------------------------------------
     |
-    | Optional platform identifier included when creating payment links.
+    | The platform identifier sent with every API call. Plorea uses it for
+    | internal logging and reporting only — it has no functional effect.
+    | Set it to your own identifier; unset, the field is omitted entirely.
     |
     */
 

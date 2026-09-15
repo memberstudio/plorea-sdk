@@ -106,6 +106,39 @@ because a link that cannot be paid out is worse than a loud failure. An earlier
 "Invalid Store" / 422-at-session regression was a Plorea-side KYC bug, fixed
 2026-08-30 and verified the same day.
 
+### 📋 `platform` belongs on every request body — Plorea, 2026-09-15
+
+Internal logging and reporting on Plorea's side, with no functional effect on
+any endpoint. The SDK adds it to every `POST` and `PATCH` body from
+`plorea.platform`. It is **not** sent as a query parameter on reads: Plorea
+described it as a body field, and a GET has no body.
+
+It was also **not** the cause of the `401` on refund and cancel. That turned out
+to be an Adyen credentials problem inside Plorea's test environment — the same
+outage that took `pay.plorea.no` down. Both were fixed on their side
+(`pay.plorea.no` verified back up 2026-09-15).
+
+### 📋 Capture is automatic; there is no capture API — Plorea, 2026-09-15
+
+Capture runs through AmendoPOS, typically within minutes of authorization. A
+manual capture endpoint is on Plorea's roadmap and does not exist today, so
+`authorised` is the end of the story from the SDK's side. No `capture()` method
+exists, and adding one would have nothing to call.
+
+### 📋 Embedded and native checkout are supported, on request — Plorea, 2026-09-15
+
+This supersedes the blocker recorded on 2026-09-09 above. Plorea issues the
+Adyen client key (`ADYEN_CLIENT_KEY_TEST` / `_LIVE`) and whitelists the origins
+you give them, which is what the Drop-in's `/sessions/{id}/setup` preflight was
+failing on. A native Adyen SDK flow additionally needs `channel: "iOS"` or
+`"Android"` on `POST payments/session` — that is what makes the response carry a
+usable `clientKey` — plus your bundle-id / package-name whitelisted in their
+Adyen account. A WebView on the hosted pay page needs none of this; it is the
+`Web` channel already in use.
+
+Nothing is implemented for the native path: the SDK sends no `channel` until a
+session with one has actually been observed.
+
 ---
 
 ## Payment methods

@@ -59,6 +59,7 @@ class SubscriptionResourceTest extends TestCase
             'title' => 'Done CRM Pro',
             'vatRate' => 0.25,
             'vatAmount' => 3980,
+            'platform' => 'memberflow',
         ]);
     }
 
@@ -85,6 +86,7 @@ class SubscriptionResourceTest extends TestCase
             && $request->data() === [
                 'amount' => ['value' => 39900, 'currency' => 'NOK'],
                 'quantity' => 10,
+                'platform' => 'memberflow',
             ]);
     }
 
@@ -197,7 +199,7 @@ class SubscriptionResourceTest extends TestCase
         $this->assertSame('Authorised', $charge->resultCode);
         $this->assertSame('2026-10-01', $charge->nextChargeAt?->toDateString());
 
-        Http::assertSent(fn (Request $request): bool => $request->data() === ['reason' => 'extra_seat']);
+        Http::assertSent(fn (Request $request): bool => $request->data() === ['reason' => 'extra_seat', 'platform' => 'memberflow']);
     }
 
     public function test_a_declined_charge_throws_a_charge_failed_exception(): void
@@ -269,6 +271,6 @@ class SubscriptionResourceTest extends TestCase
         $this->assertTrue($subscription->isActive());
 
         Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/cancel')
-            && $request->data() === ['reason' => 'customer_requested']);
+            && $request->data() === ['reason' => 'customer_requested', 'platform' => 'memberflow']);
     }
 }

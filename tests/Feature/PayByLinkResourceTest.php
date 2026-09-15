@@ -55,6 +55,7 @@ class PayByLinkResourceTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->data() === [
             'paymentLinkId' => 'pl_123',
             'returnUrl' => 'https://pay.plorea.no/pl_123/return',
+            'platform' => 'memberflow',
         ]);
     }
 }
