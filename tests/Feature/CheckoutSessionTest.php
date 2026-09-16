@@ -7,7 +7,9 @@ namespace MemberFlow\Plorea\Tests\Feature;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Enums\Channel;
+use MemberFlow\Plorea\Enums\Environment;
 use MemberFlow\Plorea\Enums\RecurringType;
+use MemberFlow\Plorea\Exceptions\PloreaException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Tests\TestCase;
 
@@ -15,8 +17,9 @@ use MemberFlow\Plorea\Tests\TestCase;
  * Embedded and native checkout: the channel, the client key, and what a
  * session is allowed to hand to a browser or an app.
  *
- * The native shapes are stated by Plorea (2026-09-15), not captured. These
- * tests pin what the SDK sends and how it reads a key, nothing more.
+ * Probed against Plorea test on 2026-09-17: both endpoints accept any
+ * `channel` value and return no client key for it. These tests pin what the
+ * SDK sends and how it reads a key, nothing more.
  */
 class CheckoutSessionTest extends TestCase
 {
@@ -83,7 +86,7 @@ class CheckoutSessionTest extends TestCase
      */
     public function test_a_session_without_a_key_falls_back_to_the_configured_one(): void
     {
-        config(['plorea.adyen_client_key' => 'test_CONFIGURED', 'plorea.environment' => 'live']);
+        config(['plorea.adyen_client_key' => 'live_CONFIGURED', 'plorea.environment' => 'live']);
 
         Http::fake([
             'payments.plorea.no/payments/session' => Http::response(['sessionId' => 'CS1', 'sessionData' => 'data', 'environment' => null, 'clientKey' => null]),
@@ -93,11 +96,41 @@ class CheckoutSessionTest extends TestCase
         $payment = Plorea::payByLink()->session('pl_1');
         $setup = Plorea::paymentMethods()->setup('shopper-1', RecurringType::Subscription, 'https://app.test/return')->session();
 
-        $this->assertSame('test_CONFIGURED', $payment->clientKey);
+        $this->assertSame('live_CONFIGURED', $payment->clientKey);
         $this->assertSame('live', $payment->environment);
-        $this->assertSame('test_CONFIGURED', $setup->clientKey);
+        $this->assertSame('live_CONFIGURED', $setup->clientKey);
         $this->assertSame('test', $setup->environment, 'The environment in the response wins.');
         $this->assertArrayNotHasKey('clientKey', $setup->raw);
+    }
+
+    /**
+     * Each deployment holds one key, and Adyen prefixes it with its
+     * environment. A mismatch would otherwise surface late, inside Drop-in.
+     */
+    public function test_a_client_key_for_the_other_environment_is_refused(): void
+    {
+        Http::fake(['payments.plorea.no/*' => Http::response(['sessionId' => 'CS1', 'clientKey' => null])]);
+
+        foreach (['test' => 'live_CONFIGURED', 'live' => 'test_CONFIGURED'] as $environment => $key) {
+            config(['plorea.environment' => $environment, 'plorea.adyen_client_key' => $key]);
+
+            try {
+                Plorea::payByLink()->session('pl_1');
+                $this->fail("A {$key} key was accepted in {$environment}.");
+            } catch (PloreaException $exception) {
+                $this->assertStringContainsString("[{$environment}]", $exception->getMessage());
+                $this->assertStringNotContainsString($key, $exception->getMessage(), 'The key is not echoed.');
+            }
+        }
+    }
+
+    public function test_a_client_key_matching_the_environment_is_accepted(): void
+    {
+        Http::fake(['payments.plorea.no/*' => Http::response(['sessionId' => 'CS1', 'clientKey' => null])]);
+
+        config(['plorea.environment' => Environment::Live, 'plorea.adyen_client_key' => 'live_CONFIGURED']);
+
+        $this->assertSame('live_CONFIGURED', Plorea::payByLink()->session('pl_1')->clientKey);
     }
 
     public function test_the_client_key_stays_null_when_nothing_provides_one(): void
@@ -129,17 +162,22 @@ class CheckoutSessionTest extends TestCase
         $this->assertSame($expected, response()->json($session)->getData(true));
     }
 
-    public function test_the_fake_returns_a_client_key_only_for_native_channels(): void
+    /**
+     * Observed 2026-09-17: no channel gets a key from Plorea, so a native
+     * session uses the configured key like a web one.
+     */
+    public function test_the_fake_returns_no_client_key_for_any_channel(): void
     {
-        Plorea::fake();
+        config(['plorea.adyen_client_key' => '']);
 
-        $this->assertNull(Plorea::payByLink()->session('pl_1', channel: Channel::Web)->clientKey);
-        $this->assertNotNull(Plorea::payByLink()->session('pl_1', channel: Channel::Android)->clientKey);
+        Plorea::fake();
 
         $setup = Plorea::paymentMethods()->setup('shopper-1', RecurringType::Subscription, 'https://app.test/return');
 
-        $this->assertNull($setup->session()->clientKey);
-        $this->assertNotNull($setup->channel(Channel::IOS)->session()->clientKey);
+        foreach (Channel::cases() as $channel) {
+            $this->assertNull(Plorea::payByLink()->session('pl_1', channel: $channel)->clientKey);
+            $this->assertNull($setup->channel($channel)->session()->clientKey);
+        }
     }
 
     public function test_only_ios_and_android_are_native(): void

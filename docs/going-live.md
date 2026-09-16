@@ -60,7 +60,8 @@ is something that has either failed silently or cost real money when missed.
 Only if you mount Drop-in yourself. See [Embedded and native checkout](checkout.md).
 
 - [ ] **A live client key** in `PLOREA_ADYEN_CLIENT_KEY`. Test keys do not work
-      against live sessions.
+      against live sessions, and the SDK throws if the key's `live_` prefix
+      does not match `PLOREA_ENVIRONMENT=live`.
 - [ ] **Production origins whitelisted** by Plorea for the live key, including
       any customer-owned domains that show checkout.
 - [ ] **Production app identifiers whitelisted**: bundle id with Team ID, and

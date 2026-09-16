@@ -33,9 +33,10 @@ class PayByLinkResource extends Resource
      * Create an Adyen Sessions object for a one-off payment. The session is
      * derived entirely from the referenced payment link.
      *
-     * Pass a native `$channel` for Adyen's iOS or Android SDK; Plorea then
-     * returns the client key in the response. Without one, nothing is sent
-     * and Plorea treats the session as `Web`.
+     * Pass a native `$channel` for Adyen's iOS or Android SDK. Plorea's test
+     * environment ignores it today (2026-09-17), so the configured client key
+     * applies either way. Without one, nothing is sent. `$returnUrl` must be
+     * http(s): a custom scheme is rejected with a 400.
      */
     public function session(string $paymentLinkId, ?string $returnUrl = null, ?Channel $channel = null): PaymentSession
     {

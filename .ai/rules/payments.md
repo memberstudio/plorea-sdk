@@ -191,12 +191,27 @@ being built now, and the SDK had to be able to ask. What exists:
   `response()->json($session)` must never ship those to a browser or an app.
   Do not widen `toCheckout()` without that in mind.
 
-Still **UNOBSERVED** — replace these with captures (and golden fixtures) as
-they land: a native-channel response; `channel` on
-`payment-methods/setup/session` (asked, not answered); a custom-scheme
-`returnUrl`; a live `environment` value; a web Drop-in mounted end to end. The
-fake returns a key only for native channels, on both endpoints — the
-setup-session half of that is an assumption, and says so.
+**Update 2026-09-17 — probed against Plorea test.** Both session endpoints
+accept any `channel` (unknown strings and an integer included) and none of it
+changes the response: `payments/session` answers `clientKey: null` for native
+channels, and `payment-methods/setup/session` has no `clientKey` key at all.
+Plorea's native support is **not live in test**. Consequences for this repo:
+
+- **Keep sending `channel`.** It is ignored, not rejected, so the SDK is ready
+  when Plorea's side lands. Do not add a default.
+- **The fake returns no client key, for any channel** — matching what was
+  observed. Do not make it more generous than Plorea; a consuming app's test
+  must see the same fallback it will get in production.
+- **`payments/session` rejects a non-http(s) `returnUrl`** with `400`
+  (`returnUrl must be a valid http(s) URL`). `payment-methods/setup/session`
+  accepts one. Native payment flows need a universal link / App Link; do not
+  document a custom scheme as working for payments.
+- **`plorea.adyen_client_key` must match `plorea.environment`.** A key whose
+  prefix is not `{environment}_` throws a `PloreaException` when a session
+  resolves it, because Adyen fails that mismatch late, inside Drop-in.
+
+Still **UNOBSERVED**: a client key used from a whitelisted origin, a Drop-in
+mounted end to end, and a live `environment` value.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 

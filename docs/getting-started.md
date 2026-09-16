@@ -48,7 +48,7 @@ switches environment for you — `PLOREA_ENVIRONMENT` is sent as the
 | `PLOREA_ENVIRONMENT` | `plorea.environment` | `test` | Sent as `X-Environment` on every request |
 | `PLOREA_BASE_URL` | `plorea.base_url` | `https://payments.plorea.no` | API base URL |
 | `PLOREA_TENANT_ID` | `plorea.tenant_id` | — | Injected into every request that needs one |
-| `PLOREA_ADYEN_CLIENT_KEY` | `plorea.adyen_client_key` | — | Adyen client key from Plorea, for mounting Drop-in yourself. Used when a session response carries none — see [Checkout](checkout.md) |
+| `PLOREA_ADYEN_CLIENT_KEY` | `plorea.adyen_client_key` | — | Adyen client key from Plorea, for mounting Drop-in yourself. Its `test_` / `live_` prefix must match `PLOREA_ENVIRONMENT`. See [Checkout](checkout.md) |
 | `PLOREA_PLATFORM` | `plorea.platform` | — | Sent on every request — in the body on writes, in the query string on reads. Plorea's internal reporting only. Unset, nothing is sent |
 | `PLOREA_TIMEOUT` | `plorea.http.timeout` | `30` | Request timeout, seconds |
 | `PLOREA_CONNECT_TIMEOUT` | `plorea.http.connect_timeout` | `10` | Connect timeout, seconds |

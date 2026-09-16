@@ -228,7 +228,7 @@ on this shape.
 
 `$sessionId`, `$sessionData`, `$clientKey`, `$environment`, `$raw`.
 
-`$clientKey` is the response's key (native channels), else `plorea.adyen_client_key`.
+`$clientKey` is the response's key if it has one, else `plorea.adyen_client_key`, which must match `plorea.environment`.
 `$environment` is the response's, else `plorea.environment`. `toCheckout()`
 returns `sessionId`, `sessionData`, `clientKey` and `environment`, and the DTO
 serializes to exactly that (`JsonSerializable`), so `raw` never reaches a

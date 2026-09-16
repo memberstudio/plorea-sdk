@@ -150,7 +150,31 @@ build ahead of observation; the shapes are still 📋, not ✅:
   for Europe, which is what `X-Environment` already uses.
 - A web Drop-in mounted on a whitelisted origin end to end: **unobserved**.
 
-Update this list when a capture lands.
+Most of that list was answered the next day — see below.
+
+### ✅ `channel` is accepted and ignored; a session carries no key — 2026-09-17
+
+Probed against Plorea test on 2026-09-17, on both session endpoints:
+
+- **`channel` is not read.** `Web`, `iOS`, `Android`, a lowercase `ios`, an
+  unknown string and an integer all return `200`. Nothing rejects a value, and
+  nothing in the response echoes one.
+- **No `clientKey` for any channel.** `payments/session` returns
+  `clientKey: null` for native channels too; `payment-methods/setup/session`
+  has no `clientKey` key at all. The key Plorea issues out of band is the only
+  key there is today, for web and native alike.
+- **`environment` is `test`**, from both endpoints.
+- **`payments/session` requires an http(s) `returnUrl`.** A custom scheme is
+  rejected with `400` and `{"error": "returnUrl must be a valid http(s) URL"}`.
+  `payment-methods/setup/session` accepts the same custom-scheme URL — the two
+  endpoints validate differently.
+
+So the native path Plorea described (2026-09-15) is **not live in test**. The
+SDK still sends `channel`, since it is ignored rather than rejected, and the
+configured key is what a native app must use until Plorea's side lands.
+
+Still unobserved: a client key that works from a whitelisted origin, a Drop-in
+mounted end to end, and a live `environment` value.
 
 ---
 

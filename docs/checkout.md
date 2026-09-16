@@ -8,11 +8,17 @@ web page or in a native iOS or Android app.
 | --- | --- | --- |
 | Hosted pay page (`$link->url`), in a browser or a WebView | Nothing | Works |
 | Drop-in on your own domain | A client key and your origins whitelisted by Plorea | Supported by Plorea (2026-09-15). Not yet mounted end to end through this SDK |
-| Native Adyen iOS / Android SDK | `Channel::IOS` / `Channel::Android`, plus your bundle id / package name whitelisted by Plorea | Stated by Plorea (2026-09-15). **Unobserved** |
-| Native card setup (`payment-methods/setup/session`) | As above | Channel support on this endpoint is **unconfirmed** |
+| Native Adyen iOS / Android SDK | `Channel::IOS` / `Channel::Android`, plus your bundle id / package name whitelisted by Plorea | Stated by Plorea (2026-09-15). **Not live in test** (2026-09-17) |
+| Native card setup (`payment-methods/setup/session`) | As above | As above |
 
-"Unobserved" means the SDK sends what Plorea described, but nobody has seen the
-response yet. See [Verified API behaviour](api-behaviour.md).
+**What a probe of Plorea's test environment showed on 2026-09-17:** both
+session endpoints accept `channel` and ignore it — any value returns `200`, and
+no channel makes the response carry a `clientKey`. Until Plorea's native
+support lands, every surface uses the key you were issued
+(`PLOREA_ADYEN_CLIENT_KEY`), so a native app needs its bundle id / package name
+whitelisted for *that* key. Keep passing the channel: it costs nothing and the
+SDK is ready when the behaviour changes. See
+[Verified API behaviour](api-behaviour.md).
 
 ## What to ask Plorea for
 
@@ -78,10 +84,12 @@ public function store(Request $request, Invoice $invoice)
   `sessionId`, `sessionData`, `clientKey` and `environment`. The rest of the
   response, including tenant, shopper reference and customer id, stays on your
   server.
-- **The client key is resolved for you.** A native session carries its own key
-  in the response. A web session does not (`clientKey` is `null`), so the DTO
-  falls back to `plorea.adyen_client_key`. `environment` falls back to
-  `plorea.environment` the same way.
+- **The client key is resolved for you.** If a response ever carries a
+  `clientKey`, it wins; today none does (observed 2026-09-17), so the DTO falls
+  back to `plorea.adyen_client_key`. `environment` falls back to
+  `plorea.environment` the same way. The configured key must match the
+  environment — a `test_` key with `PLOREA_ENVIRONMENT=live`, or the reverse,
+  throws instead of failing later inside Drop-in.
 - **Create a session per attempt.** Sessions expire, so do not cache them.
   Reuse the payment link (`firstOrCreate()`), not the session.
 - **Pick the `returnUrl` on the server.** Never take it from the request,
@@ -92,16 +100,19 @@ protected function returnUrlFor(Channel $channel, Invoice $invoice): string
 {
     return match ($channel) {
         Channel::Web => route('invoices.paid', $invoice),
-        // A universal link / App Link on your domain, or your app's custom scheme.
+        // A universal link / App Link on your domain: payments/session rejects custom schemes.
         Channel::IOS, Channel::Android => config('app.mobile_return_url'),
     };
 }
 ```
 
-Whether Plorea accepts non-https (custom scheme) return URLs has not been
-observed. Universal links (iOS) and App Links (Android) are https and avoid
-the question, but they require the `apple-app-site-association` and
-`assetlinks.json` files on your domain.
+**`payments/session` requires an http(s) `returnUrl`.** A custom scheme is
+rejected with `400` and `returnUrl must be a valid http(s) URL` (observed
+2026-09-17), so a native payment needs a universal link (iOS) or App Link
+(Android) — which also requires the `apple-app-site-association` and
+`assetlinks.json` files on your domain. `payment-methods/setup/session` does
+accept a custom scheme, but treat that as an accident of validation rather than
+a promise.
 
 ## The web side
 
@@ -195,11 +206,10 @@ return response()->json($session);
 - **There is no webhook for card setup.** Poll
   `Plorea::paymentMethods()->find($id)` from the backend until it is `active`
   or `failed`. See [Payment methods](payment-methods.md#polling-for-the-result).
-- **Native card setup is unconfirmed.** Plorea described `channel` and the
-  returned client key for `payments/session`. Whether
-  `payment-methods/setup/session` honours them has not been confirmed or
-  observed. The web setup response carries no `clientKey` field at all
-  (captured 2026-09-04), so the configured key is used.
+- **Card setup ignores `channel` too.** The response carries no `clientKey`
+  field for any channel (observed 2026-09-17), so the configured key is used.
+  Unlike `payments/session`, this endpoint does accept a custom-scheme
+  `returnUrl`.
 
 ## Apple Pay and Google Pay
 
@@ -226,9 +236,9 @@ you submit.
 
 ## Testing
 
-`Plorea::fake()` answers both session endpoints. For a native channel, the fake
-returns a client key in the response, as Plorea described. For a web session it
-returns none, so your configured key is used. Assert on what you sent:
+`Plorea::fake()` answers both session endpoints, and returns no client key for
+any channel — what Plorea does today — so your configured key is what the DTO
+resolves. Assert on what you sent:
 
 ```php
 Plorea::fake();
