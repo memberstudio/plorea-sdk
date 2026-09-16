@@ -27,6 +27,7 @@ abstract class TestCase extends Orchestra
         $app['config']->set('plorea.api_key', 'plr_test_key');
         $app['config']->set('plorea.environment', 'test');
         $app['config']->set('plorea.tenant_id', 'test-tenant');
+        $app['config']->set('plorea.platform', 'memberflow');
     }
 
     /**

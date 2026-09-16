@@ -54,6 +54,9 @@ class PaymentResourceTest extends TestCase
             $this->assertSame('Bearer plr_test_key', $request->header('Authorization')[0]);
             $this->assertSame('test', $request->header('X-Environment')[0]);
             $this->assertSame([
+                // PendingPaymentLink carries the configured platform itself,
+                // so the client finds the key already set and leaves it alone.
+                'platform' => 'memberflow',
                 'tenantId' => 'test-tenant',
                 'reference' => 'FIN-2026-00123',
                 'product' => 'Faktura FIN-2026-00123',
@@ -86,7 +89,7 @@ class PaymentResourceTest extends TestCase
     public function test_it_fetches_payment_status(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/FIN-2026-00123' => Http::response([
+            'payments.plorea.no/payments/status/FIN-2026-00123?*' => Http::response([
                 'reference' => 'FIN-2026-00123',
                 'status' => 'authorised',
                 'pspReference' => 'KZN8ZJVSMQR3JM65',
@@ -142,6 +145,7 @@ class PaymentResourceTest extends TestCase
             'reference' => 'FIN-2026-00123',
             'modificationReference' => 'FIN-2026-00123-refund-1',
             'reason' => 'Customer requested refund',
+            'platform' => 'memberflow',
         ] && $request->header('X-Environment') === ['test']);
     }
 

@@ -87,8 +87,57 @@ once a merchant is attached.
 
 First payment for a new org nr auto-starts KYC; payout is released on approval
 (1–5 business days). The earlier "Invalid Store" / 422-at-session regression was
-a Plorea-side KYC bug, fixed 2026-08-30 (verified:
-`SDK-KYC-RETEST-20260830104706` created + session OK).
+a Plorea-side KYC bug, fixed 2026-08-30 (verified the same day: a retest link
+on a fresh org nr created, and a session issued for it).
+
+## `platform` goes on every request — 2026-09-15
+
+Stated by Plorea. `platform` is **internal logging and reporting
+only** — no functional effect on any endpoint. Send it on all calls, not just
+payment-link creation.
+
+`PloreaClient::post()` / `patch()` stamp it from `plorea.platform`, which has
+**no default and must never gain one**. This is a public package: a default
+would make every app that installs it report itself under a name it did not
+choose, and Plorea's reporting would attribute that traffic to the wrong
+integrator. Unset, the field is omitted entirely; each consuming app sets
+`PLOREA_PLATFORM` to its own identifier. A value already in the payload wins,
+which is what `PendingPaymentLink::platform()` relies on. `FakeClient` mirrors
+this so a payload assertion that passes under the fake describes a real
+request.
+
+**Every verb, including reads.** A `GET` has no body, so it rides in the
+query string: `payments/status/FIN-1?platform=...`. Plorea documented
+`platform` as a body field and reads were deliberately left out at first; that
+was reversed on 2026-09-15 by Einar's decision to send it everywhere, since the
+field is reporting-only and a read attributed to nobody is a gap in exactly the
+reporting it exists for.
+
+The cost is real and was accepted knowingly: **every read the SDK makes has a
+different URL than it used to.** A consuming app that pins exact `GET` URLs in
+its tests will break on upgrade. Stub on the path with a trailing wildcard
+(`payments/status/FIN-1?*`), not on the bare URL. This repo's own suite had to
+be rewritten that way — see `PlatformFieldTest` and the `?*` keys across
+`tests/Feature/`.
+
+One trap in that rewrite: a stub key must match every verb that hits the URL.
+`subscriptions/sub_1` is both a `GET` (with a query) and a `PATCH` (without
+one), so it needs `sub_1*`, not `sub_1?*`. And never widen a key past the
+segment — `INV-1*` also swallows `INV-1-1`, which silently breaks the
+firstOrCreate suffix walk.
+
+It was **not** the cause of the refund/cancel `401`. That was an Adyen
+credentials problem in Plorea's test environment, which they fixed; the same
+outage took `pay.plorea.no` down (back up, verified 2026-09-15). Do not
+re-litigate the platform A/B.
+
+## Capture is automatic — there is no capture API
+
+Stated by Plorea 2026-09-15. Capture runs through AmendoPOS, typically minutes
+after authorization. **A manual capture endpoint is on their roadmap and does
+not exist today**, so do not add a `capture()` method or model a pending-capture
+state. `authorised` is the terminal success state an integrator can observe —
+which is already how `isPaid()` treats it.
 
 ## Embedded checkout is blocked on a client key
 
@@ -105,6 +154,22 @@ credential problem.
 Needs Plorea to whitelist origins or issue a key. **No SDK change**: the DTO
 exposes `clientKey` because the response has the field, not because it is
 usable.
+
+**Update 2026-09-15 — supported, gated on credentials.** Plorea confirmed the
+flow is supported: on request they issue the integrator an Adyen client key
+(test and live) and whitelist that integrator's origins, including
+`http://localhost:*` for development. The key is issued out of band and lives
+in the consuming app's environment — **never in this repo, and never a config
+default here**. Nothing in the SDK changes until an origin-whitelisted session
+has been mounted successfully and the shape is observed.
+
+Native mobile is the same endpoint with one extra field: `channel` of `iOS` or
+`Android` on `POST payments/session` makes the response carry the `clientKey`
+the native Adyen SDK needs, and requires the app's bundle id / package name
+whitelisted in Plorea's Adyen Customer Area. Today's working path needs none of
+it: a WebView on the hosted pay page is `channel: "Web"` and already works. The
+SDK sends no `channel` today — do not add one until an origin-whitelisted
+session proves the shape.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 

@@ -43,6 +43,7 @@ class PaymentMethodResourceTest extends TestCase
             'recurringType' => 'Subscription',
             'returnUrl' => 'https://app.test/return',
             'description' => 'Save card for future charges',
+            'platform' => 'memberflow',
         ]);
     }
 
@@ -74,7 +75,7 @@ class PaymentMethodResourceTest extends TestCase
     public function test_it_finds_a_payment_method(): void
     {
         Http::fake([
-            'payments.plorea.no/payment-methods/pm_123' => Http::response([
+            'payments.plorea.no/payment-methods/pm_123?*' => Http::response([
                 'paymentMethodId' => 'pm_123',
                 'status' => 'active',
                 'storedPaymentMethodId' => 'MQHL6N6G2P8K63W5',

@@ -74,9 +74,12 @@ and no refusal-reason field of any shape.
 
 ## Subscription webhooks — CAPTURED 2026-09-04
 
-Plorea's registered URL points at **production**, not staging — that is why an
-earlier staging run saw nothing at all. Production logs held exactly 3
-deliveries for the lifecycle run.
+Registration is per tenant and points at whichever single URL was handed to
+Plorea — for the capture tenant that was **production**, which is why an
+earlier staging run saw nothing at all. There is no per-environment routing to
+fall back on, so if deliveries are missing, check which URL is registered
+before suspecting the SDK. Production logs held exactly 3 deliveries for the
+lifecycle run.
 
 - A **scheduler** charge emits `subscription.charge_succeeded` with
   `data: {subscriptionId, chargeId, reference, customerId, shopperReference, externalId, amount: {value, currency}, pspReference, nextChargeAt, environment}`.

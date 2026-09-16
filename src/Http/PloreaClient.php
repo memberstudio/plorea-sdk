@@ -31,17 +31,17 @@ final readonly class PloreaClient implements Client
 
     public function get(string $uri, array $query = []): array
     {
-        return $this->send('get', $uri, $query);
+        return $this->send('get', $uri, $this->withPlatform($query));
     }
 
     public function post(string $uri, array $payload = []): array
     {
-        return $this->send('post', $uri, $payload);
+        return $this->send('post', $uri, $this->withPlatform($payload));
     }
 
     public function patch(string $uri, array $payload = []): array
     {
-        return $this->send('patch', $uri, $payload);
+        return $this->send('patch', $uri, $this->withPlatform($payload));
     }
 
     /**
@@ -80,6 +80,33 @@ final readonly class PloreaClient implements Client
         }
 
         return $json ?? [];
+    }
+
+    /**
+     * Plorea tags every request with the platform that sent it. It is
+     * internal logging and reporting on their side with no functional effect
+     * (confirmed by Plorea 2026-09-15), which is why it is set here rather
+     * than threaded through each resource — one place means no endpoint can
+     * be missed.
+     *
+     * Every request, reads included — on a GET it rides in the query string,
+     * since there is no body to carry it.
+     *
+     * A value already in the payload wins; that is what
+     * PendingPaymentLink::platform() relies on.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withPlatform(array $data): array
+    {
+        $platform = $this->config['platform'] ?? null;
+
+        if (! is_string($platform) || $platform === '' || array_key_exists('platform', $data)) {
+            return $data;
+        }
+
+        return [...$data, 'platform' => $platform];
     }
 
     private function request(): PendingRequest

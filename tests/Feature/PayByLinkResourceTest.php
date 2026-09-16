@@ -14,7 +14,7 @@ class PayByLinkResourceTest extends TestCase
     public function test_it_finds_a_payment_link(): void
     {
         Http::fake([
-            'payments.plorea.no/pay/pl_123' => Http::response([
+            'payments.plorea.no/pay/pl_123?*' => Http::response([
                 'id' => 'pl_123',
                 'tenantId' => 'test-tenant',
                 'reference' => 'FIN-2026-00123',
@@ -55,6 +55,7 @@ class PayByLinkResourceTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->data() === [
             'paymentLinkId' => 'pl_123',
             'returnUrl' => 'https://pay.plorea.no/pl_123/return',
+            'platform' => 'memberflow',
         ]);
     }
 }
