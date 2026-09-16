@@ -12,7 +12,7 @@ Before editing a file, read every rule file whose globs cover it, and
 | Rule file | Applies to |
 | --- | --- |
 | [security.md](security.md) | **always** — read before touching credentials, fixtures, or logging |
-| [payments.md](payments.md) | `src/Resources/PaymentResource.php`, `src/Resources/PayByLinkResource.php`, `src/Pending/PendingPaymentLink.php`, `src/Data/Payment*.php`, `src/Data/Refund.php`, `src/Data/PaymentCancellation.php`, `src/Data/Amount.php` |
+| [payments.md](payments.md) | `src/Resources/PaymentResource.php`, `src/Resources/PayByLinkResource.php`, `src/Pending/PendingPaymentLink.php`, `src/Enums/Channel.php`, `src/Data/Concerns/ProvidesCheckoutConfiguration.php`, `docs/checkout.md`, `src/Data/Payment*.php`, `src/Data/Refund.php`, `src/Data/PaymentCancellation.php`, `src/Data/Amount.php` |
 | [subscriptions.md](subscriptions.md) | `src/Resources/SubscriptionResource.php`, `src/Resources/PaymentMethodResource.php`, `src/Pending/PendingSubscription*.php`, `src/Pending/PendingPaymentMethodSetup.php`, `src/Data/Subscription*.php`, `src/Data/PaymentMethod*.php`, `src/Data/BillingInterval.php`, `src/Data/RetryPolicy.php`, `src/Enums/RecurringType.php` |
 | [webhooks.md](webhooks.md) | `src/Http/Controllers/**`, `src/Http/Middleware/**`, `src/Events/**`, `routes/**`, `tests/Feature/WebhookTest.php` |
 | [testing.md](testing.md) | `tests/**`, `src/Testing/**` |

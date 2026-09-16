@@ -68,7 +68,7 @@ Both return immediately with `refund_requested` / `cancel_requested`; the provid
 
 ## Embedded checkout
 
-`Plorea::payByLink()->session($linkId, returnUrl: ...)` returns a live Adyen session — `pay.plorea.no` is just a Drop-in mounted on one — so you can render checkout on your own domain. **But `$session->clientKey` comes back `null`**, and lifting the key from the hosted page does not work either: Adyen scopes client keys to an allowed-origins list you are not on, so the Drop-in mounts and then fails the `/sessions/{id}/setup` preflight with CORS, looking nothing like a credential problem. Embedding needs Plorea to whitelist your origins or issue you a key — ask before building. The redirect flow is the supported path today (verified 2026-09-09).
+`Plorea::payByLink()->session($linkId, returnUrl: ..., channel: Channel::Web)` opens the Adyen session `pay.plorea.no` mounts, so you can render Drop-in on your own domain or in a native app. It needs `PLOREA_CLIENT_KEY` and your origins (or app identifiers) whitelisted by Plorea. Return `response()->json($session)`, never `raw`. For the full flow, use the `plorea-checkout` skill; for production readiness, `plorea-go-live`.
 
 ## Payment methods (stored cards)
 

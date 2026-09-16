@@ -171,6 +171,33 @@ it: a WebView on the hosted pay page is `channel: "Web"` and already works. The
 SDK sends no `channel` today — do not add one until an origin-whitelisted
 session proves the shape.
 
+**Update 2026-09-16 — built ahead of observation, by Einar's decision.** The
+"wait for the shape" rule above was overruled: native apps and web Drop-in are
+being built now, and the SDK had to be able to ask. What exists:
+
+- `Enums\Channel` (`Web` / `iOS` / `Android`), sent as `channel` by
+  `payByLink()->session(..., channel:)` and
+  `paymentMethods()->setup()->channel()->session()`. **Omitted when not
+  given** — a request without it is byte-identical to before, and Plorea
+  treats it as `Web`. Never default it.
+- `plorea.client_key` (`PLOREA_CLIENT_KEY`), **no default**, same reasoning as
+  `platform`. Both session DTOs take the response's `clientKey` first and fall
+  back to the configured one; `environment` falls back to
+  `plorea.environment`. `raw` still holds the response untouched, so the
+  fallback never hides what Plorea sent.
+- Both session DTOs are `JsonSerializable` to `toCheckout()` —
+  `sessionId`, `sessionData`, `clientKey`, `environment`. `raw` carries
+  tenant, shopper reference and customer id; a consuming app's
+  `response()->json($session)` must never ship those to a browser or an app.
+  Do not widen `toCheckout()` without that in mind.
+
+Still **UNOBSERVED** — replace these with captures (and golden fixtures) as
+they land: a native-channel response; `channel` on
+`payment-methods/setup/session` (asked, not answered); a custom-scheme
+`returnUrl`; a live `environment` value; a web Drop-in mounted end to end. The
+fake returns a key only for native channels, on both endpoints — the
+setup-session half of that is an assumption, and says so.
+
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 
 `POST payments/refund` sent without the `X-Environment` header routes to

@@ -4,7 +4,34 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- **Native checkout: `Enums\Channel`.** `payByLink()->session()` takes an
+  optional `$channel`, and `paymentMethods()->setup()` gains `channel()` for its
+  Drop-in session. `Channel::IOS` / `Channel::Android` open a session for
+  Adyen's native SDKs. Nothing is sent unless a channel is given, so existing
+  calls are unchanged. The native response shape is stated by Plorea and not yet
+  observed; `channel` on card setup is unconfirmed.
+- **`plorea.client_key` (`PLOREA_CLIENT_KEY`)** for the Adyen client key
+  Plorea issues for embedded Drop-in. `PaymentSession::$clientKey` and the new
+  `PaymentMethodSession::$clientKey` use the response's key first (native
+  channels) and fall back to it. `environment` falls back to
+  `plorea.environment`.
+- **`toCheckout()` on both session DTOs**, returning `sessionId`,
+  `sessionData`, `clientKey` and `environment`.
+- Guides: [Embedded and native checkout](docs/checkout.md) and
+  [Going live](docs/going-live.md). Boost skills: `plorea-checkout` and
+  `plorea-go-live`.
+
+### Changed
+
+- **`PaymentSession` and `PaymentMethodSession` serialize to `toCheckout()`.**
+  They implement `JsonSerializable`, so `response()->json($session)` sends the
+  four checkout fields instead of every public property, including `raw` with
+  tenant, shopper reference and customer id. Code that relied on the old JSON
+  shape should read the properties directly.
+- The fake returns a client key from both session endpoints for native
+  channels only.
 
 ## v0.2.1 - 2026-09-10
 

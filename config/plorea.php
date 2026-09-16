@@ -51,6 +51,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Adyen Client Key
+    |--------------------------------------------------------------------------
+    |
+    | Needed only to mount Adyen's Drop-in yourself (embedded checkout). It is
+    | issued by Plorea on request, one per environment, and only works on the
+    | origins Plorea has whitelisted for you. It is a publishable key — it
+    | ends up in the browser — but it is yours, so keep it in your
+    | environment, not in code. Session DTOs fall back to it when the
+    | response carries no key; native-channel sessions bring their own.
+    |
+    */
+
+    'client_key' => env('PLOREA_CLIENT_KEY'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Platform
     |--------------------------------------------------------------------------
     |

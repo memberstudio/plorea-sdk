@@ -244,59 +244,20 @@ $page->raw['partnerSplits'] ?? null;  // populated once a merchant is attached
 ### Embedded checkout
 
 `pay.plorea.no` is itself just an Adyen Drop-in mounted on a session, so you
-can render the same checkout on your own domain. The session endpoint is
-callable directly with your API key:
+can render the same checkout on your own domain or in a native app:
 
 ```php
+use MemberFlow\Plorea\Enums\Channel;
+
 $session = Plorea::payByLink()->session($link->id, returnUrl: 'https://app.example/paid');
+$session = Plorea::payByLink()->session($link->id, returnUrl: $appReturnUrl, channel: Channel::IOS);
 
-$session->sessionId;
-$session->sessionData;
+return response()->json($session); // sessionId, sessionData, clientKey, environment
 ```
 
-Then mount it with Adyen Web v5+:
-
-```js
-const checkout = await AdyenCheckout({
-    environment: 'test',
-    clientKey,                                   // see the warning below
-    session: { id: sessionId, sessionData },
-});
-
-checkout.create('dropin').mount('#checkout');
-```
-
-> [!WARNING]
-> **`$session->clientKey` comes back `null`**, and the browser cannot mount a
-> Drop-in without one. The property is exposed because the field exists in the
-> response, not because it is usable — do not build on it.
->
-> The working key is visible in the hosted page's JavaScript, but lifting it
-> from there does not work either: Adyen scopes every client key to an
-> allowed-origins list, and your domain is not on Plorea's. The Drop-in mounts
-> and then fails the `/sessions/{id}/setup` preflight with a CORS rejection —
-> late, and looking nothing like a configuration problem.
->
-> Embedded checkout therefore needs Plorea to whitelist your origins, or to
-> issue you your own client key. Ask before you build; the redirect flow is the
-> supported path today. Verified 2026-09-09.
-
-The SDK needs no changes for this — the blocker is entirely on the credential
-side, and Plorea has confirmed the flow is supported: they issue the client key
-and whitelist your origins on request (2026-09-15). Ask for both before you
-build, keep the key in your app's environment, and never commit it.
-
-### Mobile
-
-A WebView on the hosted pay page works today and needs nothing from you — it is
-Adyen's `Web` channel, which is what the session already uses.
-
-A **native** Adyen SDK flow needs more: `POST payments/session` must be told the
-channel (`iOS` or `Android`), which is what makes the response carry a usable
-`clientKey`, and your bundle-id / package-name has to be whitelisted in Plorea's
-Adyen account. The SDK sends no channel today, so this path is not yet
-available through it — the shape is recorded here so the work is not
-rediscovered.
+This needs a client key (`PLOREA_CLIENT_KEY`) and whitelisted origins or app
+identifiers from Plorea. A WebView on the hosted pay page needs neither. See
+[Embedded and native checkout](checkout.md).
 
 ## A complete flow
 

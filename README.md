@@ -51,6 +51,8 @@ Full documentation lives in [`docs/`](docs/README.md).
 | [Getting started](docs/getting-started.md) | Installation, the full configuration reference, the facade |
 | [Payments](docs/payments.md) | Payment links, `firstOrCreate`, status, refunds, cancellations |
 | [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in |
+| [Embedded and native checkout](docs/checkout.md) | Drop-in on your domain or in an iOS / Android app |
+| [Going live](docs/going-live.md) | The production checklist |
 | [Subscriptions](docs/subscriptions.md) | Create, trials, update, cancel, reactivate, charges, dunning |
 | [Webhooks](docs/webhooks.md) | Signature verification, the event catalogue, what is poll-only |
 | [Testing](docs/testing.md) | `Plorea::fake()`, stubs, assertions |
@@ -104,10 +106,15 @@ app needs today. Two other surfaces are possible but need Plorea to act first:
 | Surface | Status |
 | --- | --- |
 | Hosted pay page (`$link->url`) | Works. Web and WebView alike |
-| Adyen Drop-in on your own domain | Supported — Plorea issues the Adyen client key and whitelists your origins on request |
-| Native iOS / Android Adyen SDK | Needs a `channel` on the session plus your bundle-id whitelisted. Not yet sent by this SDK |
+| Adyen Drop-in on your own domain | Supported. Set `PLOREA_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
+| Native iOS / Android Adyen SDK | `session(..., channel: Channel::IOS)`, plus your app identifiers whitelisted by Plorea. Unobserved |
 
-→ [Payments](docs/payments.md#embedded-checkout)
+```php
+return response()->json(Plorea::payByLink()->session($link->id, $returnUrl, Channel::Android));
+// {"sessionId": ..., "sessionData": ..., "clientKey": ..., "environment": ...} — and nothing else
+```
+
+→ [Embedded and native checkout](docs/checkout.md) · [Going live](docs/going-live.md)
 
 ## Testing
 

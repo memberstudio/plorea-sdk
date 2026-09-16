@@ -14,6 +14,20 @@ or exception output.
   check needs one, it runs in the consuming app and only a match/no-match
   verdict comes back.
 
+## The Adyen client key is publishable, but not ours
+
+It ends up in browsers and apps by design, so it is not a secret in the way the
+API key is. It is still **issued to one integrator** and scoped to their
+origins and app identifiers: it lives in the consuming app's
+`PLOREA_CLIENT_KEY`, `plorea.client_key` has no default, and no real key —
+test or live — goes in this repo. Fixtures and tests use obvious fakes
+(`test_FAKE_...`).
+
+## Integrator identifiers stay out of the repo
+
+App bundle ids, package names, Apple Team IDs and whitelisted domains are an
+integrator's business. Docs describe them generically; they are never quoted.
+
 ## Two paths carry the key out of the SDK
 
 Both are closed, and both must stay closed.

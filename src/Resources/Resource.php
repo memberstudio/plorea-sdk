@@ -36,6 +36,23 @@ abstract class Resource
         return $tenantId;
     }
 
+    /**
+     * The Adyen client key the consuming app was issued, for mounting Drop-in.
+     */
+    protected function clientKey(): ?string
+    {
+        $clientKey = $this->config['client_key'] ?? null;
+
+        return is_string($clientKey) && $clientKey !== '' ? $clientKey : null;
+    }
+
+    protected function environment(): ?string
+    {
+        $environment = $this->config['environment'] ?? null;
+
+        return is_string($environment) && $environment !== '' ? $environment : null;
+    }
+
     protected function platform(): ?string
     {
         $platform = $this->config['platform'] ?? null;

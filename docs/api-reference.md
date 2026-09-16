@@ -71,7 +71,7 @@ been observed to paginate, and neither sends paging parameters; see
 | Method | Returns |
 | --- | --- |
 | `find(string $paymentLinkId)` | `Data\PaymentLink` |
-| `session(string $paymentLinkId, ?string $returnUrl = null)` | `Data\PaymentSession` |
+| `session(string $paymentLinkId, ?string $returnUrl = null, ?Channel $channel = null)` | `Data\PaymentSession` |
 
 ---
 
@@ -107,6 +107,7 @@ sent until the terminal method.
 | `description(string $description)` | |
 | `metadata(array $metadata)` | |
 | **`create()`** | → `Data\PaymentMethod` (hosted redirect) |
+| `channel(Channel $channel)` | Drop-in session flow only. Unset, nothing is sent (Plorea treats it as `Web`) |
 | **`session()`** | → `Data\PaymentMethodSession` (Adyen Drop-in) |
 
 ### `PendingSubscription`
@@ -227,6 +228,12 @@ on this shape.
 
 `$sessionId`, `$sessionData`, `$clientKey`, `$environment`, `$raw`.
 
+`$clientKey` is the response's key (native channels), else `plorea.client_key`.
+`$environment` is the response's, else `plorea.environment`. `toCheckout()`
+returns `sessionId`, `sessionData`, `clientKey` and `environment`, and the DTO
+serializes to exactly that (`JsonSerializable`), so `raw` never reaches a
+client.
+
 ### `PaymentMethod`
 
 | Property | Notes |
@@ -247,7 +254,10 @@ Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `is(string $status)`.
 
 `$paymentMethodId`, `$sessionId`, `$sessionData`, `$tenantId`, `$customerId`,
 `$doneId`, `$shopperReference`, `$recurringType`, `$status`, `$environment`,
-`$expiresAt`, `$raw`.
+`$expiresAt`, `$clientKey`, `$raw`.
+
+`$clientKey`, `$environment`, `toCheckout()` and JSON serialization behave as on
+`PaymentSession`.
 
 ### `Subscription`
 
@@ -296,6 +306,7 @@ not authorised yet — read it back from `charges()`.
 
 | Enum | Cases |
 | --- | --- |
+| `Enums\Channel` | `Web` = `Web`, `IOS` = `iOS`, `Android` = `Android` — plus `isNative()` |
 | `Enums\Environment` | `Test` = `test`, `Live` = `live` — plus `isLive()` |
 | `Enums\IntervalUnit` | `Day`, `Week`, `Month`, `Year` |
 | `Enums\RecurringType` | `Subscription`, `CardOnFile`, `UnscheduledCardOnFile` |

@@ -16,6 +16,8 @@ environment, and what has not.
 | [Getting started](getting-started.md) | Requirements, installation, configuration reference, the facade |
 | [Payments](payments.md) | Payment links, `firstOrCreate`, status, refunds, cancellations, the pay page |
 | [Payment methods](payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in, polling, terminal failures |
+| [Embedded and native checkout](checkout.md) | Drop-in on your own domain and in native apps, the client key, return URLs, trusting the result |
+| [Going live](going-live.md) | The production checklist: credentials, webhooks, merchants, monitoring |
 | [Subscriptions](subscriptions.md) | Create, trials, update, cancel, reactivate, manual charges, charge history |
 | [Webhooks](webhooks.md) | Route, signature verification, the event catalogue, listener patterns, what is poll-only |
 | [Testing](testing.md) | `Plorea::fake()`, stubs, assertions, the default fixtures |

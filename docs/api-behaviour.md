@@ -138,8 +138,19 @@ usable `clientKey` — plus your bundle-id / package-name whitelisted in their
 Adyen account. A WebView on the hosted pay page needs none of this; it is the
 `Web` channel already in use.
 
-Nothing is implemented for the native path: the SDK sends no `channel` until a
-session with one has actually been observed.
+**Update 2026-09-16.** The SDK now sends `channel` when asked (`Channel`), on
+both `payments/session` and `payment-methods/setup/session`, and resolves the
+client key from the response or `plorea.client_key`. That was a decision to
+build ahead of observation; the shapes are still 📋, not ✅:
+
+- A native-channel session response, and the `clientKey` in it: **unobserved**.
+- `channel` on `payment-methods/setup/session`: asked, **unconfirmed**.
+- A custom-scheme (non-https) `returnUrl`: **unobserved**.
+- `environment` on a live session: **unobserved**. Adyen Web expects `live`
+  for Europe, which is what `X-Environment` already uses.
+- A web Drop-in mounted on a whitelisted origin end to end: **unobserved**.
+
+Update this list when a capture lands.
 
 ---
 

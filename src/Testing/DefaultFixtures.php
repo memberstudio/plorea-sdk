@@ -25,7 +25,7 @@ final class DefaultFixtures
 
         return match (true) {
             $method === 'POST' && $path === 'payments/link' => self::paymentLinkCreated($request),
-            $method === 'POST' && $path === 'payments/session' => self::paymentSession(),
+            $method === 'POST' && $path === 'payments/session' => self::paymentSession($request),
             $method === 'GET' && str_starts_with($path, 'pay/') => self::paymentLink($path),
             $method === 'GET' && str_starts_with($path, 'payments/status/') => self::paymentStatus($path, $history),
             $method === 'POST' && $path === 'payments/refund' => self::refund($request),
@@ -70,14 +70,26 @@ final class DefaultFixtures
     /**
      * @return array<string, mixed>
      */
-    private static function paymentSession(): array
+    private static function paymentSession(RecordedRequest $request): array
     {
         return [
             'sessionId' => 'CS_FAKE_SESSION',
             'sessionData' => 'fake-session-data',
             'environment' => 'test',
-            'clientKey' => null,
+            'clientKey' => self::sessionClientKey($request),
         ];
+    }
+
+    /**
+     * Plorea returns a client key only for a native channel — stated for
+     * payments/session on 2026-09-15, asked but unconfirmed for card setup.
+     * A web session gets none, so the configured key applies.
+     */
+    private static function sessionClientKey(RecordedRequest $request): ?string
+    {
+        return in_array($request->input('channel'), ['iOS', 'Android'], true)
+            ? 'test_FAKE_NATIVE_CLIENT_KEY'
+            : null;
     }
 
     /**
@@ -208,7 +220,9 @@ final class DefaultFixtures
      */
     private static function paymentMethodSession(RecordedRequest $request): array
     {
-        return [
+        // Unlike payments/session, the captured web response has no clientKey
+        // key at all, so it is only added when there is one to add.
+        $session = [
             'paymentMethodId' => 'pm_fake_method',
             'tenantId' => $request->input('tenantId', 'fake-tenant'),
             'shopperReference' => $request->input('shopperReference', 'fake-shopper'),
@@ -219,6 +233,10 @@ final class DefaultFixtures
             'sessionData' => 'fake-session-data',
             'expiresAt' => '2099-12-31T12:00:00Z',
         ];
+
+        $clientKey = self::sessionClientKey($request);
+
+        return $clientKey === null ? $session : [...$session, 'clientKey' => $clientKey];
     }
 
     /**
