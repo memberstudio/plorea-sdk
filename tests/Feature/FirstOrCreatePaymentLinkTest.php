@@ -62,7 +62,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_creates_when_no_payment_exists(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response(['error' => 'Not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1', 'status' => 'created']),
         ]);
 
@@ -77,9 +77,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_reuses_an_open_link_with_the_same_amount(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse()),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response($this->linkResponse()),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
@@ -93,9 +93,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_reuses_an_open_link_when_the_expiry_lookup_is_unavailable(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response(['error' => 'Unavailable'], 500),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response(['error' => 'Unavailable'], 500),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
@@ -106,7 +106,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_throws_when_the_payment_is_already_paid(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['status' => 'paid'])),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['status' => 'paid'])),
         ]);
 
         try {
@@ -121,7 +121,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_an_authorised_payment_also_counts_as_paid(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['status' => 'authorised'])),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['status' => 'authorised'])),
         ]);
 
         $this->expectException(PaymentAlreadyPaidException::class);
@@ -132,8 +132,8 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_link_is_dead(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['status' => 'expired'])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['status' => 'expired'])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -148,9 +148,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_open_link_has_expired(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse(['expired' => true])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response($this->linkResponse(['expired' => true])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -162,9 +162,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_expiry_date_has_passed(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse(['expiresAt' => '2020-01-01T00:00:00Z'])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response($this->linkResponse(['expiresAt' => '2020-01-01T00:00:00Z'])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -176,8 +176,8 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_environment_differs(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['environment' => 'live'])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['environment' => 'live'])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -189,8 +189,8 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_amount_differs(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['amount' => 99900])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['amount' => 99900])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -223,9 +223,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_reuses_an_open_link_when_the_expiry_lookup_cannot_connect(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => fn () => throw new ConnectionException('Connection timed out'),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => fn () => throw new ConnectionException('Connection timed out'),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
@@ -241,9 +241,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_refuses_an_open_base_link_when_a_later_suffix_was_paid(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse()),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response($this->statusResponse([
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response($this->linkResponse()),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response($this->statusResponse([
                 'reference' => 'INV-1-1',
                 'status' => 'authorised',
                 'amount' => 70000,
@@ -263,13 +263,13 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_reuses_the_first_reusable_link_once_the_chain_ends(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response($this->linkResponse()),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response($this->statusResponse([
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response($this->linkResponse()),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response($this->statusResponse([
                 'reference' => 'INV-1-1',
                 'amount' => 70000,
             ])),
-            'payments.plorea.no/payments/status/INV-1-2' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1-2?*' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
         $link = $this->pending()->firstOrCreate();
@@ -282,9 +282,9 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_stored_link_no_longer_exists(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing' => Http::response(['error' => 'Not found'], 404),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Payment not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
+            'payments.plorea.no/pay/pl_existing?*' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -296,8 +296,8 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_currency_differs(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['currency' => 'EUR'])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['currency' => 'EUR'])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -309,8 +309,8 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     public function test_it_suffixes_the_reference_when_the_tenant_differs(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['tenantId' => 'someone-elses-tenant'])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['tenantId' => 'someone-elses-tenant'])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 
@@ -324,8 +324,8 @@ class FirstOrCreatePaymentLinkTest extends TestCase
         config()->set('plorea.environment', Environment::Live);
 
         Http::fake([
-            'payments.plorea.no/payments/status/INV-1' => Http::response($this->statusResponse(['environment' => 'test'])),
-            'payments.plorea.no/payments/status/INV-1-1' => Http::response(['error' => 'Not found'], 404),
+            'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse(['environment' => 'test'])),
+            'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Not found'], 404),
             'payments.plorea.no/payments/link' => Http::response(['paymentLinkId' => 'pl_new', 'paymentLinkUrl' => 'https://pay.plorea.no/pl_new', 'reference' => 'INV-1-1', 'status' => 'created']),
         ]);
 

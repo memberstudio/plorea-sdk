@@ -175,6 +175,14 @@ returns 200.
 Before booking money, compare `$status->amount` against what you expected
 locally and flag mismatches for manual handling rather than auto-booking.
 
+### Capture is automatic
+
+There is nothing to capture. Plorea settles through AmendoPOS a few minutes
+after authorization, and **no manual capture endpoint exists** — it is on
+Plorea's roadmap, not in the API today (stated 2026-09-15). Treat `authorised`
+as done: it is what `isPaid()` already returns true for. Do not build a
+pending-capture state to wait in.
+
 ## Refund and cancel
 
 ```php
@@ -274,7 +282,21 @@ checkout.create('dropin').mount('#checkout');
 > supported path today. Verified 2026-09-09.
 
 The SDK needs no changes for this — the blocker is entirely on the credential
-side.
+side, and Plorea has confirmed the flow is supported: they issue the client key
+and whitelist your origins on request (2026-09-15). Ask for both before you
+build, keep the key in your app's environment, and never commit it.
+
+### Mobile
+
+A WebView on the hosted pay page works today and needs nothing from you — it is
+Adyen's `Web` channel, which is what the session already uses.
+
+A **native** Adyen SDK flow needs more: `POST payments/session` must be told the
+channel (`iOS` or `Android`), which is what makes the response carry a usable
+`clientKey`, and your bundle-id / package-name has to be whitelisted in Plorea's
+Adyen account. The SDK sends no channel today, so this path is not yet
+available through it — the shape is recorded here so the work is not
+rediscovered.
 
 ## A complete flow
 

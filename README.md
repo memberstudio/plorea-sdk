@@ -37,6 +37,7 @@ PLOREA_API_KEY=plr_test_...
 PLOREA_ENVIRONMENT=test        # test | live
 PLOREA_TENANT_ID=your-tenant
 PLOREA_WEBHOOK_SECRET=         # the webhook route rejects everything until this is set
+PLOREA_PLATFORM=your-platform  # optional — sent with every request for Plorea's internal reporting
 ```
 
 Requires PHP 8.4+ and Laravel 12 or 13. The service provider is auto-discovered.
@@ -60,7 +61,7 @@ Full documentation lives in [`docs/`](docs/README.md).
 
 ## What you need to know before writing code
 
-Five behaviours account for most of the surprises. Each links to the detail.
+Six behaviours account for most of the surprises. Each links to the detail.
 
 **Amounts are minor units.** `Amount::nok(450000)` is 4 500,00 kr. There is no
 major-unit constructor, on purpose.
@@ -83,11 +84,30 @@ Deduplicate on `$event->eventId`, never on the `x-plorea-event-id` header — th
 signature covers the body alone.
 → [Webhooks](docs/webhooks.md#what-is-not-sent)
 
+**There is nothing to capture.** Plorea settles automatically a few minutes
+after authorization and exposes no manual capture endpoint, so `authorised`
+means done — which is what `isPaid()` already returns true for. Do not build a
+pending-capture state to wait in.
+→ [Payments](docs/payments.md#capture-is-automatic)
+
 **Status strings do not always say what you would guess.** A refused payment
 reports `failed`, not `refused`. Subscriptions use the US spelling `canceled`.
 `expired` is never reported — judge expiry from `expiresAt`. Use the typed
 helpers (`isPaid()`, `isActive()`, `is('...')`) rather than comparing strings.
 → [Verified API behaviour](docs/api-behaviour.md)
+
+## Checkout surfaces
+
+The hosted pay page is the supported path, and a WebView on it is all a mobile
+app needs today. Two other surfaces are possible but need Plorea to act first:
+
+| Surface | Status |
+| --- | --- |
+| Hosted pay page (`$link->url`) | Works. Web and WebView alike |
+| Adyen Drop-in on your own domain | Supported — Plorea issues the Adyen client key and whitelists your origins on request |
+| Native iOS / Android Adyen SDK | Needs a `channel` on the session plus your bundle-id whitelisted. Not yet sent by this SDK |
+
+→ [Payments](docs/payments.md#embedded-checkout)
 
 ## Testing
 

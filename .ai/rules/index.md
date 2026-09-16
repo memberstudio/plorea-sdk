@@ -23,6 +23,6 @@ Before editing a file, read every rule file whose globs cover it, and
 Used throughout these files:
 
 - **VERIFIED / CAPTURED** — observed on the wire, usually with a fixture in `tests/Fixtures/`.
-- **Stated by Plorea** — told to us, not observed. Treat as likely but unproven.
+- **Stated by Plorea** — reported by Plorea, not observed on the wire. Treat as likely but unproven.
 - **UNOBSERVED** — nobody has seen it. Do not model a shape for it.
 - **Dead end** — known impossible to reproduce in test; do not spend time retrying.
