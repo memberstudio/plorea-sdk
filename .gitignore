@@ -15,3 +15,7 @@
 /.claude/
 /.junie/
 /.agents/
+
+# Editor swap files (can hold .env contents)
+*.swp
+*.swo
