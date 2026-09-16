@@ -106,7 +106,7 @@ app needs today. Two other surfaces are possible but need Plorea to act first:
 | Surface | Status |
 | --- | --- |
 | Hosted pay page (`$link->url`) | Works. Web and WebView alike |
-| Adyen Drop-in on your own domain | Supported. Set `PLOREA_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
+| Adyen Drop-in on your own domain | Supported. Set `PLOREA_ADYEN_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
 | Native iOS / Android Adyen SDK | `session(..., channel: Channel::IOS)`, plus your app identifiers whitelisted by Plorea. Unobserved |
 
 ```php

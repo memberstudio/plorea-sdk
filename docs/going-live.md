@@ -59,7 +59,7 @@ is something that has either failed silently or cost real money when missed.
 
 Only if you mount Drop-in yourself. See [Embedded and native checkout](checkout.md).
 
-- [ ] **A live client key** in `PLOREA_CLIENT_KEY`. Test keys do not work
+- [ ] **A live client key** in `PLOREA_ADYEN_CLIENT_KEY`. Test keys do not work
       against live sessions.
 - [ ] **Production origins whitelisted** by Plorea for the live key, including
       any customer-owned domains that show checkout.

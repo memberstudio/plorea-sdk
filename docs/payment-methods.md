@@ -46,7 +46,7 @@ return response()->json($session);  // sessionId, sessionData, clientKey, enviro
 ```
 
 Add `->channel(Channel::IOS)` or `->channel(Channel::Android)` for Adyen's
-native SDKs. The web Drop-in needs `PLOREA_CLIENT_KEY` and your origins
+native SDKs. The web Drop-in needs `PLOREA_ADYEN_CLIENT_KEY` and your origins
 whitelisted by Plorea. See [Embedded and native checkout](checkout.md).
 
 `shopperReference` (the first argument) is Adyen's identifier for the

@@ -62,7 +62,7 @@ class CheckoutSessionTest extends TestCase
 
     public function test_the_response_client_key_wins_over_the_configured_one(): void
     {
-        config(['plorea.client_key' => 'test_CONFIGURED']);
+        config(['plorea.adyen_client_key' => 'test_CONFIGURED']);
 
         Http::fake([
             'payments.plorea.no/payments/session' => Http::response(['sessionId' => 'CS1', 'clientKey' => 'test_FROM_RESPONSE']),
@@ -83,7 +83,7 @@ class CheckoutSessionTest extends TestCase
      */
     public function test_a_session_without_a_key_falls_back_to_the_configured_one(): void
     {
-        config(['plorea.client_key' => 'test_CONFIGURED', 'plorea.environment' => 'live']);
+        config(['plorea.adyen_client_key' => 'test_CONFIGURED', 'plorea.environment' => 'live']);
 
         Http::fake([
             'payments.plorea.no/payments/session' => Http::response(['sessionId' => 'CS1', 'sessionData' => 'data', 'environment' => null, 'clientKey' => null]),
@@ -102,7 +102,7 @@ class CheckoutSessionTest extends TestCase
 
     public function test_the_client_key_stays_null_when_nothing_provides_one(): void
     {
-        config(['plorea.client_key' => '']);
+        config(['plorea.adyen_client_key' => '']);
 
         Http::fake(['payments.plorea.no/payments/session' => Http::response(['sessionId' => 'CS1', 'clientKey' => null])]);
 
@@ -111,7 +111,7 @@ class CheckoutSessionTest extends TestCase
 
     public function test_a_session_serializes_to_the_checkout_fields_only(): void
     {
-        config(['plorea.client_key' => 'test_CONFIGURED']);
+        config(['plorea.adyen_client_key' => 'test_CONFIGURED']);
 
         Http::fake(['payments.plorea.no/payment-methods/setup/session' => Http::response($this->fixture('payment-method-setup-session'), 201)]);
 

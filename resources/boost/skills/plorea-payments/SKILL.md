@@ -68,7 +68,7 @@ Both return immediately with `refund_requested` / `cancel_requested`; the provid
 
 ## Embedded checkout
 
-`Plorea::payByLink()->session($linkId, returnUrl: ..., channel: Channel::Web)` opens the Adyen session `pay.plorea.no` mounts, so you can render Drop-in on your own domain or in a native app. It needs `PLOREA_CLIENT_KEY` and your origins (or app identifiers) whitelisted by Plorea. Return `response()->json($session)`, never `raw`. For the full flow, use the `plorea-checkout` skill; for production readiness, `plorea-go-live`.
+`Plorea::payByLink()->session($linkId, returnUrl: ..., channel: Channel::Web)` opens the Adyen session `pay.plorea.no` mounts, so you can render Drop-in on your own domain or in a native app. It needs `PLOREA_ADYEN_CLIENT_KEY` and your origins (or app identifiers) whitelisted by Plorea. Return `response()->json($session)`, never `raw`. For the full flow, use the `plorea-checkout` skill; for production readiness, `plorea-go-live`.
 
 ## Payment methods (stored cards)
 

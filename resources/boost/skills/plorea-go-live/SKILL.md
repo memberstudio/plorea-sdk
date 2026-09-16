@@ -32,7 +32,7 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 - Booking is idempotent on the reference.
 
 ## Embedded / native checkout (if used)
-- Live `PLOREA_CLIENT_KEY`; production origins (including customer-owned domains) and production app identifiers whitelisted for the live key.
+- Live `PLOREA_ADYEN_CLIENT_KEY`; production origins (including customer-owned domains) and production app identifiers whitelisted for the live key.
 - Universal links / App Links verified on the production domain; the return page completes `redirectResult`.
 - CSP allows Adyen's **live** hosts. Apple Pay domain verification per domain, if wallets are shown.
 - App Store / Play review: real-world services only, otherwise in-app purchase applies.

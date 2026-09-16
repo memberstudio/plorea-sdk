@@ -12,7 +12,7 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   Adyen's native SDKs. Nothing is sent unless a channel is given, so existing
   calls are unchanged. The native response shape is stated by Plorea and not yet
   observed; `channel` on card setup is unconfirmed.
-- **`plorea.client_key` (`PLOREA_CLIENT_KEY`)** for the Adyen client key
+- **`plorea.adyen_client_key` (`PLOREA_ADYEN_CLIENT_KEY`)** for the Adyen client key
   Plorea issues for embedded Drop-in. `PaymentSession::$clientKey` and the new
   `PaymentMethodSession::$clientKey` use the response's key first (native
   channels) and fall back to it. `environment` falls back to

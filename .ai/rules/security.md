@@ -19,7 +19,7 @@ or exception output.
 It ends up in browsers and apps by design, so it is not a secret in the way the
 API key is. It is still **issued to one integrator** and scoped to their
 origins and app identifiers: it lives in the consuming app's
-`PLOREA_CLIENT_KEY`, `plorea.client_key` has no default, and no real key —
+`PLOREA_ADYEN_CLIENT_KEY`, `plorea.adyen_client_key` has no default, and no real key —
 test or live — goes in this repo. Fixtures and tests use obvious fakes
 (`test_FAKE_...`).
 

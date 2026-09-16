@@ -36,7 +36,7 @@ class PaymentMethodResource extends Resource
             $shopperReference,
             $recurringType,
             $returnUrl,
-            $this->clientKey(),
+            $this->adyenClientKey(),
             $this->environment(),
         );
     }

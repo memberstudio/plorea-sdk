@@ -18,7 +18,8 @@ response yet. See [Verified API behaviour](api-behaviour.md).
 
 Before you build anything, ask Plorea for:
 
-- **An Adyen client key**, one for test and one for live. It is publishable,
+- **An Adyen client key**, one for test and one for live. Each deployment
+  holds only the one matching its `PLOREA_ENVIRONMENT`. It is publishable,
   since it ends up in the browser or the app. It is still issued to you, so
   keep it in your environment and never commit it.
 - **Your web origins whitelisted**: every domain that mounts Drop-in, plus
@@ -35,7 +36,8 @@ are added before you build on it. The alternative is to always serve the
 payment step from a domain you control.
 
 ```dotenv
-PLOREA_CLIENT_KEY=test_...   # live_... in production
+PLOREA_ENVIRONMENT=test
+PLOREA_ADYEN_CLIENT_KEY=test_...   # production: PLOREA_ENVIRONMENT=live with the live_... key
 ```
 
 ## The server side
@@ -78,7 +80,7 @@ public function store(Request $request, Invoice $invoice)
   server.
 - **The client key is resolved for you.** A native session carries its own key
   in the response. A web session does not (`clientKey` is `null`), so the DTO
-  falls back to `plorea.client_key`. `environment` falls back to
+  falls back to `plorea.adyen_client_key`. `environment` falls back to
   `plorea.environment` the same way.
 - **Create a session per attempt.** Sessions expire, so do not cache them.
   Reuse the payment link (`firstOrCreate()`), not the session.

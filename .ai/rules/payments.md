@@ -180,7 +180,7 @@ being built now, and the SDK had to be able to ask. What exists:
   `paymentMethods()->setup()->channel()->session()`. **Omitted when not
   given** — a request without it is byte-identical to before, and Plorea
   treats it as `Web`. Never default it.
-- `plorea.client_key` (`PLOREA_CLIENT_KEY`), **no default**, same reasoning as
+- `plorea.adyen_client_key` (`PLOREA_ADYEN_CLIENT_KEY`), **no default**, same reasoning as
   `platform`. Both session DTOs take the response's `clientKey` first and fall
   back to the configured one; `environment` falls back to
   `plorea.environment`. `raw` still holds the response untouched, so the

@@ -15,7 +15,7 @@ use MemberFlow\Plorea\Enums\Channel;
  * expiry. `session()` opens the same Adyen session the page mounts its Drop-in
  * on, so it is the entry point for rendering checkout on your own domain or in
  * a native app. The browser needs an origin-whitelisted client key from
- * Plorea (`plorea.client_key`); see docs/checkout.md.
+ * Plorea (`plorea.adyen_client_key`); see docs/checkout.md.
  */
 class PayByLinkResource extends Resource
 {
@@ -45,7 +45,7 @@ class PayByLinkResource extends Resource
                 'returnUrl' => $returnUrl,
                 'channel' => $channel?->value,
             ])),
-            clientKey: $this->clientKey(),
+            clientKey: $this->adyenClientKey(),
             environment: $this->environment(),
         );
     }

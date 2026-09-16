@@ -140,7 +140,7 @@ Adyen account. A WebView on the hosted pay page needs none of this; it is the
 
 **Update 2026-09-16.** The SDK now sends `channel` when asked (`Channel`), on
 both `payments/session` and `payment-methods/setup/session`, and resolves the
-client key from the response or `plorea.client_key`. That was a decision to
+client key from the response or `plorea.adyen_client_key`. That was a decision to
 build ahead of observation; the shapes are still 📋, not ✅:
 
 - A native-channel session response, and the `clientKey` in it: **unobserved**.

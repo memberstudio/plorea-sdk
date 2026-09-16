@@ -1,6 +1,6 @@
 ---
 name: plorea-checkout
-description: "Use this skill when building embedded or native checkout with the Plorea SDK (memberflow/plorea): mounting Adyen Drop-in on your own domain, paying or storing cards from an iOS or Android app with Adyen's native SDK, building the backend endpoint that opens a Plorea session for a browser or app, handling Adyen return URLs, redirectResult, universal links / App Links, the Adyen client key (PLOREA_CLIENT_KEY), CSP for Adyen, Apple Pay / Google Pay, or App Store payment rules. Covers Channel, payByLink()->session(), paymentMethods()->setup()->channel()->session(), toCheckout(), and verifying results server-side."
+description: "Use this skill when building embedded or native checkout with the Plorea SDK (memberflow/plorea): mounting Adyen Drop-in on your own domain, paying or storing cards from an iOS or Android app with Adyen's native SDK, building the backend endpoint that opens a Plorea session for a browser or app, handling Adyen return URLs, redirectResult, universal links / App Links, the Adyen client key (PLOREA_ADYEN_CLIENT_KEY), CSP for Adyen, Apple Pay / Google Pay, or App Store payment rules. Covers Channel, payByLink()->session(), paymentMethods()->setup()->channel()->session(), toCheckout(), and verifying results server-side."
 license: MIT
 metadata:
   author: memberflow
@@ -11,7 +11,7 @@ metadata:
 
 ## Prerequisites from Plorea (ask first)
 
-- An Adyen client key per environment → `PLOREA_CLIENT_KEY`. Publishable, but keep it in env, never in code.
+- An Adyen client key (test and live) → `PLOREA_ADYEN_CLIENT_KEY`, holding only the one matching the deployment's `PLOREA_ENVIRONMENT`. Publishable, but keep it in env, never in code.
 - Web: every origin that mounts Drop-in whitelisted (plus `http://localhost:*`). A missing origin fails late as a CORS error in `/sessions/{id}/setup`.
 - Native: iOS bundle id + Apple Team ID and Android package name whitelisted — including staging builds.
 - Customer-owned domains are origins too; agree how they get added, or serve payment from a domain you control.
@@ -48,7 +48,7 @@ $session = Plorea::paymentMethods()
 
 Rules:
 - **Never return `$session->raw`** or build the JSON by hand from it — it carries tenant, shopper reference and customer id. The DTO serializes to `toCheckout()`.
-- `clientKey`: the response's for native channels, else `PLOREA_CLIENT_KEY`. `environment`: the response's, else `PLOREA_ENVIRONMENT` (`test` / `live` = Adyen live Europe).
+- `clientKey`: the response's for native channels, else `PLOREA_ADYEN_CLIENT_KEY`. `environment`: the response's, else `PLOREA_ENVIRONMENT` (`test` / `live` = Adyen live Europe).
 - **Choose `returnUrl` on the server** by channel (web route; universal link / App Link or custom scheme for apps). Taking it from the request is an open redirect.
 - New session per attempt; reuse the link, not the session.
 - Authorize the user against the invoice / customer before opening a session.

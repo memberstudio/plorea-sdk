@@ -39,9 +39,9 @@ abstract class Resource
     /**
      * The Adyen client key the consuming app was issued, for mounting Drop-in.
      */
-    protected function clientKey(): ?string
+    protected function adyenClientKey(): ?string
     {
-        $clientKey = $this->config['client_key'] ?? null;
+        $clientKey = $this->config['adyen_client_key'] ?? null;
 
         return is_string($clientKey) && $clientKey !== '' ? $clientKey : null;
     }

@@ -255,7 +255,7 @@ $session = Plorea::payByLink()->session($link->id, returnUrl: $appReturnUrl, cha
 return response()->json($session); // sessionId, sessionData, clientKey, environment
 ```
 
-This needs a client key (`PLOREA_CLIENT_KEY`) and whitelisted origins or app
+This needs a client key (`PLOREA_ADYEN_CLIENT_KEY`) and whitelisted origins or app
 identifiers from Plorea. A WebView on the hosted pay page needs neither. See
 [Embedded and native checkout](checkout.md).
 

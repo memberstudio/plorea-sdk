@@ -19,7 +19,7 @@ final readonly class PaymentSession implements JsonSerializable
     use ProvidesCheckoutConfiguration;
 
     /**
-     * @param  ?string  $clientKey  The key from the response (native channels), else the configured `plorea.client_key`.
+     * @param  ?string  $clientKey  The key from the response (native channels), else the configured `plorea.adyen_client_key`.
      * @param  ?string  $environment  The environment from the response, else the configured `plorea.environment`.
      * @param  array<string, mixed>  $raw
      */
