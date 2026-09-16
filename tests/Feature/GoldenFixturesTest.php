@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
+use MemberFlow\Plorea\Enums\Channel;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\AuthenticationException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
@@ -883,5 +884,43 @@ class GoldenFixturesTest extends TestCase
         $this->assertSame(19900, $link->raw['partnerSplits']['totalAmount']);
         $this->assertSame('BA_TEST_SPLIT_ACCOUNT', $link->raw['partnerSplits']['splits'][0]['account']);
         $this->assertNull($link->raw['store']);
+    }
+
+    /**
+     * Captured 2026-09-17 with `channel: "iOS"`: the same four keys as a web
+     * session, and no client key, although Plorea stated native sessions
+     * would carry one. The configured key fills the gap.
+     */
+    public function test_a_real_native_payment_session_carries_no_client_key(): void
+    {
+        config(['plorea.adyen_client_key' => 'test_CONFIGURED']);
+
+        Http::fake(['payments.plorea.no/payments/session' => Http::response($this->fixture('payment-session-native'))]);
+
+        $session = Plorea::payByLink()->session('pl_golden', 'https://app.test/return', Channel::IOS);
+
+        $this->assertSame(['sessionId', 'sessionData', 'environment', 'clientKey'], array_keys($session->raw));
+        $this->assertNull($session->raw['clientKey']);
+        $this->assertSame('test_CONFIGURED', $session->clientKey);
+        $this->assertSame('test', $session->environment);
+    }
+
+    /**
+     * Captured 2026-09-17: payments/session refuses a custom-scheme return
+     * URL. (payment-methods/setup/session accepted the same URL.)
+     */
+    public function test_it_maps_a_real_custom_scheme_return_url_rejection_to_validation(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/session' => Http::response($this->fixture('payment-session-custom-scheme-return-url'), 400),
+        ]);
+
+        try {
+            Plorea::payByLink()->session('pl_golden', 'example-app://checkout/return', Channel::IOS);
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('returnUrl must be a valid http(s) URL', $caught->getMessage());
+            $this->assertSame(400, $caught->status);
+        }
     }
 }
