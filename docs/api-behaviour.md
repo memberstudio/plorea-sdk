@@ -188,13 +188,16 @@ Probed again afterwards:
 - **`payments/session`** is unchanged: any `channel` is accepted and
   `clientKey` is `null`.
 - **Both endpoints now accept a custom-scheme `returnUrl`.**
-- The key card setup returns differs from the web key Plorea issued out of
-  band. Both carry the `test_` prefix.
-- Plorea does not whitelist `localhost` origins. Development runs against a
-  whitelisted staging domain.
+- The key card setup returns differs from the key issued out of band, and it
+  is the working one: replaying Adyen's `/sessions/{id}/setup` preflight
+  against a payment session, the returned key is accepted from whitelisted
+  origins (`200`) while the other is rejected from every origin (`403`). The
+  SDK already prefers the response's key.
+- A wildcard origin covers subdomains at any depth, but not the bare domain.
+  `localhost` is not whitelisted, at any port.
 
-Still unobserved: a client key in a payment session, which key a web Drop-in
-must use, a Drop-in mounted end to end, and a live `environment` value.
+Still unobserved: a client key in a payment session, a Drop-in mounted end to
+end in a browser, and a live `environment` value.
 
 ---
 

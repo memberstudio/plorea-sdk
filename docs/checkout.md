@@ -19,9 +19,11 @@ Plorea's native rollout the same day:
   `clientKey` for **every** channel, `Web` included.
 - **Payments** still accept any `channel` and return `clientKey: null`, so a
   payment session uses `PLOREA_ADYEN_CLIENT_KEY`.
-- The key card setup returns is **not the same** as the web key Plorea issued
-  out of band. Both are `test_` keys. Which one is whitelisted for which
-  origins and apps is Plorea's to answer.
+- The key card setup returns is **not the same** as the key Plorea may have
+  sent you out of band, and it is the one that works: replaying Adyen's
+  `/sessions/{id}/setup` preflight, the returned key is accepted from
+  whitelisted origins while the other was rejected everywhere. Prefer the key
+  in the response, which is what the DTO already does.
 
 Keep passing the channel on both endpoints. See
 [Verified API behaviour](api-behaviour.md).
@@ -34,9 +36,11 @@ Before you build anything, ask Plorea for:
   holds only the one matching its `PLOREA_ENVIRONMENT`. It is publishable,
   since it ends up in the browser or the app. It is still issued to you, so
   keep it in your environment and never commit it.
-- **Your web origins whitelisted**: every domain that mounts Drop-in. Plorea
-  does not whitelist `localhost` (2026-09-17), so develop against a
-  whitelisted staging domain. An origin that is not on the list fails
+- **Your web origins whitelisted**: every domain that mounts Drop-in. A
+  wildcard entry (`https://*.example.com`) covers subdomains at any depth, but
+  **not** the bare domain — whitelist that separately. `localhost` is not
+  whitelisted (2026-09-17), so develop against a whitelisted staging domain.
+  An origin that is not on the list fails
   late, in the Drop-in's `/sessions/{id}/setup` preflight, as a CORS error that
   looks nothing like a credentials problem.
 - **Your app identifiers whitelisted**, for the native path only: the iOS

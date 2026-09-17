@@ -219,9 +219,14 @@ card setup returns `test_FAKE_CLIENT_KEY` and the channel, payments return no
 key. Re-probe (`vendor/bin/testbench plorea:probe --app-return-url`) before
 changing either half.
 
-Still **UNOBSERVED**: a client key in a payment session, which key a web
-Drop-in must use, a Drop-in mounted end to end, and a live `environment`
-value.
+**Prefer the response's key** — confirmed 2026-09-17 by replaying Adyen's
+`/sessions/{id}/setup` preflight: the key a setup session returns is accepted
+for a *payment* session from a whitelisted origin, while a separately issued
+key was rejected from every origin. `plorea.adyen_client_key` is the fallback,
+not the truth.
+
+Still **UNOBSERVED**: a client key in a payment session, a Drop-in mounted end
+to end in a browser, and a live `environment` value.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 
