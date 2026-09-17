@@ -254,7 +254,7 @@ Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `is(string $status)`.
 
 `$paymentMethodId`, `$sessionId`, `$sessionData`, `$tenantId`, `$customerId`,
 `$doneId`, `$shopperReference`, `$recurringType`, `$status`, `$environment`,
-`$expiresAt`, `$clientKey`, `$raw`.
+`$expiresAt`, `$clientKey`, `$channel` (`?Channel`, as echoed by Plorea), `$raw`.
 
 `$clientKey`, `$environment`, `toCheckout()` and JSON serialization behave as on
 `PaymentSession`.

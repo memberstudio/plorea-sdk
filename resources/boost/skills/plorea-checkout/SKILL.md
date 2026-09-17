@@ -12,7 +12,7 @@ metadata:
 ## Prerequisites from Plorea (ask first)
 
 - An Adyen client key (test and live) → `PLOREA_ADYEN_CLIENT_KEY`, holding only the one matching the deployment's `PLOREA_ENVIRONMENT`. Publishable, but keep it in env, never in code.
-- Web: every origin that mounts Drop-in whitelisted (plus `http://localhost:*`). A missing origin fails late as a CORS error in `/sessions/{id}/setup`.
+- Web: every origin that mounts Drop-in whitelisted (not `localhost` — develop on a whitelisted staging domain). A missing origin fails late as a CORS error in `/sessions/{id}/setup`.
 - Native: iOS bundle id + Apple Team ID and Android package name whitelisted — including staging builds.
 - Customer-owned domains are origins too; agree how they get added, or serve payment from a domain you control.
 
@@ -48,8 +48,8 @@ $session = Plorea::paymentMethods()
 
 Rules:
 - **Never return `$session->raw`** or build the JSON by hand from it — it carries tenant, shopper reference and customer id. The DTO serializes to `toCheckout()`.
-- `clientKey`: the response's if it has one (none does today, native included), else `PLOREA_ADYEN_CLIENT_KEY`, whose `test_` / `live_` prefix must match `PLOREA_ENVIRONMENT` or the session throws. `environment`: the response's, else `PLOREA_ENVIRONMENT` (`test` / `live` = Adyen live Europe).
-- **Choose `returnUrl` on the server** by channel (web route; universal link / App Link for apps — `payments/session` rejects custom schemes with a 400). Taking it from the request is an open redirect.
+- `clientKey`: the response's if it has one (card setup does, for every channel; payments do not), else `PLOREA_ADYEN_CLIENT_KEY`, whose `test_` / `live_` prefix must match `PLOREA_ENVIRONMENT` or the session throws. `environment`: the response's, else `PLOREA_ENVIRONMENT` (`test` / `live` = Adyen live Europe).
+- **Choose `returnUrl` on the server** by channel (web route; universal link / App Link for apps, or a custom scheme — both endpoints accept one). Taking it from the request is an open redirect.
 - New session per attempt; reuse the link, not the session.
 - Authorize the user against the invoice / customer before opening a session.
 
@@ -78,7 +78,7 @@ Client callbacks are UI hints. On "done", the backend re-reads `Plorea::payments
 
 ## Unverified — do not promise these
 
-Stated by Plorea but not live in test (probed 2026-09-17): both session endpoints accept any `channel` and ignore it, and no response carries a `clientKey`. A native app uses the configured key, with its bundle id / package name whitelisted for that key. Unobserved: a Drop-in mounted end to end from a whitelisted origin. Wallets (Apple Pay / Google Pay) depend on Plorea's Adyen account setup and Apple domain verification — ask Plorea.
+Probed 2026-09-17: card setup validates and echoes `channel` and returns a `clientKey` (a different key from the web key); `payments/session` still ignores `channel` and returns no key. Unobserved: which key a web Drop-in must use, and a Drop-in mounted end to end from a whitelisted origin. Wallets (Apple Pay / Google Pay) depend on Plorea's Adyen account setup and Apple domain verification — ask Plorea.
 
 ## App stores
 
@@ -86,4 +86,4 @@ Apple / Google require in-app purchase for digital goods consumed in the app. Pa
 
 ## Testing
 
-`Plorea::fake()` answers both session endpoints and returns no client key for any channel, as Plorea does today. Assert the JSON has exactly `sessionId`, `sessionData`, `clientKey`, `environment`, and `Plorea::assertSent(fn ($r) => $r->input('channel') === 'iOS')`.
+`Plorea::fake()` answers both session endpoints and mirrors Plorea today: card setup returns a client key and the channel, payments return no key. Assert the JSON has exactly `sessionId`, `sessionData`, `clientKey`, `environment`, and `Plorea::assertSent(fn ($r) => $r->input('channel') === 'iOS')`.

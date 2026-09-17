@@ -17,8 +17,9 @@ use MemberFlow\Plorea\Tests\TestCase;
  * Embedded and native checkout: the channel, the client key, and what a
  * session is allowed to hand to a browser or an app.
  *
- * Probed against Plorea test on 2026-09-17: both endpoints accept any
- * `channel` value and return no client key for it. These tests pin what the
+ * Probed against Plorea test on 2026-09-17, after its native rollout:
+ * payments/session still ignores `channel` and returns no key; card setup
+ * validates `channel`, echoes it and returns a key for every channel. These tests pin what the
  * SDK sends and how it reads a key, nothing more.
  */
 class CheckoutSessionTest extends TestCase
@@ -163,10 +164,10 @@ class CheckoutSessionTest extends TestCase
     }
 
     /**
-     * Observed 2026-09-17: no channel gets a key from Plorea, so a native
-     * session uses the configured key like a web one.
+     * Observed 2026-09-17: payments/session returns no key for any channel,
+     * while card setup returns one for every channel and echoes the channel.
      */
-    public function test_the_fake_returns_no_client_key_for_any_channel(): void
+    public function test_the_fake_mirrors_which_endpoint_returns_a_client_key(): void
     {
         config(['plorea.adyen_client_key' => '']);
 
@@ -174,9 +175,14 @@ class CheckoutSessionTest extends TestCase
 
         $setup = Plorea::paymentMethods()->setup('shopper-1', RecurringType::Subscription, 'https://app.test/return');
 
+        $this->assertSame(Channel::Web, $setup->session()->channel);
+
         foreach (Channel::cases() as $channel) {
             $this->assertNull(Plorea::payByLink()->session('pl_1', channel: $channel)->clientKey);
-            $this->assertNull($setup->channel($channel)->session()->clientKey);
+
+            $session = $setup->channel($channel)->session();
+            $this->assertNotNull($session->clientKey);
+            $this->assertSame($channel, $session->channel);
         }
     }
 

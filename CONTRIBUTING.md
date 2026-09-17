@@ -64,8 +64,10 @@ vendor/bin/testbench serve                   # web Drop-in at http://localhost:8
 - The probe writes Plorea's full responses to `build/plorea-probe/`
   (git-ignored). They hold tenant and shopper data: anonymise anything before
   it becomes a fixture in `tests/Fixtures`.
-- The web page needs `APP_KEY` and a `PLOREA_ADYEN_CLIENT_KEY` that Plorea has
-  whitelisted for `http://localhost:*`.
+- The web page needs `APP_KEY` and `PLOREA_ADYEN_CLIENT_KEY`, and must be
+  opened from an origin Plorea has whitelisted. `localhost` is not one, so
+  serve it on (or tunnel it to) a whitelisted staging domain and set
+  `APP_URL` to match.
 - While a command runs, Testbench copies `workbench/.env` to
   `vendor/orchestra/testbench-core/laravel/.env` and deletes it on exit. A
   killed command leaves that copy, credentials included, behind, and later

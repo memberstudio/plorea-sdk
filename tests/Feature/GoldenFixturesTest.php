@@ -887,9 +887,9 @@ class GoldenFixturesTest extends TestCase
     }
 
     /**
-     * Captured 2026-09-17 with `channel: "iOS"`: the same four keys as a web
-     * session, and no client key, although Plorea stated native sessions
-     * would carry one. The configured key fills the gap.
+     * Captured 2026-09-17 with `channel: "iOS"`, before and after Plorea's
+     * native rollout: the same four keys as a web session, and no client
+     * key. The configured key fills the gap.
      */
     public function test_a_real_native_payment_session_carries_no_client_key(): void
     {
@@ -906,8 +906,9 @@ class GoldenFixturesTest extends TestCase
     }
 
     /**
-     * Captured 2026-09-17: payments/session refuses a custom-scheme return
-     * URL. (payment-methods/setup/session accepted the same URL.)
+     * Captured 2026-09-17, before Plorea lifted the rule the same day:
+     * payments/session refused a custom-scheme return URL. It accepts one
+     * now; this pins how the SDK surfaces such a validation error.
      */
     public function test_it_maps_a_real_custom_scheme_return_url_rejection_to_validation(): void
     {
@@ -921,6 +922,53 @@ class GoldenFixturesTest extends TestCase
         } catch (ValidationException $caught) {
             $this->assertSame('returnUrl must be a valid http(s) URL', $caught->getMessage());
             $this->assertSame(400, $caught->status);
+        }
+    }
+
+    /**
+     * Captured 2026-09-17, after Plorea's native rollout: card setup echoes
+     * the channel and carries a client key, which wins over the configured
+     * one. The key comes back for the Web channel too.
+     */
+    public function test_a_real_native_setup_session_carries_the_channel_and_a_client_key(): void
+    {
+        config(['plorea.adyen_client_key' => 'test_CONFIGURED']);
+
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response($this->fixture('payment-method-setup-session-native')),
+        ]);
+
+        $session = Plorea::paymentMethods()
+            ->setup('golden-shopper-native', RecurringType::Subscription, 'example-app://checkout/return')
+            ->channel(Channel::IOS)
+            ->session();
+
+        $this->assertSame(Channel::IOS, $session->channel);
+        $this->assertSame('test_GOLDENRESPONSECLIENTKEY00000000', $session->clientKey);
+        $this->assertSame('test', $session->environment);
+        $this->assertSame([
+            'sessionId' => 'CS_TEST_NATIVE_SESSION',
+            'sessionData' => 'test-native-session-data',
+            'clientKey' => 'test_GOLDENRESPONSECLIENTKEY00000000',
+            'environment' => 'test',
+        ], $session->toCheckout());
+    }
+
+    /**
+     * Captured 2026-09-17: card setup validates the channel, case-sensitively.
+     * `Channel` only produces valid values; this pins the error if one slips.
+     */
+    public function test_it_maps_a_real_invalid_channel_rejection_to_validation(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response($this->fixture('payment-method-setup-session-invalid-channel'), 400),
+        ]);
+
+        try {
+            Plorea::paymentMethods()->setup('golden-shopper-native', RecurringType::Subscription, 'https://example.com/return')->session();
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('channel must be one of Web, iOS, Android', $caught->getMessage());
         }
     }
 }

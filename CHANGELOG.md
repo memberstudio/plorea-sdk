@@ -10,8 +10,9 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   optional `$channel`, and `paymentMethods()->setup()` gains `channel()` for its
   Drop-in session. `Channel::IOS` / `Channel::Android` open a session for
   Adyen's native SDKs. Nothing is sent unless a channel is given, so existing
-  calls are unchanged. Plorea's test environment accepts and ignores `channel`
-  today (probed 2026-09-17), so native sessions use the configured key.
+  calls are unchanged. `PaymentMethodSession::$channel` holds the channel Plorea
+  echoes. In Plorea's test environment (2026-09-17) card setup honours
+  `channel` and returns a client key; payments still ignore it.
 - **`plorea.adyen_client_key` (`PLOREA_ADYEN_CLIENT_KEY`)** for the Adyen client key
   Plorea issues for embedded Drop-in. `PaymentSession::$clientKey` and the new
   `PaymentMethodSession::$clientKey` use the response's key first and fall
@@ -31,8 +32,9 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   four checkout fields instead of every public property, including `raw` with
   tenant, shopper reference and customer id. Code that relied on the old JSON
   shape should read the properties directly.
-- The fake returns no client key from either session endpoint, for any
-  channel, matching what Plorea's test environment returned on 2026-09-17.
+- The fake mirrors Plorea's test environment on 2026-09-17: card setup
+  sessions return a client key and echo the channel, payment sessions return no
+  key.
 
 ## v0.2.1 - 2026-09-10
 

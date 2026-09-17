@@ -1,0 +1,21 @@
+{
+    "paymentMethodId": "pm_test_golden_native_session",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-native",
+    "recurringType": "Subscription",
+    "status": "pending_setup",
+    "environment": "test",
+    "channel": "iOS",
+    "sessionId": "CS_TEST_NATIVE_SESSION",
+    "sessionData": "test-native-session-data",
+    "clientKey": "test_GOLDENRESPONSECLIENTKEY00000000",
+    "expiresAt": "2026-09-17T09:23:45+02:00",
+    "reference": null,
+    "product": null,
+    "amount": 100,
+    "currency": "NOK",
+    "clientType": "payments_only",
+    "skipKyc": false,
+    "partnerSplitsApplied": false
+}

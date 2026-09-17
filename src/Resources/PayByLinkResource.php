@@ -34,9 +34,9 @@ class PayByLinkResource extends Resource
      * derived entirely from the referenced payment link.
      *
      * Pass a native `$channel` for Adyen's iOS or Android SDK. Plorea's test
-     * environment ignores it today (2026-09-17), so the configured client key
-     * applies either way. Without one, nothing is sent. `$returnUrl` must be
-     * http(s): a custom scheme is rejected with a 400.
+     * environment still ignores it here (2026-09-17), so the configured client
+     * key applies. Without one, nothing is sent. `$returnUrl` may be https or
+     * an app's custom scheme.
      */
     public function session(string $paymentLinkId, ?string $returnUrl = null, ?Channel $channel = null): PaymentSession
     {

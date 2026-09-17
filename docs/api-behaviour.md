@@ -176,6 +176,26 @@ configured key is what a native app must use until Plorea's side lands.
 Still unobserved: a client key that works from a whitelisted origin, a Drop-in
 mounted end to end, and a live `environment` value.
 
+### ✅ Native support, partly rolled out — later on 2026-09-17
+
+Plorea announced native support on both session endpoints the same day.
+Probed again afterwards:
+
+- **`payment-methods/setup/session`** validates `channel` —
+  `{"error": "channel must be one of Web, iOS, Android"}` for anything else,
+  lowercase `ios` included — and echoes it in the response (`Web` when none is
+  sent). It returns a `clientKey` for **every** channel, `Web` included.
+- **`payments/session`** is unchanged: any `channel` is accepted and
+  `clientKey` is `null`.
+- **Both endpoints now accept a custom-scheme `returnUrl`.**
+- The key card setup returns differs from the web key Plorea issued out of
+  band. Both carry the `test_` prefix.
+- Plorea does not whitelist `localhost` origins. Development runs against a
+  whitelisted staging domain.
+
+Still unobserved: a client key in a payment session, which key a web Drop-in
+must use, a Drop-in mounted end to end, and a live `environment` value.
+
 ---
 
 ## Payment methods

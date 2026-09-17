@@ -158,7 +158,8 @@ usable.
 **Update 2026-09-15 — supported, gated on credentials.** Plorea confirmed the
 flow is supported: on request they issue the integrator an Adyen client key
 (test and live) and whitelist that integrator's origins, including
-`http://localhost:*` for development. The key is issued out of band and lives
+`http://localhost:*` for development (Plorea later said Adyen does not allow
+`localhost`; see 2026-09-17). The key is issued out of band and lives
 in the consuming app's environment — **never in this repo, and never a config
 default here**. Nothing in the SDK changes until an origin-whitelisted session
 has been mounted successfully and the shape is observed.
@@ -199,19 +200,28 @@ Plorea's native support is **not live in test**. Consequences for this repo:
 
 - **Keep sending `channel`.** It is ignored, not rejected, so the SDK is ready
   when Plorea's side lands. Do not add a default.
-- **The fake returns no client key, for any channel** — matching what was
-  observed. Do not make it more generous than Plorea; a consuming app's test
-  must see the same fallback it will get in production.
-- **`payments/session` rejects a non-http(s) `returnUrl`** with `400`
-  (`returnUrl must be a valid http(s) URL`). `payment-methods/setup/session`
-  accepts one. Native payment flows need a universal link / App Link; do not
-  document a custom scheme as working for payments.
+- **The fake is never more generous than Plorea**; a consuming app's test
+  must see the same fallback it will get in production. (Superseded below.)
+- **`payments/session` rejected a non-http(s) `returnUrl`** with `400`
+  (`returnUrl must be a valid http(s) URL`). (Lifted the same day, below.)
 - **`plorea.adyen_client_key` must match `plorea.environment`.** A key whose
   prefix is not `{environment}_` throws a `PloreaException` when a session
   resolves it, because Adyen fails that mismatch late, inside Drop-in.
 
-Still **UNOBSERVED**: a client key used from a whitelisted origin, a Drop-in
-mounted end to end, and a live `environment` value.
+**Later on 2026-09-17 — Plorea's native rollout, re-probed.** Card setup now
+validates `channel` (case-sensitive, `400` otherwise), echoes it
+(`PaymentMethodSession::$channel`) and returns a `clientKey` for every
+channel, `Web` included — a different key from the web key Plorea issued out of
+band. `payments/session` still ignores `channel` and returns `clientKey: null`.
+Both endpoints now accept a custom-scheme `returnUrl`, so the rejection above
+is history. Plorea does not whitelist `localhost`. The fake mirrors all of it:
+card setup returns `test_FAKE_CLIENT_KEY` and the channel, payments return no
+key. Re-probe (`vendor/bin/testbench plorea:probe --app-return-url`) before
+changing either half.
+
+Still **UNOBSERVED**: a client key in a payment session, which key a web
+Drop-in must use, a Drop-in mounted end to end, and a live `environment`
+value.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 

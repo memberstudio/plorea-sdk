@@ -76,8 +76,8 @@ final class DefaultFixtures
             'sessionId' => 'CS_FAKE_SESSION',
             'sessionData' => 'fake-session-data',
             'environment' => 'test',
-            // Null for every channel, native included (observed 2026-09-17),
-            // although Plorea stated native sessions would carry a key.
+            // Null for every channel, native included (observed 2026-09-17,
+            // after Plorea's native rollout reached only card setup).
             'clientKey' => null,
         ];
     }
@@ -210,8 +210,8 @@ final class DefaultFixtures
      */
     private static function paymentMethodSession(RecordedRequest $request): array
     {
-        // Unlike payments/session, the response has no clientKey key at all,
-        // for any channel (observed 2026-09-17).
+        // Observed 2026-09-17: the channel is echoed (Web when none is sent)
+        // and a client key comes back for every channel, web included.
         return [
             'paymentMethodId' => 'pm_fake_method',
             'tenantId' => $request->input('tenantId', 'fake-tenant'),
@@ -219,8 +219,10 @@ final class DefaultFixtures
             'recurringType' => $request->input('recurringType', 'Subscription'),
             'status' => 'pending_setup',
             'environment' => 'test',
+            'channel' => $request->input('channel', 'Web'),
             'sessionId' => 'CS_FAKE_SESSION',
             'sessionData' => 'fake-session-data',
+            'clientKey' => 'test_FAKE_CLIENT_KEY',
             'expiresAt' => '2099-12-31T12:00:00Z',
         ];
     }

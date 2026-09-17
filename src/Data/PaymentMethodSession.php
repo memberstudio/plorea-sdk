@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use JsonSerializable;
 use MemberFlow\Plorea\Data\Concerns\ParsesResponseData;
 use MemberFlow\Plorea\Data\Concerns\ProvidesCheckoutConfiguration;
+use MemberFlow\Plorea\Enums\Channel;
 use MemberFlow\Plorea\Enums\RecurringType;
 
 /**
@@ -25,6 +26,7 @@ final readonly class PaymentMethodSession implements JsonSerializable
     /**
      * @param  ?string  $clientKey  The key from the response, else the configured `plorea.adyen_client_key`.
      * @param  ?string  $environment  The environment from the response, else the configured `plorea.environment`.
+     * @param  ?Channel  $channel  The channel Plorea opened the session for (echoed since 2026-09-17).
      * @param  array<string, mixed>  $raw
      */
     public function __construct(
@@ -40,6 +42,7 @@ final readonly class PaymentMethodSession implements JsonSerializable
         public ?string $sessionData,
         public ?CarbonImmutable $expiresAt,
         public ?string $clientKey = null,
+        public ?Channel $channel = null,
         public array $raw = [],
     ) {}
 
@@ -61,6 +64,7 @@ final readonly class PaymentMethodSession implements JsonSerializable
             sessionData: self::string($data['sessionData'] ?? null),
             expiresAt: self::date($data['expiresAt'] ?? null),
             clientKey: self::string($data['clientKey'] ?? null) ?? $clientKey,
+            channel: Channel::tryFrom(self::string($data['channel'] ?? null) ?? ''),
             raw: $data,
         );
     }
