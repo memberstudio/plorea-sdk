@@ -199,8 +199,31 @@ Probed again afterwards:
 - A wildcard origin covers subdomains at any depth, but not the bare domain.
   `localhost` is not whitelisted, at any port.
 
+### ✅ Native Drop-in, verified on device — 2026-09-17, evening
+
+An iOS integration (Adyen's Drop-in/Sessions SDK 5.20.2, `Environment.test`)
+mounted both session types with `channel: "iOS"` and a custom-scheme
+`returnUrl`:
+
+- **Card setup** used the key in the response. The payment method reached
+  `active`.
+- **A payment** carries no key, so the app used the configured one. Drop-in
+  mounted, a test card authorised, and Plorea reported `authorised` a minute
+  later. The falling back this SDK does is therefore what makes native payment
+  work today, and it confirms from the app side that Adyen checks neither
+  origin nor bundle id on this path: no error mentioning origin, client key or
+  `403` appeared anywhere.
+- **3-D Secure arrived as a browser redirect**, not as Adyen's native 3DS2
+  challenge: the challenge opened Adyen's test simulator in an in-app browser
+  and returned through the custom scheme, which the app handled. Plorea's
+  session does not ask for native 3DS2
+  (`authenticationData.threeDSRequestData.nativeThreeDS`), so a native
+  integration must handle the redirect and its return URL regardless of
+  channel.
+
 Still unobserved: a client key in a payment session, a Drop-in mounted end to
-end in a browser, and a live `environment` value.
+end in a browser, an authorisation *through* a 3DS challenge, and a live
+`environment` value.
 
 ---
 

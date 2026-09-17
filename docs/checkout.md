@@ -8,7 +8,7 @@ web page or in a native iOS or Android app.
 | --- | --- | --- |
 | Hosted pay page (`$link->url`), in a browser or a WebView | Nothing | Works |
 | Drop-in on your own domain | A client key and your origins whitelisted by Plorea | Supported by Plorea (2026-09-15). Not yet mounted end to end through this SDK |
-| Native payment (`payments/session`) | `Channel::IOS` / `Channel::Android`, plus your bundle id / package name whitelisted by Plorea | Promised by Plorea. **`channel` still ignored in test** (2026-09-17) |
+| Native payment (`payments/session`) | `Channel::IOS` / `Channel::Android`, plus the configured client key | **Verified on iOS** (2026-09-17): authorises end to end. `channel` still ignored, no `clientKey` in the response |
 | Native card setup (`payment-methods/setup/session`) | As above | **Live in test** (2026-09-17): `channel` validated and echoed, `clientKey` returned |
 
 **What probing Plorea's test environment showed on 2026-09-17**, after
@@ -18,7 +18,9 @@ Plorea's native rollout the same day:
   anything else is a `400`), echoes it as `$session->channel`, and returns a
   `clientKey` for **every** channel, `Web` included.
 - **Payments** still accept any `channel` and return `clientKey: null`, so a
-  payment session uses `PLOREA_ADYEN_CLIENT_KEY`.
+  payment session uses `PLOREA_ADYEN_CLIENT_KEY`. That fallback is what makes
+  native payment work today: an iOS Drop-in mounted on such a session
+  authorised a test card the same evening.
 - The key card setup returns may **differ** from the key Plorea sent you out
   of band. Both can be valid: Adyen checks allowed origins **per key**, and
   only when the caller sends an `Origin` header. Replaying Adyen's
@@ -184,6 +186,11 @@ the four fields to Adyen's native SDK in session mode:
 
 Map `environment` to the SDK's own value: `test` is the test environment, and
 `live` is Adyen's live **Europe** environment.
+
+**Handle the redirect, not just the native challenge.** Plorea's sessions do
+not request native 3DS2, so a 3-D Secure challenge opens in a browser and comes
+back through your `returnUrl` (observed on iOS, 2026-09-17). The return-URL
+path is on the critical path for card payments, not an edge case.
 
 ## The result: never trust the client
 
