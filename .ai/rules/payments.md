@@ -220,10 +220,13 @@ key. Re-probe (`vendor/bin/testbench plorea:probe --app-return-url`) before
 changing either half.
 
 **Prefer the response's key** — confirmed 2026-09-17 by replaying Adyen's
-`/sessions/{id}/setup` preflight: the key a setup session returns is accepted
-for a *payment* session from a whitelisted origin, while a separately issued
-key was rejected from every origin. `plorea.adyen_client_key` is the fallback,
-not the truth.
+`/sessions/{id}/setup` preflight. Adyen enforces allowed origins **per key and
+only when an `Origin` header is present**: with no `Origin` (a native SDK) two
+different keys both answered `200`, while from a browser origin only the key
+the session returned was accepted. A native app therefore works with a key
+whose origins are unset, and a web Drop-in does not. Never conclude from a
+working app that the key is right for the web.
+`plorea.adyen_client_key` is the fallback, not the truth.
 
 Still **UNOBSERVED**: a client key in a payment session, a Drop-in mounted end
 to end in a browser, and a live `environment` value.

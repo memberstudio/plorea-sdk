@@ -19,11 +19,13 @@ Plorea's native rollout the same day:
   `clientKey` for **every** channel, `Web` included.
 - **Payments** still accept any `channel` and return `clientKey: null`, so a
   payment session uses `PLOREA_ADYEN_CLIENT_KEY`.
-- The key card setup returns is **not the same** as the key Plorea may have
-  sent you out of band, and it is the one that works: replaying Adyen's
-  `/sessions/{id}/setup` preflight, the returned key is accepted from
-  whitelisted origins while the other was rejected everywhere. Prefer the key
-  in the response, which is what the DTO already does.
+- The key card setup returns may **differ** from the key Plorea sent you out
+  of band. Both can be valid: Adyen checks allowed origins **per key**, and
+  only when the caller sends an `Origin` header. Replaying Adyen's
+  `/sessions/{id}/setup` preflight, both keys were accepted with no `Origin`
+  (what a native app sends), while only the returned key was accepted from a
+  whitelisted web origin. Prefer the key in the response — which is what the
+  DTO already does — and check with Plorea which key carries your origins.
 
 Keep passing the channel on both endpoints. See
 [Verified API behaviour](api-behaviour.md).

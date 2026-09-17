@@ -188,11 +188,14 @@ Probed again afterwards:
 - **`payments/session`** is unchanged: any `channel` is accepted and
   `clientKey` is `null`.
 - **Both endpoints now accept a custom-scheme `returnUrl`.**
-- The key card setup returns differs from the key issued out of band, and it
-  is the working one: replaying Adyen's `/sessions/{id}/setup` preflight
-  against a payment session, the returned key is accepted from whitelisted
-  origins (`200`) while the other is rejected from every origin (`403`). The
-  SDK already prefers the response's key.
+- The key card setup returns differs from the one issued out of band, and
+  both are valid. Replaying Adyen's `/sessions/{id}/setup` preflight against a
+  payment session: with **no `Origin` header** — what a native SDK sends —
+  both keys answer `200`. With a browser `Origin`, only the returned key is
+  accepted from whitelisted origins (`200`); the other answers `403`
+  everywhere. So the origin allow-list is per key and applies to browsers
+  only, which is why a native app works with a key whose origins are unset.
+  A session's `clientKey` is the safest choice; the SDK already prefers it.
 - A wildcard origin covers subdomains at any depth, but not the bare domain.
   `localhost` is not whitelisted, at any port.
 
