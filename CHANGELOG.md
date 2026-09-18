@@ -35,6 +35,10 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 - The fake mirrors Plorea's test environment on 2026-09-17: card setup
   sessions return a client key and echo the channel, payment sessions return no
   key.
+- Both surfaces are now observed rather than assumed: a browser Drop-in
+  authorises from a whitelisted origin, and an iOS Drop-in authorises on a
+  payment session using the configured key. See
+  [Verified API behaviour](docs/api-behaviour.md).
 
 ## v0.2.1 - 2026-09-10
 

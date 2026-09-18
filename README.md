@@ -101,13 +101,14 @@ helpers (`isPaid()`, `isActive()`, `is('...')`) rather than comparing strings.
 ## Checkout surfaces
 
 The hosted pay page is the supported path, and a WebView on it is all a mobile
-app needs today. Two other surfaces are possible but need Plorea to act first:
+app needs today. Two other surfaces mount Adyen's Drop-in yourself, and both
+need a client key from Plorea:
 
 | Surface | Status |
 | --- | --- |
 | Hosted pay page (`$link->url`) | Works. Web and WebView alike |
-| Adyen Drop-in on your own domain | Supported. Set `PLOREA_ADYEN_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
-| Native iOS / Android Adyen SDK | `session(..., channel: Channel::IOS)`, plus your app identifiers whitelisted by Plorea. Unobserved |
+| Adyen Drop-in on your own domain | Works. Set `PLOREA_ADYEN_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
+| Native iOS / Android Adyen SDK | Works. `session(..., channel: Channel::IOS)`, plus a return URL your app handles |
 
 ```php
 return response()->json(Plorea::payByLink()->session($link->id, $returnUrl, Channel::Android));
