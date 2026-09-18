@@ -138,8 +138,118 @@ usable `clientKey` — plus your bundle-id / package-name whitelisted in their
 Adyen account. A WebView on the hosted pay page needs none of this; it is the
 `Web` channel already in use.
 
-Nothing is implemented for the native path: the SDK sends no `channel` until a
-session with one has actually been observed.
+**Update 2026-09-16.** The SDK now sends `channel` when asked (`Channel`), on
+both `payments/session` and `payment-methods/setup/session`, and resolves the
+client key from the response or `plorea.adyen_client_key`. That was a decision to
+build ahead of observation; the shapes are still 📋, not ✅:
+
+- A native-channel session response, and the `clientKey` in it: **unobserved**.
+- `channel` on `payment-methods/setup/session`: asked, **unconfirmed**.
+- A custom-scheme (non-https) `returnUrl`: **unobserved**.
+- `environment` on a live session: **unobserved**. Adyen Web expects `live`
+  for Europe, which is what `X-Environment` already uses.
+- A web Drop-in mounted on a whitelisted origin end to end: **unobserved**.
+
+Most of that list was answered the next day — see below.
+
+### ✅ `channel` is accepted and ignored; a session carries no key — 2026-09-17, morning
+
+**Every line of this entry was superseded later the same day — read on.** It is
+kept because it is the before-picture that the rollout below is a change from.
+
+Probed against Plorea test on 2026-09-17, on both session endpoints:
+
+- **`channel` is not read.** `Web`, `iOS`, `Android`, a lowercase `ios`, an
+  unknown string and an integer all return `200`. Nothing rejects a value, and
+  nothing in the response echoes one.
+- **No `clientKey` for any channel.** `payments/session` returns
+  `clientKey: null` for native channels too; `payment-methods/setup/session`
+  has no `clientKey` key at all. The key Plorea issues out of band is the only
+  key there is today, for web and native alike.
+- **`environment` is `test`**, from both endpoints.
+- **`payments/session` requires an http(s) `returnUrl`.** A custom scheme is
+  rejected with `400` and `{"error": "returnUrl must be a valid http(s) URL"}`.
+  `payment-methods/setup/session` accepts the same custom-scheme URL — the two
+  endpoints validate differently.
+
+So the native path Plorea described (2026-09-15) is **not live in test** as of
+this probe. The SDK still sends `channel`, since it is ignored rather than
+rejected, and the configured key is what a native app must use until Plorea's
+side lands.
+
+Unobserved at this point — all three were settled the same evening, below: a
+client key that works from a whitelisted origin, a Drop-in mounted end to end,
+and a live `environment` value.
+
+### ✅ Native support, partly rolled out — later on 2026-09-17
+
+Plorea announced native support on both session endpoints the same day.
+Probed again afterwards:
+
+- **`payment-methods/setup/session`** validates `channel` —
+  `{"error": "channel must be one of Web, iOS, Android"}` for anything else,
+  lowercase `ios` included — and echoes it in the response (`Web` when none is
+  sent). It returns a `clientKey` for **every** channel, `Web` included.
+- **`payments/session`** is unchanged: any `channel` is accepted and
+  `clientKey` is `null`.
+- **Both endpoints now accept a custom-scheme `returnUrl`.**
+- The key card setup returns differs from the one issued out of band, and
+  both are valid. Replaying Adyen's `/sessions/{id}/setup` preflight against a
+  payment session: with **no `Origin` header** — what a native SDK sends —
+  both keys answer `200`. With a browser `Origin`, only the returned key is
+  accepted from whitelisted origins (`200`); the other answers `403`
+  everywhere. So the origin allow-list is per key and applies to browsers
+  only, which is why a native app works with a key whose origins are unset.
+  A session's `clientKey` is the safest choice; the SDK already prefers it.
+- A wildcard origin covers subdomains at any depth, but not the bare domain.
+  `localhost` is not whitelisted, at any port.
+
+### ✅ Native Drop-in, verified on device — 2026-09-17, evening
+
+An iOS integration (Adyen's Drop-in/Sessions SDK 5.20.2, `Environment.test`)
+mounted both session types with `channel: "iOS"` and a custom-scheme
+`returnUrl`:
+
+- **Card setup** used the key in the response. The payment method reached
+  `active`.
+- **A payment** carries no key, so the app used the configured one. Drop-in
+  mounted, a test card authorised, and Plorea reported `authorised` a minute
+  later. The falling back this SDK does is therefore what makes native payment
+  work today, and it confirms from the app side that Adyen checks neither
+  origin nor bundle id on this path: no error mentioning origin, client key or
+  `403` appeared anywhere.
+- **3-D Secure arrived as a browser redirect**, not as Adyen's native 3DS2
+  challenge: the challenge opened Adyen's test simulator in an in-app browser
+  and returned through the custom scheme, which the app handled. Plorea's
+  session does not ask for native 3DS2
+  (`authenticationData.threeDSRequestData.nativeThreeDS`), so a native
+  integration must handle the redirect and its return URL regardless of
+  channel.
+
+### ✅ Web Drop-in and 3DS, verified end to end — 2026-09-17, late
+
+- **A browser Drop-in authorises from a whitelisted origin.** Adyen Web 5.71.0
+  mounted on a payment session from a whitelisted staging subdomain, using the
+  key a setup session returned, was accepted at `/sessions/{id}/setup` with the
+  browser's `Origin` present, offered `scheme` and `googlepay`, and reported
+  `Authorised`. Plorea moved the payment to `authorised` and the
+  `AUTHORISATION` webhook arrived.
+- **Authorisation survives a 3DS challenge.** The redirect returns through the
+  app's custom scheme and Plorea reports `authorised`.
+- **A refused challenge does reach Plorea**, as
+  `webhookEventCode: "AUTHORISATION"` with `webhookSuccess: false` — the same
+  shape as any other decline, still with no reason field.
+
+### ✅ An unsubmitted session never reaches a terminal state — 2026-09-17
+
+A session that is created and then abandoned — the customer closes Drop-in, or
+never opens it — still reads `created` more than an hour later, with no webhook
+fields set. Like payment links, which never report `expired`, a session has no
+observed terminal state. **Do not poll a session waiting for it to fail.** Time
+the attempt out yourself and open a new session for the next try.
+
+Still unobserved: a client key in a payment session, a live `environment`
+value, and any Android channel on a device.
 
 ---
 
@@ -247,11 +357,11 @@ worse than not sending any, and both methods say so in their docblocks. A
 tripwire in `GoldenFixturesTest` asserts `count === count($items)` on the list
 fixture, so a future capture where they diverge fails the build.
 
-**To settle it:** a page-crossing dataset cannot be manufactured on demand
-without spamming real Adyen test subscriptions. The cheap path is to leave one
-daily-interval subscription running — it accumulates roughly 30 charges a
-month unattended — and read its charges once the history is long enough to
-cross any plausible page size. That is a wait, not a probe.
+Settling it takes time rather than effort: a page-crossing dataset cannot be
+manufactured on demand without spamming real Adyen test subscriptions. A
+daily-interval subscription left running accumulates roughly 30 charges a
+month unattended, and its charges can be read once the history is long enough
+to cross any plausible page size.
 
 ### ✅ A refund without `X-Environment` hits live credentials — 2026-09-10
 
@@ -296,10 +406,10 @@ environment}`. A **manual** `charge()` emits `payment.authorised` with the
 ordinary flat payment shape.
 
 Webhook registration is manual and **per tenant**: Plorea delivers to the one
-URL you gave them, with no per-environment routing. The tenant these captures
-came from had production registered, which is why an earlier staging run saw
-nothing at all. If deliveries are missing, confirm which URL is registered
-before suspecting your listener.
+URL you gave them, with no per-environment routing. So a tenant registered
+against production sends nothing at all to a staging run — that is the shape of
+this trap, and it has been walked into. If deliveries are missing, confirm
+which URL is registered before suspecting your listener.
 
 ### 📋 The catalogue is four types — Plorea, 2026-09-09
 
@@ -347,8 +457,8 @@ Both halves matter. The first says genuine traffic is accepted; the second says
 tampered traffic is rejected. A verifier that only ever sees valid input can
 pass every test while doing nothing at all — this one demonstrably rejects.
 
-The check was run by the consuming application, which holds the signing secret;
-this repository still has never held a secret, and never should. The result
+The check was run inside a consuming application, which is where the signing
+secret lives; this repository has never held a secret, and never should. The result
 came back as a match/no-match verdict only — no secret and no signature value
 crossed into this repo, and none belongs in a fixture. That is also why there
 is no golden test for it: a fixture proving signature verification would have
@@ -365,8 +475,8 @@ break verification while the payload still looks valid.
 
 ### ❌ A subscription charge that fails
 
-**Verified impossible with the public Adyen test cards, 2026-09-09.** Do not
-re-run this investigation; it has been done twice.
+**Verified impossible with the public Adyen test cards, 2026-09-09** — twice,
+independently. The reasoning below is why, so you do not have to repeat it.
 
 The blocked shapes are: the 402 `ChargeFailedException` body, a
 `payment_failed` subscription, a populated `failureReason` or non-zero

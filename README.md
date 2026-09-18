@@ -20,7 +20,7 @@ use MemberFlow\Plorea\Facades\Plorea;
 $link = Plorea::payments()
     ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
     ->payerEmail('kunde@eksempel.no')
-    ->merchant(orgNr: '912650774', name: 'Techify AS')
+    ->merchant(orgNr: '999999999', name: 'Techify AS')
     ->firstOrCreate();
 
 return redirect($link->url);
@@ -51,6 +51,8 @@ Full documentation lives in [`docs/`](docs/README.md).
 | [Getting started](docs/getting-started.md) | Installation, the full configuration reference, the facade |
 | [Payments](docs/payments.md) | Payment links, `firstOrCreate`, status, refunds, cancellations |
 | [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in |
+| [Embedded and native checkout](docs/checkout.md) | Drop-in on your domain or in an iOS / Android app |
+| [Going live](docs/going-live.md) | The production checklist |
 | [Subscriptions](docs/subscriptions.md) | Create, trials, update, cancel, reactivate, charges, dunning |
 | [Webhooks](docs/webhooks.md) | Signature verification, the event catalogue, what is poll-only |
 | [Testing](docs/testing.md) | `Plorea::fake()`, stubs, assertions |
@@ -99,15 +101,21 @@ helpers (`isPaid()`, `isActive()`, `is('...')`) rather than comparing strings.
 ## Checkout surfaces
 
 The hosted pay page is the supported path, and a WebView on it is all a mobile
-app needs today. Two other surfaces are possible but need Plorea to act first:
+app needs today. Two other surfaces mount Adyen's Drop-in yourself, and both
+need a client key from Plorea:
 
 | Surface | Status |
 | --- | --- |
 | Hosted pay page (`$link->url`) | Works. Web and WebView alike |
-| Adyen Drop-in on your own domain | Supported — Plorea issues the Adyen client key and whitelists your origins on request |
-| Native iOS / Android Adyen SDK | Needs a `channel` on the session plus your bundle-id whitelisted. Not yet sent by this SDK |
+| Adyen Drop-in on your own domain | Works. Set `PLOREA_ADYEN_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
+| Native iOS / Android Adyen SDK | Works. `session(..., channel: Channel::IOS)`, plus a return URL your app handles |
 
-→ [Payments](docs/payments.md#embedded-checkout)
+```php
+return response()->json(Plorea::payByLink()->session($link->id, $returnUrl, Channel::Android));
+// {"sessionId": ..., "sessionData": ..., "clientKey": ..., "environment": ...} — and nothing else
+```
+
+→ [Embedded and native checkout](docs/checkout.md) · [Going live](docs/going-live.md)
 
 ## Testing
 

@@ -41,9 +41,13 @@ $session = Plorea::paymentMethods()
     ->session();
 
 $session->paymentMethodId;  // pm_... — store this now
-$session->sessionId;
-$session->sessionData;      // hand both to the Drop-in component
+
+return response()->json($session);  // sessionId, sessionData, clientKey, environment
 ```
+
+Add `->channel(Channel::IOS)` or `->channel(Channel::Android)` for Adyen's
+native SDKs. The web Drop-in needs `PLOREA_ADYEN_CLIENT_KEY` and your origins
+whitelisted by Plorea. See [Embedded and native checkout](checkout.md).
 
 `shopperReference` (the first argument) is Adyen's identifier for the
 cardholder and is what ties stored cards to a person. Keep it stable per

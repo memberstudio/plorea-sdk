@@ -39,7 +39,7 @@ class PaymentResourceTest extends TestCase
             ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
             ->payerEmail('kunde@eksempel.no')
             ->invoiceUrl('https://app.example/invoices/123.pdf')
-            ->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
+            ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
             ->create();
 
         $this->assertSame('https://pay.plorea.no/pl_123', $link->url);
@@ -65,7 +65,7 @@ class PaymentResourceTest extends TestCase
                 'email' => 'kunde@eksempel.no',
                 'returnUrl' => 'https://app.example/paid',
                 'invoice_url' => 'https://app.example/invoices/123.pdf',
-                'merchantOrgNr' => '912650774',
+                'merchantOrgNr' => '999999999',
                 'merchantName' => 'Techify AS',
                 'merchantEmail' => 'post@techify.no',
             ], $request->data());

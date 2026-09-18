@@ -24,7 +24,7 @@ class FakeClientTest extends TestCase
 
         $link = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->create();
 
         $this->assertSame('pl_fake_link', $link->id);
@@ -60,7 +60,7 @@ class FakeClientTest extends TestCase
 
         $pending = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
-            ->merchant(orgNr: '912650774');
+            ->merchant(orgNr: '999999999');
 
         $pending->create();
         $again = $pending->firstOrCreate();
@@ -86,14 +86,14 @@ class FakeClientTest extends TestCase
 
         $created = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->firstOrCreate();
 
         $this->assertSame('pl_fake_link', $created->id);
 
         $reused = Plorea::payments()
             ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->firstOrCreate();
 
         $this->assertSame('pl_fake_link', $reused->id);
@@ -126,7 +126,7 @@ class FakeClientTest extends TestCase
 
         $link = Plorea::payments()
             ->link('ref-9', 'Product', Amount::nok(1000), 'https://example.test')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->create();
 
         $this->assertSame('pl_from_callable', $link->id);
@@ -236,7 +236,7 @@ class FakeClientTest extends TestCase
         try {
             Plorea::payments()
                 ->link('ref-failed', 'Product', Amount::nok(50000), 'https://example.test/return')
-                ->merchant(orgNr: '912650774')
+                ->merchant(orgNr: '999999999')
                 ->create();
             $this->fail('Expected ServerException.');
         } catch (ServerException) {

@@ -1,3 +1,11 @@
 providers:
   - MemberFlow\Plorea\PloreaServiceProvider
   - Laravel\Boost\BoostServiceProvider
+
+# Local harness against Plorea's test environment: see CONTRIBUTING.md.
+workbench:
+  start: /plorea
+  discovers:
+    web: true
+    commands: true
+    views: true

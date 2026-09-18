@@ -12,7 +12,7 @@ Prerequisite: an `active` [payment method](payment-methods.md).
 use MemberFlow\Plorea\Data\{Amount, BillingInterval};
 
 $subscription = Plorea::subscriptions()
-    ->create('pm_63cd...', Amount::nok(19900), BillingInterval::monthly())
+    ->create('pm_...', Amount::nok(19900), BillingInterval::monthly())
     ->externalId('ws_acme_456')            // your own entity id — the link back
     ->title('Done CRM Pro')
     ->description('5 seats')
@@ -69,7 +69,7 @@ Use the helpers or `is('...')`, never a bare string comparison.
 ## Find and list
 
 ```php
-$subscription = Plorea::subscriptions()->find('sub_774c...');
+$subscription = Plorea::subscriptions()->find('sub_...');
 
 $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', status: 'active');
 $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', tenantId: 'other-tenant');

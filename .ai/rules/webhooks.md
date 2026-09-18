@@ -48,7 +48,7 @@ body))` matched the header; the `hex2bin($secret)`-as-key variant did **not**.
 
 **The middleware is correct as written — do not "fix" the key handling.**
 
-The check ran in the consuming app, which holds the secret. Only a match/no-match
+The check ran inside a consuming app, which is where the secret lives. Only a match/no-match
 verdict crossed over; see [security.md](security.md) for why there is no golden
 fixture for this and why that is deliberate.
 
@@ -75,11 +75,11 @@ and no refusal-reason field of any shape.
 ## Subscription webhooks — CAPTURED 2026-09-04
 
 Registration is per tenant and points at whichever single URL was handed to
-Plorea — for the capture tenant that was **production**, which is why an
-earlier staging run saw nothing at all. There is no per-environment routing to
-fall back on, so if deliveries are missing, check which URL is registered
-before suspecting the SDK. Production logs held exactly 3 deliveries for the
-lifecycle run.
+Plorea. There is no per-environment routing to fall back on, so a tenant
+registered against one environment sends nothing at all to the other — that is
+why an earlier run of these captures saw no deliveries. If deliveries are
+missing, check which URL is registered before suspecting the SDK. The
+lifecycle run below is exactly 3 deliveries.
 
 - A **scheduler** charge emits `subscription.charge_succeeded` with
   `data: {subscriptionId, chargeId, reference, customerId, shopperReference, externalId, amount: {value, currency}, pspReference, nextChargeAt, environment}`.

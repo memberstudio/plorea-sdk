@@ -4,7 +4,41 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- **Native checkout: `Enums\Channel`.** `payByLink()->session()` takes an
+  optional `$channel`, and `paymentMethods()->setup()` gains `channel()` for its
+  Drop-in session. `Channel::IOS` / `Channel::Android` open a session for
+  Adyen's native SDKs. Nothing is sent unless a channel is given, so existing
+  calls are unchanged. `PaymentMethodSession::$channel` holds the channel Plorea
+  echoes. In Plorea's test environment (2026-09-17) card setup honours
+  `channel` and returns a client key; payments still ignore it.
+- **`plorea.adyen_client_key` (`PLOREA_ADYEN_CLIENT_KEY`)** for the Adyen client key
+  Plorea issues for embedded Drop-in. `PaymentSession::$clientKey` and the new
+  `PaymentMethodSession::$clientKey` use the response's key first and fall
+  back to it. `environment` falls back to `plorea.environment`. A key whose
+  `test_` / `live_` prefix does not match `plorea.environment` throws a
+  `PloreaException` instead of failing later inside Drop-in.
+- **`toCheckout()` on both session DTOs**, returning `sessionId`,
+  `sessionData`, `clientKey` and `environment`.
+- Guides: [Embedded and native checkout](docs/checkout.md) and
+  [Going live](docs/going-live.md). Boost skills: `plorea-checkout` and
+  `plorea-go-live`.
+
+### Changed
+
+- **`PaymentSession` and `PaymentMethodSession` serialize to `toCheckout()`.**
+  They implement `JsonSerializable`, so `response()->json($session)` sends the
+  four checkout fields instead of every public property, including `raw` with
+  tenant, shopper reference and customer id. Code that relied on the old JSON
+  shape should read the properties directly.
+- The fake mirrors Plorea's test environment on 2026-09-17: card setup
+  sessions return a client key and echo the channel, payment sessions return no
+  key.
+- Both surfaces are now observed rather than assumed: a browser Drop-in
+  authorises from a whitelisted origin, and an iOS Drop-in authorises on a
+  payment session using the configured key. See
+  [Verified API behaviour](docs/api-behaviour.md).
 
 ## v0.2.1 - 2026-09-10
 

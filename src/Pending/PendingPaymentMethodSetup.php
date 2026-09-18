@@ -8,6 +8,7 @@ use MemberFlow\Plorea\Concerns\FiltersNullValues;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\PaymentMethod;
 use MemberFlow\Plorea\Data\PaymentMethodSession;
+use MemberFlow\Plorea\Enums\Channel;
 use MemberFlow\Plorea\Enums\RecurringType;
 
 /**
@@ -23,6 +24,8 @@ class PendingPaymentMethodSetup
 
     protected ?string $description = null;
 
+    protected ?Channel $channel = null;
+
     /** @var array<string, mixed> */
     protected array $metadata = [];
 
@@ -32,6 +35,8 @@ class PendingPaymentMethodSetup
         protected readonly string $shopperReference,
         protected readonly RecurringType $recurringType,
         protected readonly string $returnUrl,
+        protected readonly ?string $clientKey = null,
+        protected readonly ?string $environment = null,
     ) {}
 
     /**
@@ -75,6 +80,17 @@ class PendingPaymentMethodSetup
     }
 
     /**
+     * The Adyen channel the Drop-in session is for. Only used by the Drop-in
+     * session flow; unset, nothing is sent and Plorea treats it as `Web`.
+     */
+    public function channel(Channel $channel): static
+    {
+        $this->channel = $channel;
+
+        return $this;
+    }
+
+    /**
      * @param  array<string, mixed>  $metadata
      */
     public function metadata(array $metadata): static
@@ -96,29 +112,32 @@ class PendingPaymentMethodSetup
     }
 
     /**
-     * Create an Adyen Sessions object for the embedded Web Drop-in component.
+     * Create an Adyen Sessions object for the embedded Drop-in component.
      */
     public function session(): PaymentMethodSession
     {
         return PaymentMethodSession::fromArray(
-            $this->client->post('payment-methods/setup/session', $this->toPayload(includeDoneId: true)),
+            $this->client->post('payment-methods/setup/session', $this->toPayload(includeSessionFields: true)),
+            clientKey: $this->clientKey,
+            environment: $this->environment,
         );
     }
 
     /**
      * @return array<string, mixed>
      */
-    protected function toPayload(bool $includeDescription = false, bool $includeDoneId = false): array
+    protected function toPayload(bool $includeDescription = false, bool $includeSessionFields = false): array
     {
         return $this->withoutNulls([
             'tenantId' => $this->tenantId,
             'customerId' => $this->customerId,
-            'doneId' => $includeDoneId ? $this->doneId : null,
+            'doneId' => $includeSessionFields ? $this->doneId : null,
             'shopperReference' => $this->shopperReference,
             'recurringType' => $this->recurringType->value,
             'returnUrl' => $this->returnUrl,
             'description' => $includeDescription ? $this->description : null,
             'metadata' => $this->metadata === [] ? null : $this->metadata,
+            'channel' => $includeSessionFields ? $this->channel?->value : null,
         ]);
     }
 }

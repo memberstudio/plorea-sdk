@@ -48,6 +48,7 @@ switches environment for you — `PLOREA_ENVIRONMENT` is sent as the
 | `PLOREA_ENVIRONMENT` | `plorea.environment` | `test` | Sent as `X-Environment` on every request |
 | `PLOREA_BASE_URL` | `plorea.base_url` | `https://payments.plorea.no` | API base URL |
 | `PLOREA_TENANT_ID` | `plorea.tenant_id` | — | Injected into every request that needs one |
+| `PLOREA_ADYEN_CLIENT_KEY` | `plorea.adyen_client_key` | — | Adyen client key from Plorea, for mounting Drop-in yourself. Its `test_` / `live_` prefix must match `PLOREA_ENVIRONMENT`. See [Checkout](checkout.md) |
 | `PLOREA_PLATFORM` | `plorea.platform` | — | Sent on every request — in the body on writes, in the query string on reads. Plorea's internal reporting only. Unset, nothing is sent |
 | `PLOREA_TIMEOUT` | `plorea.http.timeout` | `30` | Request timeout, seconds |
 | `PLOREA_CONNECT_TIMEOUT` | `plorea.http.connect_timeout` | `10` | Connect timeout, seconds |
@@ -90,7 +91,7 @@ Nothing is mutated in place; every builder method returns a new instance.
 $link = Plorea::payments()
     ->link('FIN-2026-00123', 'Faktura', Amount::nok(450000), 'https://app.example/paid')
     ->payerEmail('kunde@eksempel.no')   // builder
-    ->merchant(orgNr: '912650774')      // builder
+    ->merchant(orgNr: '999999999')      // builder
     ->create();                         // terminal — returns PaymentLinkCreated
 ```
 

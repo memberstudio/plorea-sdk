@@ -14,7 +14,7 @@ class PaymentMethodResource extends Resource
      * Start building a payment method setup for the customer to save a card.
      *
      * Finish with `create()` for the hosted Adyen page flow, or `session()`
-     * for the embedded Web Drop-in flow.
+     * for the embedded Drop-in flow (web or native, see `channel()`).
      *
      * ```php
      * $method = Plorea::paymentMethods()
@@ -36,6 +36,8 @@ class PaymentMethodResource extends Resource
             $shopperReference,
             $recurringType,
             $returnUrl,
+            $this->adyenClientKey(),
+            $this->environment(),
         );
     }
 

@@ -49,6 +49,30 @@ committing.
   OpenAPI spec (statuses, error shapes, webhook payloads), the README and
   docblocks describe observed reality. Keep that distinction when editing.
 
+## Trying the SDK against Plorea's test environment
+
+The `workbench/` harness sends real requests to Plorea's **test** environment.
+It refuses to run with `PLOREA_ENVIRONMENT` set to anything else.
+
+```bash
+cp workbench/.env.example workbench/.env    # git-ignored; fill in test credentials
+vendor/bin/testbench plorea:probe            # opens sessions per channel, prints redacted fields
+vendor/bin/testbench plorea:probe --app-return-url --only=setup
+vendor/bin/testbench serve                   # web Drop-in at http://localhost:8000/plorea
+```
+
+- The probe writes Plorea's full responses to `build/plorea-probe/`
+  (git-ignored). They hold tenant and shopper data: anonymise anything before
+  it becomes a fixture in `tests/Fixtures`.
+- The web page needs `APP_KEY` and `PLOREA_ADYEN_CLIENT_KEY`, and must be
+  opened from an origin Plorea has whitelisted. `localhost` is not one, so
+  serve it on (or tunnel it to) a whitelisted staging domain and set
+  `APP_URL` to match.
+- While a command runs, Testbench copies `workbench/.env` to
+  `vendor/orchestra/testbench-core/laravel/.env` and deletes it on exit. A
+  killed command leaves that copy, credentials included, behind, and later
+  runs keep using it instead of your `workbench/.env`. Delete it by hand.
+
 ## Reporting bugs
 
 Open an issue with the SDK version, Laravel/PHP versions, and a minimal

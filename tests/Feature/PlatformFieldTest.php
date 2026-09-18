@@ -34,7 +34,7 @@ class PlatformFieldTest extends TestCase
 
         Plorea::payments()
             ->link('FIN-1', 'Faktura', Amount::nok(45000), 'https://app.test/paid')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->platform('partner-portal')
             ->create();
 
