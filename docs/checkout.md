@@ -7,7 +7,7 @@ web page or in a native iOS or Android app.
 | Surface | What you need | Status |
 | --- | --- | --- |
 | Hosted pay page (`$link->url`), in a browser or a WebView | Nothing | Works |
-| Drop-in on your own domain | A client key and your origins whitelisted by Plorea | Supported by Plorea (2026-09-15). Not yet mounted end to end through this SDK |
+| Drop-in on your own domain | A client key and your origins whitelisted by Plorea | **Verified** (2026-09-17): authorises from a whitelisted origin |
 | Native payment (`payments/session`) | `Channel::IOS` / `Channel::Android`, plus the configured client key | **Verified on iOS** (2026-09-17): authorises end to end. `channel` still ignored, no `clientKey` in the response |
 | Native card setup (`payment-methods/setup/session`) | As above | **Live in test** (2026-09-17): `channel` validated and echoed, `clientKey` returned |
 
@@ -205,6 +205,9 @@ They are not a record of payment. Treat the outcome like any other payment:
    closed the app still sees the result.
 3. Webhook, status poll and return page can race. Book the payment
    idempotently on the reference.
+4. **An abandoned session stays `created` forever.** If the customer closes
+   Drop-in, nothing marks the session failed (observed 2026-09-17). Time the
+   attempt out on your side and open a new session for the next try.
 
 ## Card setup
 

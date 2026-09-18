@@ -221,9 +221,30 @@ mounted both session types with `channel: "iOS"` and a custom-scheme
   integration must handle the redirect and its return URL regardless of
   channel.
 
-Still unobserved: a client key in a payment session, a Drop-in mounted end to
-end in a browser, an authorisation *through* a 3DS challenge, and a live
-`environment` value.
+### ✅ Web Drop-in and 3DS, verified end to end — 2026-09-17, late
+
+- **A browser Drop-in authorises from a whitelisted origin.** Adyen Web 5.71.0
+  mounted on a payment session from a whitelisted staging subdomain, using the
+  key a setup session returned, was accepted at `/sessions/{id}/setup` with the
+  browser's `Origin` present, offered `scheme` and `googlepay`, and reported
+  `Authorised`. Plorea moved the payment to `authorised` and the
+  `AUTHORISATION` webhook arrived.
+- **Authorisation survives a 3DS challenge.** The redirect returns through the
+  app's custom scheme and Plorea reports `authorised`.
+- **A refused challenge does reach Plorea**, as
+  `webhookEventCode: "AUTHORISATION"` with `webhookSuccess: false` — the same
+  shape as any other decline, still with no reason field.
+
+### ✅ An unsubmitted session never reaches a terminal state — 2026-09-17
+
+A session that is created and then abandoned — the customer closes Drop-in, or
+never opens it — still reads `created` more than an hour later, with no webhook
+fields set. Like payment links, which never report `expired`, a session has no
+observed terminal state. **Do not poll a session waiting for it to fail.** Time
+the attempt out yourself and open a new session for the next try.
+
+Still unobserved: a client key in a payment session, a live `environment`
+value, and any Android channel on a device.
 
 ---
 
