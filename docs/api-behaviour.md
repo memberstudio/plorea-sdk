@@ -152,7 +152,10 @@ build ahead of observation; the shapes are still 📋, not ✅:
 
 Most of that list was answered the next day — see below.
 
-### ✅ `channel` is accepted and ignored; a session carries no key — 2026-09-17
+### ✅ `channel` is accepted and ignored; a session carries no key — 2026-09-17, morning
+
+**Every line of this entry was superseded later the same day — read on.** It is
+kept because it is the before-picture that the rollout below is a change from.
 
 Probed against Plorea test on 2026-09-17, on both session endpoints:
 
@@ -169,12 +172,14 @@ Probed against Plorea test on 2026-09-17, on both session endpoints:
   `payment-methods/setup/session` accepts the same custom-scheme URL — the two
   endpoints validate differently.
 
-So the native path Plorea described (2026-09-15) is **not live in test**. The
-SDK still sends `channel`, since it is ignored rather than rejected, and the
-configured key is what a native app must use until Plorea's side lands.
+So the native path Plorea described (2026-09-15) is **not live in test** as of
+this probe. The SDK still sends `channel`, since it is ignored rather than
+rejected, and the configured key is what a native app must use until Plorea's
+side lands.
 
-Still unobserved: a client key that works from a whitelisted origin, a Drop-in
-mounted end to end, and a live `environment` value.
+Unobserved at this point — all three were settled the same evening, below: a
+client key that works from a whitelisted origin, a Drop-in mounted end to end,
+and a live `environment` value.
 
 ### ✅ Native support, partly rolled out — later on 2026-09-17
 
@@ -352,11 +357,11 @@ worse than not sending any, and both methods say so in their docblocks. A
 tripwire in `GoldenFixturesTest` asserts `count === count($items)` on the list
 fixture, so a future capture where they diverge fails the build.
 
-**To settle it:** a page-crossing dataset cannot be manufactured on demand
-without spamming real Adyen test subscriptions. The cheap path is to leave one
-daily-interval subscription running — it accumulates roughly 30 charges a
-month unattended — and read its charges once the history is long enough to
-cross any plausible page size. That is a wait, not a probe.
+Settling it takes time rather than effort: a page-crossing dataset cannot be
+manufactured on demand without spamming real Adyen test subscriptions. A
+daily-interval subscription left running accumulates roughly 30 charges a
+month unattended, and its charges can be read once the history is long enough
+to cross any plausible page size.
 
 ### ✅ A refund without `X-Environment` hits live credentials — 2026-09-10
 
@@ -401,10 +406,10 @@ environment}`. A **manual** `charge()` emits `payment.authorised` with the
 ordinary flat payment shape.
 
 Webhook registration is manual and **per tenant**: Plorea delivers to the one
-URL you gave them, with no per-environment routing. The tenant these captures
-came from had production registered, which is why an earlier staging run saw
-nothing at all. If deliveries are missing, confirm which URL is registered
-before suspecting your listener.
+URL you gave them, with no per-environment routing. So a tenant registered
+against production sends nothing at all to a staging run — that is the shape of
+this trap, and it has been walked into. If deliveries are missing, confirm
+which URL is registered before suspecting your listener.
 
 ### 📋 The catalogue is four types — Plorea, 2026-09-09
 
@@ -452,8 +457,8 @@ Both halves matter. The first says genuine traffic is accepted; the second says
 tampered traffic is rejected. A verifier that only ever sees valid input can
 pass every test while doing nothing at all — this one demonstrably rejects.
 
-The check was run by the consuming application, which holds the signing secret;
-this repository still has never held a secret, and never should. The result
+The check was run inside a consuming application, which is where the signing
+secret lives; this repository has never held a secret, and never should. The result
 came back as a match/no-match verdict only — no secret and no signature value
 crossed into this repo, and none belongs in a fixture. That is also why there
 is no golden test for it: a fixture proving signature verification would have
@@ -470,8 +475,8 @@ break verification while the payload still looks valid.
 
 ### ❌ A subscription charge that fails
 
-**Verified impossible with the public Adyen test cards, 2026-09-09.** Do not
-re-run this investigation; it has been done twice.
+**Verified impossible with the public Adyen test cards, 2026-09-09** — twice,
+independently. The reasoning below is why, so you do not have to repeat it.
 
 The blocked shapes are: the 402 `ChargeFailedException` body, a
 `payment_failed` subscription, a populated `failureReason` or non-zero

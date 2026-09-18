@@ -13,7 +13,7 @@ major-unit constructor, on purpose.
 - open = `created` | `pending` | `active`
 - paid = `authorised` | `paid` (test payments settle on `authorised`)
 - **A refused payment reports `failed`, NOT `refused`** (captured 2026-09-09).
-  `refused` is a string the API never returns; earlier docs of ours wrongly
+  `refused` is a string the API never returns; earlier docs in this repo wrongly
   used it, so any `is('refused')` written from them was dead code.
 - `refund_requested` / `cancel_requested` appear immediately after
   `payments/refund` / `payments/cancel` and persist until the provider settles.
@@ -108,9 +108,9 @@ request.
 
 **Every verb, including reads.** A `GET` has no body, so it rides in the
 query string: `payments/status/FIN-1?platform=...`. Plorea documented
-`platform` as a body field and reads were deliberately left out at first; that
-was reversed on 2026-09-15 by Einar's decision to send it everywhere, since the
-field is reporting-only and a read attributed to nobody is a gap in exactly the
+`platform` as a body field and reads were deliberately left out at first. That
+was reversed on 2026-09-15 — send it everywhere, since the field is
+reporting-only and a read attributed to nobody is a gap in exactly the
 reporting it exists for.
 
 The cost is real and was accepted knowingly: **every read the SDK makes has a
@@ -139,11 +139,16 @@ not exist today**, so do not add a `capture()` method or model a pending-capture
 state. `authorised` is the terminal success state an integrator can observe —
 which is already how `isPaid()` treats it.
 
-## Embedded checkout is blocked on a client key
+## Embedded and native checkout
 
-Verified 2026-09-09. `payByLink()->session()` (`POST payments/session`) is
-callable directly and returns a live Adyen session — `pay.plorea.no` is just a
-Drop-in mounted on one.
+**Current state (2026-09-17): both surfaces work.** A browser Drop-in
+authorises from a whitelisted origin, and a native iOS Drop-in authorises on a
+payment session. The dated blocks below are how that was arrived at — read them
+in order, and take the last one as the truth.
+
+**2026-09-09 — blocked on a client key. (Superseded below.)**
+`payByLink()->session()` (`POST payments/session`) is callable directly and
+returns a live Adyen session — `pay.plorea.no` is just a Drop-in mounted on one.
 
 But **`$session->clientKey` comes back `null`**, and lifting the key from the
 hosted page's JS does not help: Adyen scopes client keys to an allowed-origins
@@ -172,9 +177,9 @@ it: a WebView on the hosted pay page is `channel: "Web"` and already works. The
 SDK sends no `channel` today — do not add one until an origin-whitelisted
 session proves the shape.
 
-**Update 2026-09-16 — built ahead of observation, by Einar's decision.** The
-"wait for the shape" rule above was overruled: native apps and web Drop-in are
-being built now, and the SDK had to be able to ask. What exists:
+**Update 2026-09-16 — built ahead of observation, deliberately.** The
+"wait for the shape" rule above was overruled: native apps and web Drop-in were
+being built at the same time, and the SDK had to be able to ask. What exists:
 
 - `Enums\Channel` (`Web` / `iOS` / `Android`), sent as `channel` by
   `payByLink()->session(..., channel:)` and
@@ -192,14 +197,17 @@ being built now, and the SDK had to be able to ask. What exists:
   `response()->json($session)` must never ship those to a browser or an app.
   Do not widen `toCheckout()` without that in mind.
 
-**Update 2026-09-17 — probed against Plorea test.** Both session endpoints
+**Update 2026-09-17, morning — probed against Plorea test. (Card setup is
+superseded below; the rest still holds.)** Both session endpoints
 accept any `channel` (unknown strings and an integer included) and none of it
 changes the response: `payments/session` answers `clientKey: null` for native
 channels, and `payment-methods/setup/session` has no `clientKey` key at all.
-Plorea's native support is **not live in test**. Consequences for this repo:
+Native support is **not live in test** yet at this point. Consequences for this
+repo:
 
 - **Keep sending `channel`.** It is ignored, not rejected, so the SDK is ready
-  when Plorea's side lands. Do not add a default.
+  when Plorea's side lands. Do not add a default. (Card setup now reads it —
+  see below.)
 - **The fake is never more generous than Plorea**; a consuming app's test
   must see the same fallback it will get in production. (Superseded below.)
 - **`payments/session` rejected a non-http(s) `returnUrl`** with `400`
@@ -228,8 +236,18 @@ whose origins are unset, and a web Drop-in does not. Never conclude from a
 working app that the key is right for the web.
 `plorea.adyen_client_key` is the fallback, not the truth.
 
-Still **UNOBSERVED**: a client key in a payment session, a Drop-in mounted end
-to end in a browser, and a live `environment` value.
+**Both surfaces verified 2026-09-17, evening.** A browser Drop-in (Adyen Web
+5.71.0) mounted on a payment session from a whitelisted origin, using the key
+the setup session returned, authorised end to end and reported back. A native
+iOS Drop-in (Adyen 5.20.2, `Environment.test`) authorised a payment session
+using the configured key, with no origin or key error anywhere. Because Plorea
+does not set `authenticationData.threeDSRequestData.nativeThreeDS`, a 3-D
+Secure challenge on a native session arrives as a browser redirect and returns
+through the app's `returnUrl` — handle the redirect, not just the native
+challenge.
+
+Still **UNOBSERVED**: a client key in a payment session, an Android Drop-in on
+a device, and a live `environment` value.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 

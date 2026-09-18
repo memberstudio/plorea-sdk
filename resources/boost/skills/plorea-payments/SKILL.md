@@ -103,7 +103,7 @@ still lists all five — so never parse them.
 use MemberFlow\Plorea\Data\{Amount, BillingInterval};
 
 $subscription = Plorea::subscriptions()
-    ->create('pm_63cd...', Amount::nok(19900), BillingInterval::monthly())
+    ->create('pm_...', Amount::nok(19900), BillingInterval::monthly())
     ->externalId('ws_acme_456')
     ->trialUntil(now()->addDays(14))
     ->retryPolicy(3, retryIntervalDays: 2)

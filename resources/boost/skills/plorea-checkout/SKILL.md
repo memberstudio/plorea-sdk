@@ -78,7 +78,9 @@ Client callbacks are UI hints. On "done", the backend re-reads `Plorea::payments
 
 ## Unverified — do not promise these
 
-Probed 2026-09-17: card setup validates and echoes `channel` and returns a `clientKey` (a different key from the web key); `payments/session` still ignores `channel` and returns no key. Unobserved: which key a web Drop-in must use, and a Drop-in mounted end to end from a whitelisted origin. Wallets (Apple Pay / Google Pay) depend on Plorea's Adyen account setup and Apple domain verification — ask Plorea.
+Observed 2026-09-17: card setup validates and echoes `channel` and returns a `clientKey`; `payments/session` ignores `channel` and returns no key, so the configured key is the fallback there. Both a browser Drop-in on a whitelisted origin and a native iOS Drop-in authorise end to end.
+
+Still unobserved: an Android Drop-in on a device, a `clientKey` in a payment session, and a live `environment` value. Wallets (Apple Pay / Google Pay) depend on your provider's Adyen account setup and Apple domain verification — ask them.
 
 ## App stores
 

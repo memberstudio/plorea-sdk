@@ -14,7 +14,7 @@ or exception output.
   check needs one, it runs in the consuming app and only a match/no-match
   verdict comes back.
 
-## The Adyen client key is publishable, but not ours
+## The Adyen client key is publishable, but it is not this package's
 
 It ends up in browsers and apps by design, so it is not a secret in the way the
 API key is. It is still **issued to one integrator** and scoped to their
