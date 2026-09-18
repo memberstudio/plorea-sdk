@@ -35,7 +35,7 @@ class GoldenFixturesTest extends TestCase
 
         $link = Plorea::payments()
             ->link('GOLDEN-2026-001', 'Golden fixture product', Amount::nok(1000), 'https://example.com/return')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->create();
 
         $this->assertSame('created', $link->status);
@@ -847,7 +847,7 @@ class GoldenFixturesTest extends TestCase
 
         $link = Plorea::payments()
             ->link('GOLDEN-2026-002', 'Golden fixture product', Amount::nok(19900), 'https://example.com/return')
-            ->merchant(orgNr: '912650774', name: 'Golden Fixture Gym AS')
+            ->merchant(orgNr: '999999999', name: 'Golden Fixture Gym AS')
             ->create();
 
         $this->assertSame('created', $link->status);
@@ -874,7 +874,7 @@ class GoldenFixturesTest extends TestCase
 
         // This is the only response that echoes the merchant back, so it is
         // the only way to confirm which org number Plorea recorded.
-        $this->assertSame('912650774', $link->merchantOrgNr);
+        $this->assertSame('999999999', $link->merchantOrgNr);
         $this->assertSame('Golden Fixture Gym AS', $link->merchantName);
         $this->assertFalse($link->expired);
         $this->assertSame(19900, $link->amount?->value);

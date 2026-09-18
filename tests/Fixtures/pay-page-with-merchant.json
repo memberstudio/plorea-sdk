@@ -24,7 +24,7 @@
     "reference": "GOLDEN-2026-002",
     "returnUrl": "https://example.com/return",
     "expiresAt": "2026-11-16T19:58:00.000Z",
-    "merchantOrgNr": "912650774",
+    "merchantOrgNr": "999999999",
     "amount": 19900,
     "splits": null,
     "id": "pl_test_golden_orgnr_link",

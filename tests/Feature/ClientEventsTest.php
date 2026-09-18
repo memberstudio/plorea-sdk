@@ -30,7 +30,7 @@ class ClientEventsTest extends TestCase
 
         Plorea::payments()
             ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
-            ->merchant(orgNr: '912650774')
+            ->merchant(orgNr: '999999999')
             ->create();
 
         Event::assertDispatched(RequestSent::class, function (RequestSent $event): bool {

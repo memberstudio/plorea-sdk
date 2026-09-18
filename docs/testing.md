@@ -12,7 +12,7 @@ Plorea::fake();
 
 $link = Plorea::payments()
     ->link('ref-1', 'Product', Amount::nok(50000), 'https://example.test/return')
-    ->merchant(orgNr: '912650774')
+    ->merchant(orgNr: '999999999')
     ->create();
 
 Plorea::assertSent('payments/link');
@@ -42,7 +42,7 @@ A `RecordedRequest` exposes `->method`, `->path`, `->data` and
 string for GET.
 
 ```php
-Plorea::recorded()->first()->input('merchantOrgNr');  // '912650774'
+Plorea::recorded()->first()->input('merchantOrgNr');  // '999999999'
 ```
 
 ## Stubbing
@@ -114,7 +114,7 @@ works out of the box:
 ```php
 Plorea::fake();
 
-$pending = Plorea::payments()->link('ref-1', 'P', Amount::nok(50000), 'https://x.test')->merchant(orgNr: '912650774');
+$pending = Plorea::payments()->link('ref-1', 'P', Amount::nok(50000), 'https://x.test')->merchant(orgNr: '999999999');
 $pending->create();
 $again = $pending->firstOrCreate();   // reuses the open link — no second create
 

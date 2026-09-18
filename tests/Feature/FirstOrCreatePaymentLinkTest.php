@@ -21,7 +21,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     {
         return Plorea::payments()
             ->link('INV-1', 'Invoice INV-1', Amount::nok(50000), 'https://app.test/paid')
-            ->merchant(orgNr: '912650774');
+            ->merchant(orgNr: '999999999');
     }
 
     /**

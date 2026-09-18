@@ -25,7 +25,7 @@ $link = Plorea::payments()
     ->payerEmail('kunde@eksempel.no')
     ->invoiceUrl('https://app.example/invoices/123.pdf')
     // Required: the invoice issuer (the client) — never the platform's own org nr:
-    ->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
+    ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
     ->create();
 
 $link->url;       // send the customer here

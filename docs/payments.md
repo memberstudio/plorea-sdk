@@ -21,7 +21,7 @@ $link = Plorea::payments()
     ->payerEmail('kunde@eksempel.no')
     ->invoiceUrl('https://app.example/invoices/123.pdf')
     ->orderId('ORD-99')
-    ->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
+    ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
     ->create();
 
 $link->url;        // https://pay.plorea.no/... — send the customer here
@@ -40,7 +40,7 @@ number.
 ### The merchant is required
 
 ```php
-->merchant(orgNr: '912650774', name: 'Techify AS', email: 'post@techify.no')
+->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
 ```
 
 `merchantOrgNr` tells Plorea **who receives the payout**, so it is always the
@@ -78,7 +78,7 @@ two live links for the same invoice, and both are payable.
 ```php
 $link = Plorea::payments()
     ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
-    ->merchant(orgNr: '912650774')
+    ->merchant(orgNr: '999999999')
     ->firstOrCreate();
 ```
 
