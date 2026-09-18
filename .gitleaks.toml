@@ -1,0 +1,27 @@
+# Configuration for the `secret scan` CI job (.github/workflows/security.yml).
+#
+# The default ruleset is extended, never replaced — every upstream rule still
+# runs.
+[extend]
+useDefault = true
+
+# `workbench/.env.example` lists variable *names* with empty values; the real
+# `workbench/.env` is git-ignored, and this repo has never held a credential
+# (see .ai/rules/security.md). An empty value is exactly what defeats the
+# `generic-api-key` rule: with nothing after the `=`, its match runs past the
+# newline and reports the following line as the value. So
+#
+#     PLOREA_API_KEY=
+#     PLOREA_ENVIRONMENT=test
+#
+# is read as an API key whose secret is the string "PLOREA_ENVIRONMENT=test".
+#
+# This drops findings whose secret is itself a `NAME=` assignment. A real
+# credential never takes that shape, so a value genuinely pasted into the
+# template — or anywhere else — is still reported.
+[allowlist]
+description = "An empty env value makes the match span the next assignment"
+regexTarget = "match"
+regexes = [
+    '''(?m)=[\r\n]+[A-Z][A-Z0-9_]*=''',
+]
