@@ -2,7 +2,21 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
-## Unreleased
+## v0.3.0 - 2026-09-18
+
+Embedded and native checkout. Both surfaces were verified end to end against
+Plorea's test environment before release: a browser Drop-in authorising from a
+whitelisted origin, and a native iOS Drop-in authorising a payment and storing
+a card on a device.
+
+### Breaking
+
+- **`PaymentSession` and `PaymentMethodSession` serialize to `toCheckout()`.**
+  They implement `JsonSerializable`, so `response()->json($session)` sends the
+  four checkout fields instead of every public property, including `raw` with
+  tenant, shopper reference and customer id. Code that relied on the old JSON
+  shape should read the properties directly. This is deliberate: the old shape
+  leaked identifiers to whatever the response was handed to.
 
 ### Added
 
@@ -27,11 +41,6 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ### Changed
 
-- **`PaymentSession` and `PaymentMethodSession` serialize to `toCheckout()`.**
-  They implement `JsonSerializable`, so `response()->json($session)` sends the
-  four checkout fields instead of every public property, including `raw` with
-  tenant, shopper reference and customer id. Code that relied on the old JSON
-  shape should read the properties directly.
 - The fake mirrors Plorea's test environment on 2026-09-17: card setup
   sessions return a client key and echo the channel, payment sessions return no
   key.
@@ -39,6 +48,11 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   authorises from a whitelisted origin, and an iOS Drop-in authorises on a
   payment session using the configured key. See
   [Verified API behaviour](docs/api-behaviour.md).
+- **The example merchant org number in the documentation changed** from a real,
+  registered number to `999999999`. The old one passed the mod-11 check because
+  it was genuinely assigned — to a company on the provider's side — and
+  `merchantOrgNr` is the invoice issuer, the field payouts route on. Nothing in
+  the package read it, so this affects copied examples only.
 
 ## v0.2.1 - 2026-09-10
 
