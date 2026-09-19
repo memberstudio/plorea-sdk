@@ -99,6 +99,8 @@ still lists all five — so never parse them.
 
 ## Subscriptions
 
+The calls are below. For the lifecycle around them — access on first charge, dunning, duplicate-start protection — use the `plorea-subscriptions` skill.
+
 ```php
 use MemberFlow\Plorea\Data\{Amount, BillingInterval};
 

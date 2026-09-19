@@ -6,6 +6,12 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ### Added
 
+- **Boost skill `plorea-subscriptions`**: the lifecycle around recurring
+  billing rather than the individual calls — storing the card first, guarding
+  against a duplicate start, granting access on the first authorised charge
+  instead of on `create()`, trials as delayed starts, the reconciliation job
+  that is the only way to see a failed charge, changing card or price, and
+  cancelling. `plorea-payments` and the core guideline point to it.
 - **`PaymentSession::$channel`**, the channel Plorea opened the session for.
   Since 2026-09-19 `payments/session` answers like card setup: it validates
   `channel` (`400` for anything but `Web`, `iOS`, `Android`), echoes it, and

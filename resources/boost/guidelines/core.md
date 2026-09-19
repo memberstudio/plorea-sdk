@@ -23,4 +23,4 @@ Always use `Plorea::fake()` in tests — no HTTP leaves the suite, every endpoin
 
 All exceptions extend `MemberFlow\Plorea\Exceptions\PloreaException`: `ValidationException` (400), `AuthenticationException` (401/403), `ChargeFailedException` (402, declined subscription charge), `NotFoundException` (404), `ServerException` (5xx), `ConnectionException`, `PaymentAlreadyPaidException`. `RequestException` subclasses expose `$e->status` and `$e->response?->json()`.
 
-For full flows (payment links, stored cards, subscriptions, webhooks) use the `plorea-payments` skill.
+For full flows (payment links, stored cards, subscriptions, webhooks) use the `plorea-payments` skill. For recurring billing as a whole — when to grant access, first-charge settlement, dunning, duplicate-start protection — use the `plorea-subscriptions` skill.
