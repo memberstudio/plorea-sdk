@@ -2,7 +2,12 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
-## Unreleased
+## v0.3.1 - 2026-09-19
+
+Follows `payments/session` as it behaves since 2026-09-19, re-probed against
+Plorea's test environment, and adds a Boost skill for recurring billing.
+Nothing breaks: `PaymentSession::$channel` is appended with a null default and
+`toCheckout()` is unchanged.
 
 ### Added
 
