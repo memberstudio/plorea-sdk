@@ -14,8 +14,8 @@ use MemberFlow\Plorea\Enums\Channel;
  * `find()` is what the page renders from, and is the authoritative answer on
  * expiry. `session()` opens the same Adyen session the page mounts its Drop-in
  * on, so it is the entry point for rendering checkout on your own domain or in
- * a native app. The browser needs an origin-whitelisted client key from
- * Plorea (`plorea.adyen_client_key`); see docs/checkout.md.
+ * a native app. The session carries the client key; a browser additionally
+ * needs its origin whitelisted on that key by Plorea. See docs/checkout.md.
  */
 class PayByLinkResource extends Resource
 {
@@ -33,10 +33,11 @@ class PayByLinkResource extends Resource
      * Create an Adyen Sessions object for a one-off payment. The session is
      * derived entirely from the referenced payment link.
      *
-     * Pass a native `$channel` for Adyen's iOS or Android SDK. Plorea's test
-     * environment still ignores it here (2026-09-17), so the configured client
-     * key applies. Without one, nothing is sent. `$returnUrl` may be https or
-     * an app's custom scheme.
+     * Pass a native `$channel` for Adyen's iOS or Android SDK. Plorea validates
+     * it, echoes it and returns a client key for every channel (2026-09-19);
+     * the configured key is only the fallback. Without a channel, nothing is
+     * sent and Plorea opens a `Web` session. `$returnUrl` may be https or an
+     * app's custom scheme.
      */
     public function session(string $paymentLinkId, ?string $returnUrl = null, ?Channel $channel = null): PaymentSession
     {

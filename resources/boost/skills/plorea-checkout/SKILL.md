@@ -48,7 +48,7 @@ $session = Plorea::paymentMethods()
 
 Rules:
 - **Never return `$session->raw`** or build the JSON by hand from it — it carries tenant, shopper reference and customer id. The DTO serializes to `toCheckout()`.
-- `clientKey`: the response's if it has one (card setup does, for every channel; payments do not), else `PLOREA_ADYEN_CLIENT_KEY`, whose `test_` / `live_` prefix must match `PLOREA_ENVIRONMENT` or the session throws. `environment`: the response's, else `PLOREA_ENVIRONMENT` (`test` / `live` = Adyen live Europe).
+- `clientKey`: the response's if it has one (both endpoints send one for every channel), else `PLOREA_ADYEN_CLIENT_KEY`, whose `test_` / `live_` prefix must match `PLOREA_ENVIRONMENT` or the session throws. `environment`: the response's, else `PLOREA_ENVIRONMENT` (`test` / `live` = Adyen live Europe).
 - **Choose `returnUrl` on the server** by channel (web route; universal link / App Link for apps, or a custom scheme — both endpoints accept one). Taking it from the request is an open redirect.
 - New session per attempt; reuse the link, not the session.
 - Authorize the user against the invoice / customer before opening a session.
@@ -78,9 +78,9 @@ Client callbacks are UI hints. On "done", the backend re-reads `Plorea::payments
 
 ## Unverified — do not promise these
 
-Observed 2026-09-17: card setup validates and echoes `channel` and returns a `clientKey`; `payments/session` ignores `channel` and returns no key, so the configured key is the fallback there. Both a browser Drop-in on a whitelisted origin and a native iOS Drop-in authorise end to end.
+Observed 2026-09-19: both session endpoints validate `channel` (`400` for anything but `Web`, `iOS`, `Android`, case-sensitive), echo it as `$session->channel` and return a `clientKey`; the configured key is only a fallback. A 3-D Secure challenge on a native session arrives as a browser redirect, so handle the return URL. Both a browser Drop-in on a whitelisted origin and a native iOS Drop-in authorise end to end.
 
-Still unobserved: an Android Drop-in on a device, a `clientKey` in a payment session, and a live `environment` value. Wallets (Apple Pay / Google Pay) depend on your provider's Adyen account setup and Apple domain verification — ask them.
+Still unobserved: an Android Drop-in on a device, native 3DS2, and a live `environment` value. Wallets (Apple Pay / Google Pay) depend on your provider's Adyen account setup and Apple domain verification — ask them.
 
 ## App stores
 
@@ -88,4 +88,4 @@ Apple / Google require in-app purchase for digital goods consumed in the app. Pa
 
 ## Testing
 
-`Plorea::fake()` answers both session endpoints and mirrors Plorea today: card setup returns a client key and the channel, payments return no key. Assert the JSON has exactly `sessionId`, `sessionData`, `clientKey`, `environment`, and `Plorea::assertSent(fn ($r) => $r->input('channel') === 'iOS')`.
+`Plorea::fake()` answers both session endpoints and mirrors Plorea today: each returns a client key and the channel. Assert the JSON has exactly `sessionId`, `sessionData`, `clientKey`, `environment`, and `Plorea::assertSent(fn ($r) => $r->input('channel') === 'iOS')`.

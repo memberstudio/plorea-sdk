@@ -17,10 +17,9 @@ use MemberFlow\Plorea\Tests\TestCase;
  * Embedded and native checkout: the channel, the client key, and what a
  * session is allowed to hand to a browser or an app.
  *
- * Probed against Plorea test on 2026-09-17, after its native rollout:
- * payments/session still ignores `channel` and returns no key; card setup
- * validates `channel`, echoes it and returns a key for every channel. These tests pin what the
- * SDK sends and how it reads a key, nothing more.
+ * Probed against Plorea test on 2026-09-19: both payments/session and card
+ * setup validate `channel`, echo it and return a key for every channel. These
+ * tests pin what the SDK sends and how it reads a key, nothing more.
  */
 class CheckoutSessionTest extends TestCase
 {
@@ -164,10 +163,10 @@ class CheckoutSessionTest extends TestCase
     }
 
     /**
-     * Observed 2026-09-17: payments/session returns no key for any channel,
-     * while card setup returns one for every channel and echoes the channel.
+     * Observed 2026-09-19: both session endpoints return a client key for
+     * every channel and echo the channel, `Web` when none is sent.
      */
-    public function test_the_fake_mirrors_which_endpoint_returns_a_client_key(): void
+    public function test_the_fake_returns_a_client_key_and_the_channel_like_plorea(): void
     {
         config(['plorea.adyen_client_key' => '']);
 
@@ -176,9 +175,12 @@ class CheckoutSessionTest extends TestCase
         $setup = Plorea::paymentMethods()->setup('shopper-1', RecurringType::Subscription, 'https://app.test/return');
 
         $this->assertSame(Channel::Web, $setup->session()->channel);
+        $this->assertSame(Channel::Web, Plorea::payByLink()->session('pl_1')->channel);
 
         foreach (Channel::cases() as $channel) {
-            $this->assertNull(Plorea::payByLink()->session('pl_1', channel: $channel)->clientKey);
+            $payment = Plorea::payByLink()->session('pl_1', channel: $channel);
+            $this->assertNotNull($payment->clientKey);
+            $this->assertSame($channel, $payment->channel);
 
             $session = $setup->channel($channel)->session();
             $this->assertNotNull($session->clientKey);

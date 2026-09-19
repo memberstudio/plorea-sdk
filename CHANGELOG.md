@@ -2,6 +2,23 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- **`PaymentSession::$channel`**, the channel Plorea opened the session for.
+  Since 2026-09-19 `payments/session` answers like card setup: it validates
+  `channel` (`400` for anything but `Web`, `iOS`, `Android`), echoes it, and
+  returns a `clientKey` for every channel. `plorea.adyen_client_key` is now a
+  fallback on both endpoints.
+
+### Changed
+
+- **`Plorea::fake()` returns a client key and the channel from
+  `payments/session`**, mirroring Plorea. A test that asserted the configured
+  key on a faked payment session now sees `test_FAKE_CLIENT_KEY`; stub the
+  response without a key to exercise the fallback.
+
 ## v0.3.0 - 2026-09-18
 
 Embedded and native checkout. Both surfaces were verified end to end against
