@@ -25,7 +25,7 @@ final class DefaultFixtures
 
         return match (true) {
             $method === 'POST' && $path === 'payments/link' => self::paymentLinkCreated($request),
-            $method === 'POST' && $path === 'payments/session' => self::paymentSession(),
+            $method === 'POST' && $path === 'payments/session' => self::paymentSession($request),
             $method === 'GET' && str_starts_with($path, 'pay/') => self::paymentLink($path),
             $method === 'GET' && str_starts_with($path, 'payments/status/') => self::paymentStatus($path, $history),
             $method === 'POST' && $path === 'payments/refund' => self::refund($request),
@@ -70,15 +70,16 @@ final class DefaultFixtures
     /**
      * @return array<string, mixed>
      */
-    private static function paymentSession(): array
+    private static function paymentSession(RecordedRequest $request): array
     {
+        // Observed 2026-09-19: like card setup, the channel is echoed (Web
+        // when none is sent) and a client key comes back for every channel.
         return [
             'sessionId' => 'CS_FAKE_SESSION',
             'sessionData' => 'fake-session-data',
             'environment' => 'test',
-            // Null for every channel, native included (observed 2026-09-17,
-            // after Plorea's native rollout reached only card setup).
-            'clientKey' => null,
+            'channel' => $request->input('channel', 'Web'),
+            'clientKey' => 'test_FAKE_CLIENT_KEY',
         ];
     }
 

@@ -107,7 +107,7 @@ need a client key from Plorea:
 | Surface | Status |
 | --- | --- |
 | Hosted pay page (`$link->url`) | Works. Web and WebView alike |
-| Adyen Drop-in on your own domain | Works. Set `PLOREA_ADYEN_CLIENT_KEY`; Plorea issues it and whitelists your origins on request |
+| Adyen Drop-in on your own domain | Works. Plorea whitelists your origins on request; the session carries the client key, with `PLOREA_ADYEN_CLIENT_KEY` as the fallback |
 | Native iOS / Android Adyen SDK | Works. `session(..., channel: Channel::IOS)`, plus a return URL your app handles |
 
 ```php

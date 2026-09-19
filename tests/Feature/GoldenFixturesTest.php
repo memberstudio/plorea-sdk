@@ -888,8 +888,9 @@ class GoldenFixturesTest extends TestCase
 
     /**
      * Captured 2026-09-17 with `channel: "iOS"`, before and after Plorea's
-     * native rollout: the same four keys as a web session, and no client
-     * key. The configured key fills the gap.
+     * first native rollout: the same four keys as a web session, and no
+     * client key. Plorea returns one since 2026-09-19 (next test); this pins
+     * that the configured key fills the gap whenever the response has none.
      */
     public function test_a_real_native_payment_session_carries_no_client_key(): void
     {
@@ -903,6 +904,44 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($session->raw['clientKey']);
         $this->assertSame('test_CONFIGURED', $session->clientKey);
         $this->assertSame('test', $session->environment);
+    }
+
+    /**
+     * Captured 2026-09-19: payments/session now answers like card setup. It
+     * echoes the channel and carries a client key, which wins over the
+     * configured one.
+     */
+    public function test_a_real_native_payment_session_carries_the_channel_and_a_client_key(): void
+    {
+        config(['plorea.adyen_client_key' => 'test_CONFIGURED']);
+
+        Http::fake(['payments.plorea.no/payments/session' => Http::response($this->fixture('payment-session-native-client-key'))]);
+
+        $session = Plorea::payByLink()->session('pl_golden', 'example-app://checkout/return', Channel::IOS);
+
+        $this->assertSame(['sessionId', 'sessionData', 'environment', 'channel', 'clientKey'], array_keys($session->raw));
+        $this->assertSame(Channel::IOS, $session->channel);
+        $this->assertSame('test_GOLDENRESPONSECLIENTKEY00000000', $session->clientKey);
+        $this->assertSame('test', $session->environment);
+    }
+
+    /**
+     * Captured 2026-09-19: payments/session validates the channel the way card
+     * setup does, case-sensitively. Before that day it accepted anything.
+     */
+    public function test_it_maps_a_real_invalid_payment_channel_rejection_to_validation(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/session' => Http::response($this->fixture('payment-session-invalid-channel'), 400),
+        ]);
+
+        try {
+            Plorea::payByLink()->session('pl_golden', 'https://app.test/return', Channel::IOS);
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('channel must be one of Web, iOS, Android', $caught->getMessage());
+            $this->assertSame(400, $caught->status);
+        }
     }
 
     /**

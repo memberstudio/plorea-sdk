@@ -7,6 +7,7 @@ namespace MemberFlow\Plorea\Data;
 use JsonSerializable;
 use MemberFlow\Plorea\Data\Concerns\ParsesResponseData;
 use MemberFlow\Plorea\Data\Concerns\ProvidesCheckoutConfiguration;
+use MemberFlow\Plorea\Enums\Channel;
 
 /**
  * An Adyen Sessions object for a one-off payment, used by pay.plorea.no.
@@ -19,8 +20,9 @@ final readonly class PaymentSession implements JsonSerializable
     use ProvidesCheckoutConfiguration;
 
     /**
-     * @param  ?string  $clientKey  The key from the response (native channels), else the configured `plorea.adyen_client_key`.
+     * @param  ?string  $clientKey  The key from the response (every channel since 2026-09-19), else the configured `plorea.adyen_client_key`.
      * @param  ?string  $environment  The environment from the response, else the configured `plorea.environment`.
+     * @param  ?Channel  $channel  The channel Plorea opened the session for (echoed since 2026-09-19).
      * @param  array<string, mixed>  $raw
      */
     public function __construct(
@@ -29,6 +31,7 @@ final readonly class PaymentSession implements JsonSerializable
         public ?string $environment,
         public ?string $clientKey,
         public array $raw = [],
+        public ?Channel $channel = null,
     ) {}
 
     /**
@@ -42,6 +45,7 @@ final readonly class PaymentSession implements JsonSerializable
             environment: self::string($data['environment'] ?? null) ?? $environment,
             clientKey: self::string($data['clientKey'] ?? null) ?? $clientKey,
             raw: $data,
+            channel: Channel::tryFrom(self::string($data['channel'] ?? null) ?? ''),
         );
     }
 }
