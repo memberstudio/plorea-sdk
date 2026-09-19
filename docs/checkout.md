@@ -8,21 +8,20 @@ web page or in a native iOS or Android app.
 | --- | --- | --- |
 | Hosted pay page (`$link->url`), in a browser or a WebView | Nothing | Works |
 | Drop-in on your own domain | A client key and your origins whitelisted by Plorea | **Verified** (2026-09-17): authorises from a whitelisted origin |
-| Native payment (`payments/session`) | `Channel::IOS` / `Channel::Android`, plus the configured client key | **Verified on iOS** (2026-09-17): authorises end to end. `channel` still ignored, no `clientKey` in the response |
+| Native payment (`payments/session`) | `Channel::IOS` / `Channel::Android` | **Verified on iOS** (2026-09-17): authorises end to end. Since 2026-09-19 `channel` is validated and echoed, and `clientKey` returned |
 | Native card setup (`payment-methods/setup/session`) | As above | **Live in test** (2026-09-17): `channel` validated and echoed, `clientKey` returned |
 
-**What probing Plorea's test environment showed on 2026-09-17**, after
-Plorea's native rollout the same day:
+**What probing Plorea's test environment showed**, last on 2026-09-19:
 
-- **Card setup** validates `channel` (`Web`, `iOS`, `Android`, case-sensitive;
-  anything else is a `400`), echoes it as `$session->channel`, and returns a
-  `clientKey` for **every** channel, `Web` included.
-- **Payments** still accept any `channel` and return `clientKey: null`, so a
-  payment session uses `PLOREA_ADYEN_CLIENT_KEY`. That fallback is what makes
-  native payment work today: an iOS Drop-in mounted on such a session
-  authorised a test card the same evening.
-- The key card setup returns may **differ** from the key Plorea sent you out
-  of band. Both can be valid: Adyen checks allowed origins **per key**, and
+- **Both endpoints** validate `channel` (`Web`, `iOS`, `Android`,
+  case-sensitive; anything else is a `400`), echo it as `$session->channel`,
+  and return a `clientKey` for **every** channel, `Web` included.
+- **Payments match card setup since 2026-09-19.** Before that they accepted any `channel`
+  and returned `clientKey: null`, so a payment session used
+  `PLOREA_ADYEN_CLIENT_KEY`. That fallback stays in the SDK, and it is what
+  authorised a test card from an iOS Drop-in on 2026-09-17.
+- The key a session returns may **differ** from a key Plorea sent you out of
+  band. Both can be valid: Adyen checks allowed origins **per key**, and
   only when the caller sends an `Origin` header. Replaying Adyen's
   `/sessions/{id}/setup` preflight, both keys were accepted with no `Origin`
   (what a native app sends), while only the returned key was accepted from a
@@ -43,18 +42,22 @@ Before you build anything, ask Plorea for:
 - **Your web origins whitelisted**: every domain that mounts Drop-in. A
   wildcard entry (`https://*.example.com`) covers subdomains at any depth, but
   **not** the bare domain — whitelist that separately. `localhost` is not
-  whitelisted (2026-09-17), so develop against a whitelisted staging domain.
+  whitelisted (2026-09-19), so develop against a whitelisted staging domain.
   An origin that is not on the list fails
   late, in the Drop-in's `/sessions/{id}/setup` preflight, as a CORS error that
   looks nothing like a credentials problem.
 - **Your app identifiers whitelisted**, for the native path only: the iOS
   bundle id with your Apple Team ID, and the Android package name. Staging and
   development builds usually have different identifiers, so list those too.
+  Adyen does not check them on app calls (Plorea, 2026-09-18; matches the
+  2026-09-17 device test), so a missing id blocks nothing — register them
+  anyway before going live.
 
 If your customers serve checkout from **their own domains**, each of those
 domains is an origin that Plorea has to whitelist by hand. Plorea recommends
 serving the payment step from a wildcard subdomain you control instead, such as
 `{customer}.example.com`, so one wildcard entry covers every customer.
+Confirmed 2026-09-18: no API for registering single origins is planned.
 
 ```dotenv
 PLOREA_ENVIRONMENT=test
@@ -99,8 +102,8 @@ public function store(Request $request, Invoice $invoice)
   `sessionId`, `sessionData`, `clientKey` and `environment`. The rest of the
   response, including tenant, shopper reference and customer id, stays on your
   server.
-- **The client key is resolved for you.** A `clientKey` in the response wins:
-  card setup sends one, payments do not (observed 2026-09-17), so a payment
+- **The client key is resolved for you.** A `clientKey` in the response wins,
+  and both endpoints send one (payments since 2026-09-19). Without one, a
   session falls back to `plorea.adyen_client_key`. `environment` falls back to
   `plorea.environment` the same way. The configured key must match the
   environment — a `test_` key with `PLOREA_ENVIRONMENT=live`, or the reverse,
@@ -256,9 +259,9 @@ you submit.
 
 ## Testing
 
-`Plorea::fake()` answers both session endpoints the way Plorea does today: a
-payment session has no client key, so your configured key is resolved; a card
-setup session returns `test_FAKE_CLIENT_KEY` and echoes the channel. Assert on what you sent:
+`Plorea::fake()` answers both session endpoints the way Plorea does today:
+each returns `test_FAKE_CLIENT_KEY` and echoes the channel, `Web` when none is
+sent. Assert on what you sent:
 
 ```php
 Plorea::fake();

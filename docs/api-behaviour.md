@@ -103,8 +103,8 @@ once a merchant is attached.
 The API does **not** enforce it: a link created without one is accepted and
 even issues a session (verified). The SDK enforces it in `create()` anyway,
 because a link that cannot be paid out is worse than a loud failure. An earlier
-"Invalid Store" / 422-at-session regression was a Plorea-side KYC bug, fixed
-2026-08-30 and verified the same day.
+"Invalid Store" / 422 at session time was resolved by Plorea on 2026-08-30 and
+verified the same day.
 
 ### 📋 `platform` belongs on every request — Plorea, 2026-09-15
 
@@ -115,10 +115,9 @@ on `GET`, which has no body to carry it. Reads therefore have a different URL
 than they did before — `payments/status/FIN-1?platform=...` — which matters if
 you assert exact URLs anywhere.
 
-It was also **not** the cause of the `401` on refund and cancel. That turned out
-to be an Adyen credentials problem inside Plorea's test environment — the same
-outage that took `pay.plorea.no` down. Both were fixed on their side
-(`pay.plorea.no` verified back up 2026-09-15).
+It was also **not** the cause of the `401` on refund and cancel. That was a
+configuration issue in the test environment, since resolved by Plorea (see
+"The refund/cancel `401` is gone" below).
 
 ### 📋 Capture is automatic; there is no capture API — Plorea, 2026-09-15
 
@@ -248,8 +247,62 @@ fields set. Like payment links, which never report `expired`, a session has no
 observed terminal state. **Do not poll a session waiting for it to fail.** Time
 the attempt out yourself and open a new session for the next try.
 
-Still unobserved: a client key in a payment session, a live `environment`
-value, and any Android channel on a device.
+### ✅ `payments/session` now matches card setup — 2026-09-19
+
+Plorea announced the fix on 2026-09-18; probed the day after
+(`plorea:probe --app-return-url`), it supersedes the `payments/session` lines
+of the 2026-09-17 entries above:
+
+- **`channel` is validated**, exactly like card setup: a lowercase `ios`, an
+  unknown string and an integer all answer `400` with
+  `{"error": "channel must be one of Web, iOS, Android"}`.
+- **`channel` is echoed**, and is `Web` when none is sent. The response is now
+  `sessionId`, `sessionData`, `environment`, `channel`, `clientKey`.
+- **A `clientKey` comes back for every channel**, `Web` included, with https
+  and custom-scheme return URLs alike. It is the same key card setup returns,
+  so `plorea.adyen_client_key` is now a pure fallback on both endpoints.
+- **The bare domain is whitelisted.** Replaying Adyen's `/sessions/{id}/setup`
+  preflight with the returned key: the bare production domain and its
+  subdomains answer `200`; `localhost` and an unrelated origin still answer
+  `403`; no `Origin` answers `200`.
+
+### 📋 What Plorea said on 2026-09-18, not yet observed
+
+- **The key the sessions return is the web Drop-in key**, and the one to use.
+  A client key is tied to the origins registered on it. The hosted pay page
+  mounts its Drop-in with a key of its own (observed 2026-09-19), registered
+  for the pay page's origin, so that key answers `403` from any other origin.
+  Configure only a key Plorea issued for your origins — or none, and use the
+  one the session returns.
+- **App ids are not enforced.** Adyen does no native origin check on app
+  calls, so unregistered bundle ids / package names block nothing (matches the
+  2026-09-17 device test). Plorea registers them formally before go-live.
+- **Native 3DS2 is coming**: `nativeThreeDS: "preferred"` on sessions with
+  channel `iOS` / `Android`, in an upcoming deploy. Until it is observed, a native app
+  must keep handling the redirect.
+- **`refusalReason` is coming** on `GET payments/status/{reference}`, same
+  deploy. Until it is observed, `failed` still has no reason — do not model the
+  field.
+- **Customers' own domains: route the payment step through your own
+  whitelisted subdomain.** The wildcard covers every subdomain; no API for
+  registering single origins is planned.
+
+### ✅ The refund/cancel `401` is gone — 2026-09-19
+
+Plorea reported it resolved on 2026-09-18. Re-tested the day after:
+
+- **Refund**: a 10 kr link paid on the hosted pay page reached `authorised`
+  within a minute; `POST payments/refund` answered `refund_requested` with a
+  `refundPspReference`.
+- **Cancel**: the payment from the original report (authorised 2026-09-10,
+  `401` on every attempt until 2026-09-11) accepted a cancel and reads
+  `cancel_requested` with a `lastCancelRequestPspReference`.
+- On this refund, `lastRefundRequestPspReference` on the status body equals the
+  `refundPspReference` from the refund response. One sample — keep persisting
+  the `Refund` DTO.
+
+Still unobserved: a live `environment` value, a live client key, and any
+Android channel on a device.
 
 ---
 

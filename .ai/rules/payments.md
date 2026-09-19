@@ -86,8 +86,8 @@ They appear only on `pay/{id}`, which also gains a populated `partnerSplits`
 once a merchant is attached.
 
 First payment for a new org nr auto-starts KYC; payout is released on approval
-(1–5 business days). The earlier "Invalid Store" / 422-at-session regression was
-a Plorea-side KYC bug, fixed 2026-08-30 (verified the same day: a retest link
+(1–5 business days). The earlier "Invalid Store" / 422 at session time was
+resolved by Plorea on 2026-08-30 (verified the same day: a retest link
 on a fresh org nr created, and a session issued for it).
 
 ## `platform` goes on every request — 2026-09-15
@@ -126,10 +126,9 @@ one), so it needs `sub_1*`, not `sub_1?*`. And never widen a key past the
 segment — `INV-1*` also swallows `INV-1-1`, which silently breaks the
 firstOrCreate suffix walk.
 
-It was **not** the cause of the refund/cancel `401`. That was an Adyen
-credentials problem in Plorea's test environment, which they fixed; the same
-outage took `pay.plorea.no` down (back up, verified 2026-09-15). Do not
-re-litigate the platform A/B.
+It was **not** the cause of the refund/cancel `401`. That was a configuration
+issue in the test environment, since resolved by Plorea. Do not re-litigate the
+platform A/B.
 
 ## Capture is automatic — there is no capture API
 
@@ -246,8 +245,35 @@ Secure challenge on a native session arrives as a browser redirect and returns
 through the app's `returnUrl` — handle the redirect, not just the native
 challenge.
 
-Still **UNOBSERVED**: a client key in a payment session, an Android Drop-in on
-a device, and a live `environment` value.
+**2026-09-19 — `payments/session` now matches card setup, re-probed.** It now behaves like
+card setup: `channel` validated (case-sensitive, `400` otherwise), echoed
+(`PaymentSession::$channel`, `Web` when none is sent), and a `clientKey`
+returned for every channel — the same key card setup returns. This supersedes
+every "`payments/session` ignores `channel` / returns `clientKey: null`" line
+above. The fake mirrors it: both endpoints return `test_FAKE_CLIENT_KEY` and
+the channel. **The configured-key fallback stays** — it is what the DTO does
+when a response has no key, and `payment-session-native.json` pins it. The bare
+domain is whitelisted on the returned key; `localhost` is still not.
+
+**Stated by Plorea 2026-09-18, not observed — do not model before it is:**
+`nativeThreeDS: "preferred"` on native sessions and `refusalReason` on
+`payments/status` (an upcoming deploy); Adyen does not enforce app ids on
+native calls; customers' own domains go through a whitelisted wildcard
+subdomain, with no origin-registration API planned.
+
+**Only use a client key issued for your origins — or the one the session
+returns.** Client keys are origin-scoped. The hosted pay page mounts its
+Drop-in with a key of its own (observed 2026-09-19), registered for
+`pay.plorea.no`, so it answers `403` from any consuming app's web origin. Never
+configure that one.
+
+**Refund and cancel work again — VERIFIED 2026-09-19.** Plorea reported the
+`401` of 2026-09-10/11 resolved on 2026-09-18. A fresh payment
+refunded to `refund_requested`; the originally failing payment cancelled to
+`cancel_requested`.
+
+Still **UNOBSERVED**: an Android Drop-in on a device, a live client key, and a
+live `environment` value.
 
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
 
