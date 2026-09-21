@@ -18,10 +18,10 @@ $link = Plorea::payments()
         amount: Amount::nok(450000),          // 4 500,00 kr
         returnUrl: 'https://app.example/paid',
     )
-    ->payerEmail('kunde@eksempel.no')
+    ->payerEmail('customer@example.com')
     ->invoiceUrl('https://app.example/invoices/123.pdf')
     ->orderId('ORD-99')
-    ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
+    ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
     ->create();
 
 $link->url;        // https://pay.plorea.no/... — send the customer here
@@ -40,7 +40,7 @@ number.
 ### The merchant is required
 
 ```php
-->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
+->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
 ```
 
 `merchantOrgNr` tells Plorea **who receives the payout**, so it is always the

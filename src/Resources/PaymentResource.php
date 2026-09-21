@@ -19,8 +19,8 @@ class PaymentResource extends Resource
      * ```php
      * $link = Plorea::payments()
      *     ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.test/paid')
-     *     ->payerEmail('kunde@eksempel.no')
-     *     ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
+     *     ->payerEmail('customer@example.com')
+     *     ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
      *     ->create();
      * ```
      */

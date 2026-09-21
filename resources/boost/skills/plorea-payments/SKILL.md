@@ -22,10 +22,10 @@ $link = Plorea::payments()
         amount: Amount::nok(450000),
         returnUrl: 'https://app.example/paid',
     )
-    ->payerEmail('kunde@eksempel.no')
+    ->payerEmail('customer@example.com')
     ->invoiceUrl('https://app.example/invoices/123.pdf')
     // Required: the invoice issuer (the client) — never the platform's own org nr:
-    ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
+    ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
     ->create();
 
 $link->url;       // send the customer here
