@@ -21,10 +21,14 @@ is something that has either failed silently or cost real money when missed.
 ## Webhooks
 
 - [ ] **Your production URL registered with Plorea**, for example
-      `https://api.example.com/plorea/webhook`. Registration is manual and done
-      separately per environment.
+      `https://api.example.com/plorea/webhook`. Registration is manual. Ask
+      for a separate URL per environment; Plorea sets that up on request.
 - [ ] **The production signing secret** in `PLOREA_WEBHOOK_SECRET`, received
-      over a secure channel. It differs from the test secret.
+      over a secure channel. Confirm with Plorea whether it differs from the
+      test secret — the two environments can share one.
+- [ ] **No redelivery.** Plorea does not retry a failed delivery (stated
+      2026-09-21). Persist each delivery before processing it and run the
+      polling backstop on a schedule.
 - [ ] **`PLOREA_WEBHOOK_VERIFY=true`**, or unset. `false` is a staging escape
       hatch; in production it lets anyone post fake events.
 - [ ] **The webhook path excluded from CSRF.** Otherwise every delivery gets a

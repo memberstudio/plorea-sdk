@@ -15,7 +15,8 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 - `PLOREA_TENANT_ID` for production; `PLOREA_PLATFORM` set to your own identifier (no default).
 
 ## Webhooks
-- Production URL registered with Plorea (manual, per environment) and the production secret in `PLOREA_WEBHOOK_SECRET` — it differs from test.
+- Production URL registered with Plorea (manual; ask for a separate URL per environment) and the production secret in `PLOREA_WEBHOOK_SECRET` — confirm with Plorea whether it differs from test.
+- Plorea does **not** redeliver a failed webhook. Persist each delivery before processing; a `500` loses the event.
 - `PLOREA_WEBHOOK_VERIFY` true/unset. `false` lets anyone post fake events.
 - Webhook path excluded from CSRF, or every delivery is a 419.
 - Listeners queued, deduplicating on `$event->eventId` (not the header), re-fetching state rather than trusting payloads.
@@ -24,6 +25,7 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 ## Merchants
 - `merchantOrgNr` is always the invoice issuer's, never your own.
 - The first live payment for a new org number starts KYC; payout is held until approval (1–5 business days). Tell merchants.
+- Subscriptions for a client company carry `->merchant()` too; KYC then starts on the first charge. There is no KYC API — to onboard a company before launch, Plorea suggests a payment link carrying its org number, sent to yourself.
 
 ## Money-handling code
 - `PLOREA_RETRY_TIMES=0` unless every retried write is idempotent — retried link creation or charges double-bill.

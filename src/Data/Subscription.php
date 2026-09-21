@@ -19,6 +19,7 @@ final readonly class Subscription
     /**
      * @param  array<string, mixed>  $metadata
      * @param  array<string, mixed>  $raw
+     * @param  ?string  $merchantOrgNr  The company receiving the funds. Returned on create only (2026-09-21); null on every read.
      */
     public function __construct(
         public string $id,
@@ -52,6 +53,7 @@ final readonly class Subscription
         public ?CarbonImmutable $createdAt,
         public ?CarbonImmutable $updatedAt,
         public array $raw = [],
+        public ?string $merchantOrgNr = null,
     ) {}
 
     /**
@@ -91,6 +93,7 @@ final readonly class Subscription
             createdAt: self::date($data['createdAt'] ?? null),
             updatedAt: self::date($data['updatedAt'] ?? null),
             raw: $data,
+            merchantOrgNr: self::string($data['merchantOrgNr'] ?? null),
         );
     }
 

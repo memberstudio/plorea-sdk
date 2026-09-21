@@ -75,9 +75,12 @@ and no refusal-reason field of any shape.
 ## Subscription webhooks — CAPTURED 2026-09-04
 
 Registration is per tenant and points at whichever single URL was handed to
-Plorea. There is no per-environment routing to fall back on, so a tenant
-registered against one environment sends nothing at all to the other — that is
-why an earlier run of these captures saw no deliveries. If deliveries are
+Plorea. By default there is no per-environment routing to fall back on, so a
+tenant registered against one environment sends nothing at all to the other —
+that is why an earlier run of these captures saw no deliveries. **Stated by
+Plorea 2026-09-21:** a URL per environment is available on request, both
+environments may share one signing secret, and a failed delivery is **never
+redelivered** — so never document a 5xx as a way to get a retry. If deliveries are
 missing, check which URL is registered before suspecting the SDK. The
 lifecycle run below is exactly 3 deliveries.
 

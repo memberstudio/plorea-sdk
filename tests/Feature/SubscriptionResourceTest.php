@@ -63,6 +63,53 @@ class SubscriptionResourceTest extends TestCase
         ]);
     }
 
+    public function test_it_sends_the_merchant_when_creating_a_subscription(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions' => Http::response([
+                'subscriptionId' => 'sub_1',
+                'status' => 'active',
+                'merchantOrgNr' => '999999999',
+            ], 201),
+        ]);
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
+            ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
+            ->save();
+
+        $this->assertSame('999999999', $subscription->merchantOrgNr);
+
+        Http::assertSent(fn (Request $request): bool => $request->data() === [
+            'tenantId' => 'test-tenant',
+            'paymentMethodId' => 'pm_1',
+            'recurringType' => 'Subscription',
+            'amount' => ['value' => 19900, 'currency' => 'NOK'],
+            'interval' => ['unit' => 'month', 'count' => 1],
+            'merchantOrgNr' => '999999999',
+            'merchantName' => 'Acme Gym AS',
+            'merchantEmail' => 'billing@example.com',
+            'platform' => 'memberflow',
+        ]);
+    }
+
+    public function test_a_subscription_without_a_merchant_sends_no_merchant_fields(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions' => Http::response(['subscriptionId' => 'sub_1', 'status' => 'active'], 201),
+        ]);
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
+            ->save();
+
+        $this->assertNull($subscription->merchantOrgNr);
+
+        Http::assertSent(fn (Request $request): bool => ! array_key_exists('merchantOrgNr', $request->data())
+            && ! array_key_exists('merchantName', $request->data())
+            && ! array_key_exists('merchantEmail', $request->data()));
+    }
+
     public function test_it_updates_a_subscription(): void
     {
         Http::fake([

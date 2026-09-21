@@ -38,6 +38,40 @@ trial that ends then.
 Always set `externalId` — it is how you find the subscription again, and it is
 included in the `subscription.charge_succeeded` webhook payload.
 
+### Routing the money to a company
+
+A platform billing on behalf of several companies names the receiving company
+on the subscription, exactly as on a payment link:
+
+```php
+$subscription = Plorea::subscriptions()
+    ->create('pm_...', Amount::nok(49900), BillingInterval::monthly())
+    ->externalId((string) $membership->id)
+    ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@acme.example')
+    ->save();
+
+$subscription->merchantOrgNr;   // "999999999" — on the create response only
+```
+
+Every charge on the subscription, scheduled or manual, is settled to that
+company. It is always the client's organisation number, never the platform's
+own. Name and email are optional and used for KYC communication.
+
+- **Verified 2026-09-21:** the fields are accepted; the create response echoes
+  `merchantOrgNr` (not the name or email); an organisation number that is not
+  nine digits is a `ValidationException` (`400`) at create; the first
+  scheduled charge authorises as usual.
+- **Not returned on reads:** `find()`, `forExternalId()` and `charges()` do not
+  carry the organisation number (2026-09-21). Persist it yourself when you
+  create the subscription.
+- **Stated by Plorea, not observed:** KYC for a company Plorea has not seen
+  starts on the first charge; settlement splits apply from that same charge;
+  charge webhooks carry the organisation number. A subscription created
+  without a merchant behaves as before.
+- **Stated by Plorea:** a stored payment method belongs to the shopper, not to
+  a company, so one `pm_...` can back subscriptions for different companies
+  under the same tenant.
+
 ## Trials
 
 ```php
