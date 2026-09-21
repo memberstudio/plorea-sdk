@@ -231,9 +231,10 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
 ## Responses and retries
 
 The controller always answers `200 [accepted]`, including for unparseable
-payloads — there is nothing for Plorea to retry when the body is malformed.
-Return a 500 from your own listener only for transient failures where you
-*want* redelivery.
+payloads. Plorea states (2026-09-21) that a failed delivery is **not
+redelivered**, so answering `500` does not buy you a second attempt — it loses
+the event. Accept the delivery, store it, and retry your own processing from
+what you stored.
 
 Queue anything slow. The route should answer fast; do the work in a job.
 

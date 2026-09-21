@@ -89,8 +89,12 @@ one of them read by `PaymentStatus`. The refund's own PSP reference
 request rather than the refund. Persist the `Refund` DTO — that identifier
 cannot be recovered from a later poll.
 
-What the top-level status becomes *after* settlement is still unobserved; the
-only refund anyone has watched was still in flight after eleven hours.
+What the top-level status becomes *after* settlement is still unobserved. A
+refund and a cancellation requested on 2026-09-19 were both still
+`refund_requested` / `cancel_requested` more than 24 hours later. Plorea states
+(2026-09-21) that this is expected, because the provider processes
+modifications asynchronously, and that the final statuses are `refunded` and
+`cancelled`. Book on the request; do not wait for the final status.
 
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
@@ -343,6 +347,36 @@ charges within seconds unless a trial is set.
 trial returns `accessEndsAt: null`, because it is derived from the last charge
 and there is none. Treat null as "access ends now".
 
+### ✅ `merchantOrgNr` on subscriptions — 2026-09-21
+
+`POST subscriptions` accepts `merchantOrgNr`, `merchantName` and
+`merchantEmail`. The create response echoes **`merchantOrgNr` only**, as its
+last key, for both an `active` and a `trialing` create
+(`subscription-created-merchant.json`). This differs from payment links, whose
+create response echoes nothing. An organisation number that is not nine digits
+returns `400` — "Invalid merchantOrgNr — must be 9 digits". The first scheduled
+charge on such a subscription authorised normally.
+
+`GET subscriptions/{id}`, `GET subscriptions` and the items from
+`GET subscriptions/{id}/charges` do **not** return the field. Keep your own
+record of which company a subscription bills for.
+
+### 📋 What `merchantOrgNr` does on a subscription — Plorea, 2026-09-21
+
+Every charge inherits the company. KYC for a company Plorea has not seen
+starts on the first charge, and settlement splits apply from that charge. The
+organisation number is included on charge webhooks. A subscription without the
+field behaves as before. None of this is observable from the API responses.
+
+A stored payment method is tied to the shopper reference, not to a company:
+the same method can be charged for different organisation numbers under one
+tenant.
+
+There is no API for starting or reading KYC. To onboard a company ahead of its
+first real charge, Plorea suggests creating a payment link that carries its
+organisation number and sending it to yourself; that starts KYC the ordinary
+way.
+
 ### ✅ Charge shapes — 2026-09-04
 
 `POST .../charge` returns `status: "charge_created"` with Adyen's answer in
@@ -458,11 +492,21 @@ externalId, amount: {value, currency}, pspReference, nextChargeAt,
 environment}`. A **manual** `charge()` emits `payment.authorised` with the
 ordinary flat payment shape.
 
-Webhook registration is manual and **per tenant**: Plorea delivers to the one
-URL you gave them, with no per-environment routing. So a tenant registered
-against production sends nothing at all to a staging run — that is the shape of
-this trap, and it has been walked into. If deliveries are missing, confirm
-which URL is registered before suspecting your listener.
+Webhook registration is manual and **per tenant**. Until 2026-09-21 Plorea
+delivered to the one URL you gave them, with no per-environment routing, so a
+tenant registered against production sent nothing at all to a staging run —
+that is the shape of this trap, and it has been walked into. If deliveries are
+missing, confirm which URL is registered before suspecting your listener.
+
+### 📋 Routing, signing and redelivery — Plorea, 2026-09-21
+
+- Plorea can register one URL per environment (test and live) on request.
+  Ask for it; it is not the default. `data.environment` remains a useful
+  second filter.
+- The same signing secret may be used for both environments. Do not assume
+  the test and live secrets differ — ask.
+- **A failed delivery is not retried.** There is no automatic redelivery, so a
+  `500` from your endpoint loses the event. Polling is not a nicety.
 
 ### 📋 The catalogue is four types — Plorea, 2026-09-09
 

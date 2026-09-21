@@ -2,6 +2,29 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.2 - 2026-09-21
+
+Subscriptions can name the company that receives the money, verified against
+Plorea's test environment the day Plorea shipped it. Nothing breaks:
+`Subscription::$merchantOrgNr` is appended with a null default.
+
+### Added
+
+- **`PendingSubscription::merchant(orgNr, name, email)`**: sends
+  `merchantOrgNr`, `merchantName` and `merchantEmail` on create, so every
+  charge on the subscription is settled to that company. An organisation
+  number that is not nine digits is a `ValidationException`.
+- **`Subscription::$merchantOrgNr`**, populated from the create response.
+  Plorea does not return it from `find()`, the list or `charges()`, so it is
+  null on reads — persist it when you create. `Plorea::fake()` mirrors this.
+
+### Changed
+
+- **Docs no longer suggest answering `500` to get a webhook redelivered.**
+  Plorea states that failed deliveries are not retried. The go-live checklist
+  and skill now also cover one webhook URL per environment, a possibly shared
+  signing secret, and onboarding a company to KYC before its first charge.
+
 ## v0.3.1 - 2026-09-19
 
 Follows `payments/session` as it behaves since 2026-09-19, re-probed against

@@ -33,7 +33,7 @@ final class DefaultFixtures
             $method === 'POST' && $path === 'payment-methods/setup' => self::paymentMethod($request, pending: true),
             $method === 'POST' && $path === 'payment-methods/setup/session' => self::paymentMethodSession($request),
             $method === 'GET' && preg_match('#^payment-methods/[^/]+$#', $path) === 1 => self::paymentMethodFound($path),
-            $method === 'POST' && $path === 'subscriptions' => self::subscription($request->data),
+            $method === 'POST' && $path === 'subscriptions' => self::subscription(array_diff_key($request->data, ['merchantName' => true, 'merchantEmail' => true])),
             $method === 'GET' && $path === 'subscriptions' => self::subscriptionList($request),
             $method === 'GET' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription(['subscriptionId' => basename($path)]),
             $method === 'PATCH' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription([...$request->data, 'subscriptionId' => basename($path)]),

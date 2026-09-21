@@ -58,6 +58,14 @@ $membership->update(['plorea_subscription_id' => $subscription->id]);
   option; a later start is a trial (below).
 - The charge is made against the stored card. The customer is not asked for
   anything at this point.
+- **Billing for several companies?** Add
+  `->merchant(orgNr: ..., name: ..., email: ...)` — always the client's
+  organisation number, never your own. Every charge on the subscription is
+  settled to that company, and Plorea starts KYC on the first charge for a
+  company it has not seen. The create response returns `merchantOrgNr`; reads
+  (`find()`, `forExternalId()`, `charges()`) do not, so store it on your own
+  record. Not nine digits is a `ValidationException`. One stored card can back
+  subscriptions for different companies under the same tenant.
 - **Guard against creating it twice.** Write the local record before calling
   Plorea. If the call times out or the request is repeated, look before you
   create again:
@@ -196,6 +204,8 @@ active; an overdue first charge; cancel during a trial.
 ## Checklist
 
 - `externalId` set on every subscription.
+- On a multi-company platform: `->merchant()` set on every subscription, and
+  the organisation number stored locally.
 - Access follows an authorised charge (or your trial rule), never `create()`.
 - Charge webhook deduplicated on `$event->eventId`, booked idempotently.
 - A scheduled job runs `needingAttention()` and settles missed charges.

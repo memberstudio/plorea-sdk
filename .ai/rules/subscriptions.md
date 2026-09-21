@@ -31,6 +31,25 @@ differently (`ValidationException` vs `ChargeFailedException`).
 Validation messages are static templates — one missing field still lists all
 five — so never parse them.
 
+## Merchant routing — VERIFIED 2026-09-21
+
+`->merchant(orgNr, name, email)` sends `merchantOrgNr` / `merchantName` /
+`merchantEmail` on `POST subscriptions`. The create response echoes
+**`merchantOrgNr` only**, as the last key (`subscription-created-merchant.json`)
+— unlike payment links, which echo nothing. Not nine digits → 400. `find()`,
+the list and `charges()` items do **not** return it; `Subscription::$merchantOrgNr`
+is therefore null on every read, and the fake mirrors that. Do not "fix" the
+fake to return it on reads.
+
+Only three fields are accepted as far as anyone knows — do not add `phone` /
+`country` to match `PendingPaymentLink::merchant()`.
+
+**Stated by Plorea 2026-09-21, UNOBSERVED:** every charge inherits the company;
+KYC starts on the first charge; splits apply from that charge; charge webhooks
+carry the org number (do not model an accessor until one is captured); a
+stored method is tied to the shopper, not a company, and can be charged for
+several org numbers under one tenant.
+
 ## Trials — VERIFIED 2026-09-07
 
 `trialUntil()` → status `trialing` (a fourth status), `nextChargeAt` ==

@@ -40,6 +40,12 @@ class PendingSubscription
 
     protected ?int $vatAmount = null;
 
+    protected ?string $merchantOrgNr = null;
+
+    protected ?string $merchantName = null;
+
+    protected ?string $merchantEmail = null;
+
     /** @var array<string, mixed> */
     protected array $metadata = [];
 
@@ -155,6 +161,28 @@ class PendingSubscription
     }
 
     /**
+     * The company receiving the funds — always your client's organisation
+     * number, never the platform's own. Every charge on the subscription,
+     * scheduled or on demand, is settled to this company. Plorea starts KYC
+     * automatically on the first charge for a company it has not seen
+     * before; name and email are optional but recommended for KYC
+     * communication. An organisation number that is not nine digits is
+     * rejected with a validation error when the subscription is created.
+     *
+     * A stored payment method belongs to the shopper, not to a company, so
+     * the same method can back subscriptions for different companies under
+     * one tenant.
+     */
+    public function merchant(string $orgNr, ?string $name = null, ?string $email = null): static
+    {
+        $this->merchantOrgNr = $orgNr;
+        $this->merchantName = $name;
+        $this->merchantEmail = $email;
+
+        return $this;
+    }
+
+    /**
      * @param  array<string, mixed>  $metadata
      */
     public function metadata(array $metadata): static
@@ -196,6 +224,9 @@ class PendingSubscription
             'vatRate' => $this->vatRate,
             'vatAmount' => $this->vatAmount,
             'metadata' => $this->metadata === [] ? null : $this->metadata,
+            'merchantOrgNr' => $this->merchantOrgNr,
+            'merchantName' => $this->merchantName,
+            'merchantEmail' => $this->merchantEmail,
         ]);
     }
 }

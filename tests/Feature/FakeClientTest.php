@@ -187,6 +187,23 @@ class FakeClientTest extends TestCase
         $this->assertFalse($subscription->isActive());
     }
 
+    public function test_the_fake_echoes_only_the_merchant_organisation_number_on_create(): void
+    {
+        Plorea::fake();
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
+            ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
+            ->save();
+
+        $this->assertSame('999999999', $subscription->merchantOrgNr);
+        $this->assertArrayNotHasKey('merchantName', $subscription->raw);
+        $this->assertArrayNotHasKey('merchantEmail', $subscription->raw);
+
+        // Reading the subscription back does not return the merchant.
+        $this->assertNull(Plorea::subscriptions()->find($subscription->id)->merchantOrgNr);
+    }
+
     public function test_a_subscription_created_with_a_past_trial_is_reported_as_active(): void
     {
         Plorea::fake();

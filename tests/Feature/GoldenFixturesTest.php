@@ -804,6 +804,28 @@ class GoldenFixturesTest extends TestCase
         $this->assertSame('2026-09-14 21:57:00', $subscription->trialEndsAt?->utc()->format('Y-m-d H:i:s'));
     }
 
+    public function test_it_parses_a_real_subscription_created_with_a_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions' => Http::response($this->fixture('subscription-created-merchant')),
+        ]);
+
+        $subscription = Plorea::subscriptions()
+            ->create('pm_test_golden_method', Amount::nok(1000), BillingInterval::monthly())
+            ->externalId('GOLDEN-EXT-MERCHANT-001')
+            ->title('Golden fixture merchant plan')
+            ->trialUntil(CarbonImmutable::parse('2026-10-11T15:11:19Z'))
+            ->merchant(orgNr: '999999999', name: 'Golden Fixture Gym AS', email: 'billing@example.com')
+            ->save();
+
+        // Unlike a payment link, a subscription echoes the organisation number
+        // on create — but only the number: the name and email are not returned.
+        $this->assertSame('999999999', $subscription->merchantOrgNr);
+        $this->assertArrayNotHasKey('merchantName', $subscription->raw);
+        $this->assertArrayNotHasKey('merchantEmail', $subscription->raw);
+        $this->assertTrue($subscription->isTrialing());
+    }
+
     public function test_it_parses_a_real_trialing_subscription_response(): void
     {
         Http::fake([
