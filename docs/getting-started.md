@@ -90,7 +90,7 @@ Nothing is mutated in place; every builder method returns a new instance.
 ```php
 $link = Plorea::payments()
     ->link('FIN-2026-00123', 'Faktura', Amount::nok(450000), 'https://app.example/paid')
-    ->payerEmail('kunde@eksempel.no')   // builder
+    ->payerEmail('customer@example.com')   // builder
     ->merchant(orgNr: '999999999')      // builder
     ->create();                         // terminal — returns PaymentLinkCreated
 ```

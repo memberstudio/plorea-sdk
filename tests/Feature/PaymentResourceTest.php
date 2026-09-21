@@ -37,9 +37,9 @@ class PaymentResourceTest extends TestCase
 
         $link = Plorea::payments()
             ->link('FIN-2026-00123', 'Faktura FIN-2026-00123', Amount::nok(450000), 'https://app.example/paid')
-            ->payerEmail('kunde@eksempel.no')
+            ->payerEmail('customer@example.com')
             ->invoiceUrl('https://app.example/invoices/123.pdf')
-            ->merchant(orgNr: '999999999', name: 'Techify AS', email: 'post@techify.no')
+            ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
             ->create();
 
         $this->assertSame('https://pay.plorea.no/pl_123', $link->url);
@@ -62,12 +62,12 @@ class PaymentResourceTest extends TestCase
                 'product' => 'Faktura FIN-2026-00123',
                 'amount' => 450000,
                 'currency' => 'NOK',
-                'email' => 'kunde@eksempel.no',
+                'email' => 'customer@example.com',
                 'returnUrl' => 'https://app.example/paid',
                 'invoice_url' => 'https://app.example/invoices/123.pdf',
                 'merchantOrgNr' => '999999999',
-                'merchantName' => 'Techify AS',
-                'merchantEmail' => 'post@techify.no',
+                'merchantName' => 'Acme Gym AS',
+                'merchantEmail' => 'billing@example.com',
             ], $request->data());
 
             return true;
