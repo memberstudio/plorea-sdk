@@ -550,7 +550,8 @@ class GoldenFixturesTest extends TestCase
         // hasMore key either, so there is nothing in the response that would
         // reveal a truncated history. A capture from a subscription with a
         // long history is what would settle it; see the pagination note in
-        // docs/api-behaviour.md.
+        // docs/api-behaviour.md. This capture predates merchant routing; a
+        // subscription with a merchant adds merchantOrgNr to the envelope.
         $this->assertSame(['subscriptionId', 'items'], array_keys($this->fixture('subscription-charges')));
     }
 
@@ -824,6 +825,39 @@ class GoldenFixturesTest extends TestCase
         $this->assertArrayNotHasKey('merchantName', $subscription->raw);
         $this->assertArrayNotHasKey('merchantEmail', $subscription->raw);
         $this->assertTrue($subscription->isTrialing());
+    }
+
+    /**
+     * Captured 2026-09-22 from a trial subscription created with a merchant:
+     * reads now carry the organisation number that on 2026-09-21 only the
+     * create response returned.
+     */
+    public function test_reads_return_the_merchant_organisation_number(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_merchant/charges*' => Http::response($this->fixture('subscription-charges-merchant')),
+            'payments.plorea.no/subscriptions/sub_test_golden_merchant*' => Http::response($this->fixture('subscription-merchant')),
+            'payments.plorea.no/subscriptions?externalId=GOLDEN-EXT-MERCHANT-002*' => Http::response($this->fixture('subscription-list-merchant')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->find('sub_test_golden_merchant');
+
+        $this->assertSame('999999999', $subscription->merchantOrgNr);
+        $this->assertArrayNotHasKey('merchantName', $subscription->raw);
+        $this->assertArrayNotHasKey('merchantEmail', $subscription->raw);
+
+        $listed = Plorea::subscriptions()->forExternalId('GOLDEN-EXT-MERCHANT-002');
+
+        $this->assertSame('999999999', $listed->first()?->merchantOrgNr);
+
+        // The charge history carries it once, on the envelope rather than on
+        // each item, and charges() returns only the items — read it from the
+        // subscription instead.
+        $this->assertSame(
+            ['subscriptionId', 'merchantOrgNr', 'items'],
+            array_keys($this->fixture('subscription-charges-merchant')),
+        );
+        $this->assertCount(0, Plorea::subscriptions()->charges('sub_test_golden_merchant'));
     }
 
     public function test_it_parses_a_real_trialing_subscription_response(): void

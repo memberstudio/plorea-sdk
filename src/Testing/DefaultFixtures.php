@@ -34,11 +34,14 @@ final class DefaultFixtures
             $method === 'POST' && $path === 'payment-methods/setup/session' => self::paymentMethodSession($request),
             $method === 'GET' && preg_match('#^payment-methods/[^/]+$#', $path) === 1 => self::paymentMethodFound($path),
             $method === 'POST' && $path === 'subscriptions' => self::subscription(array_diff_key($request->data, ['merchantName' => true, 'merchantEmail' => true])),
-            $method === 'GET' && $path === 'subscriptions' => self::subscriptionList($request),
-            $method === 'GET' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription(['subscriptionId' => basename($path)]),
+            $method === 'GET' && $path === 'subscriptions' => self::subscriptionList($request, $history),
+            $method === 'GET' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription([
+                'subscriptionId' => basename($path),
+                ...self::merchantOf(self::createdSubscription($history, subscriptionId: basename($path))),
+            ]),
             $method === 'PATCH' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription([...$request->data, 'subscriptionId' => basename($path)]),
             $method === 'POST' && str_ends_with($path, '/charge') => self::charge($request),
-            $method === 'GET' && str_ends_with($path, '/charges') => self::chargeList($path),
+            $method === 'GET' && str_ends_with($path, '/charges') => self::chargeList($path, $history),
             $method === 'POST' && str_ends_with($path, '/cancel') => self::subscriptionCanceled($path),
             $method === 'POST' && str_ends_with($path, '/reactivate') => self::subscription(['subscriptionId' => basename(dirname($path)), 'status' => 'active']),
             default => throw new PloreaException(
@@ -259,6 +262,46 @@ final class DefaultFixtures
     }
 
     /**
+     * The most recent subscription the fake has created that matches the
+     * given id or external id, so reads can echo what was sent on create.
+     * Every subscription the fake creates shares one id, so any other id
+     * has no creation to echo.
+     *
+     * @param  list<RecordedRequest>  $history
+     */
+    private static function createdSubscription(array $history, ?string $subscriptionId = null, mixed $externalId = null): ?RecordedRequest
+    {
+        if ($subscriptionId !== null && $subscriptionId !== self::subscription()['subscriptionId']) {
+            return null;
+        }
+
+        foreach (array_reverse($history) as $recorded) {
+            if (! $recorded->matches('POST subscriptions')) {
+                continue;
+            }
+
+            if ($externalId === null || $recorded->input('externalId') === $externalId) {
+                return $recorded;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Reads return the organisation number sent on create, but not the
+     * merchant's name or email — matching the wire since 2026-09-22.
+     *
+     * @return array{merchantOrgNr?: mixed}
+     */
+    private static function merchantOf(?RecordedRequest $created): array
+    {
+        $orgNr = $created?->input('merchantOrgNr');
+
+        return $orgNr === null ? [] : ['merchantOrgNr' => $orgNr];
+    }
+
+    /**
      * @param  array<string, mixed>  $subscription
      */
     private static function isTrialing(array $subscription): bool
@@ -279,15 +322,19 @@ final class DefaultFixtures
      * filters are applied to it rather than ignored — a consumer filtering
      * for canceled subscriptions must not be handed an active one.
      *
+     * @param  list<RecordedRequest>  $history
      * @return array<string, mixed>
      */
-    private static function subscriptionList(RecordedRequest $request): array
+    private static function subscriptionList(RecordedRequest $request, array $history): array
     {
         $externalId = $request->input('externalId', 'fake-external');
         $tenantId = $request->input('tenantId');
         $status = $request->input('status');
 
-        $overrides = ['externalId' => $externalId];
+        $overrides = [
+            'externalId' => $externalId,
+            ...self::merchantOf(self::createdSubscription($history, externalId: $externalId)),
+        ];
 
         if (is_string($tenantId) && $tenantId !== '') {
             $overrides['tenantId'] = $tenantId;
@@ -333,14 +380,16 @@ final class DefaultFixtures
     }
 
     /**
+     * @param  list<RecordedRequest>  $history
      * @return array<string, mixed>
      */
-    private static function chargeList(string $path): array
+    private static function chargeList(string $path, array $history): array
     {
         $subscriptionId = basename(dirname($path));
 
         return [
             'subscriptionId' => $subscriptionId,
+            ...self::merchantOf(self::createdSubscription($history, subscriptionId: $subscriptionId)),
             'items' => [
                 [
                     'subscriptionId' => $subscriptionId,

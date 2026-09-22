@@ -62,9 +62,9 @@ $membership->update(['plorea_subscription_id' => $subscription->id]);
   `->merchant(orgNr: ..., name: ..., email: ...)` — always the client's
   organisation number, never your own. Every charge on the subscription is
   settled to that company, and Plorea starts KYC on the first charge for a
-  company it has not seen. The create response returns `merchantOrgNr`; reads
-  (`find()`, `forExternalId()`, `charges()`) do not, so store it on your own
-  record. Not nine digits is a `ValidationException`. One stored card can back
+  company it has not seen. The create response, `find()` and `forExternalId()`
+  return `merchantOrgNr` (charge items do not); still store it on your own
+  record when you create. Not nine digits is a `ValidationException`. One stored card can back
   subscriptions for different companies under the same tenant.
 - **Guard against creating it twice.** Write the local record before calling
   Plorea. If the call times out or the request is repeated, look before you

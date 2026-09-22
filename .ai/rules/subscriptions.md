@@ -31,15 +31,22 @@ differently (`ValidationException` vs `ChargeFailedException`).
 Validation messages are static templates — one missing field still lists all
 five — so never parse them.
 
-## Merchant routing — VERIFIED 2026-09-21
+## Merchant routing — VERIFIED 2026-09-21, reads 2026-09-22
 
 `->merchant(orgNr, name, email)` sends `merchantOrgNr` / `merchantName` /
 `merchantEmail` on `POST subscriptions`. The create response echoes
 **`merchantOrgNr` only**, as the last key (`subscription-created-merchant.json`)
-— unlike payment links, which echo nothing. Not nine digits → 400. `find()`,
-the list and `charges()` items do **not** return it; `Subscription::$merchantOrgNr`
-is therefore null on every read, and the fake mirrors that. Do not "fix" the
-fake to return it on reads.
+— unlike payment links, which echo nothing. Not nine digits → 400.
+
+On 2026-09-21 reads did not return it. **Since 2026-09-22 they do**
+(`subscription-merchant.json`, `subscription-list-merchant.json`,
+`subscription-charges-merchant.json`): `find()` and each list item carry
+`merchantOrgNr`; the charge history carries it **once, on the envelope**
+(`{subscriptionId, merchantOrgNr, items}`), not on each item. `charges()`
+returns only the items, so the envelope value is not exposed — read it from
+`find()`. A subscription created before merchant routing has the key with
+`null`. The name and email are never returned. The fake echoes the org number
+on reads of a subscription it created with one.
 
 Only three fields are accepted as far as anyone knows — do not add `phone` /
 `country` to match `PendingPaymentLink::merchant()`.
