@@ -19,7 +19,7 @@ final readonly class Subscription
     /**
      * @param  array<string, mixed>  $metadata
      * @param  array<string, mixed>  $raw
-     * @param  ?string  $merchantOrgNr  The company receiving the funds. Returned on create only (2026-09-21); null on every read.
+     * @param  ?string  $merchantOrgNr  The company receiving the funds. Returned on create and on reads (2026-09-22); null when the subscription has none.
      */
     public function __construct(
         public string $id,

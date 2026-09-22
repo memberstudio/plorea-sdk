@@ -50,7 +50,7 @@ $subscription = Plorea::subscriptions()
     ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@acme.example')
     ->save();
 
-$subscription->merchantOrgNr;   // "999999999" — on the create response only
+$subscription->merchantOrgNr;   // "999999999" — also returned by find() and forExternalId()
 ```
 
 Every charge on the subscription, scheduled or manual, is settled to that
@@ -61,9 +61,10 @@ own. Name and email are optional and used for KYC communication.
   `merchantOrgNr` (not the name or email); an organisation number that is not
   nine digits is a `ValidationException` (`400`) at create; the first
   scheduled charge authorises as usual.
-- **Not returned on reads:** `find()`, `forExternalId()` and `charges()` do not
-  carry the organisation number (2026-09-21). Persist it yourself when you
-  create the subscription.
+- **Returned on reads since 2026-09-22:** `find()` and `forExternalId()` carry
+  the organisation number (not the name or email). `charges()` returns only
+  the charge items, which do not. Still persist it when you create the
+  subscription: your own record is what tells you which company to expect.
 - **Stated by Plorea, not observed:** KYC for a company Plorea has not seen
   starts on the first charge; settlement splits apply from that same charge;
   charge webhooks carry the organisation number. A subscription created

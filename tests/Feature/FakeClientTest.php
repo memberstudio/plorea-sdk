@@ -187,12 +187,13 @@ class FakeClientTest extends TestCase
         $this->assertFalse($subscription->isActive());
     }
 
-    public function test_the_fake_echoes_only_the_merchant_organisation_number_on_create(): void
+    public function test_the_fake_echoes_only_the_merchant_organisation_number(): void
     {
         Plorea::fake();
 
         $subscription = Plorea::subscriptions()
             ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
+            ->externalId('ws_1')
             ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
             ->save();
 
@@ -200,8 +201,16 @@ class FakeClientTest extends TestCase
         $this->assertArrayNotHasKey('merchantName', $subscription->raw);
         $this->assertArrayNotHasKey('merchantEmail', $subscription->raw);
 
-        // Reading the subscription back does not return the merchant.
-        $this->assertNull(Plorea::subscriptions()->find($subscription->id)->merchantOrgNr);
+        // Reads return the organisation number too, as the API does.
+        $found = Plorea::subscriptions()->find($subscription->id);
+
+        $this->assertSame('999999999', $found->merchantOrgNr);
+        $this->assertArrayNotHasKey('merchantName', $found->raw);
+        $this->assertSame('999999999', Plorea::subscriptions()->forExternalId('ws_1')->first()?->merchantOrgNr);
+
+        // Nothing was created under another id or external id.
+        $this->assertNull(Plorea::subscriptions()->find('sub_other')->merchantOrgNr);
+        $this->assertNull(Plorea::subscriptions()->forExternalId('ws_2')->first()?->merchantOrgNr);
     }
 
     public function test_a_subscription_created_with_a_past_trial_is_reported_as_active(): void

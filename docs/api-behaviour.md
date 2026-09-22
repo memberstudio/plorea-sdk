@@ -357,9 +357,20 @@ create response echoes nothing. An organisation number that is not nine digits
 returns `400` — "Invalid merchantOrgNr — must be 9 digits". The first scheduled
 charge on such a subscription authorised normally.
 
-`GET subscriptions/{id}`, `GET subscriptions` and the items from
-`GET subscriptions/{id}/charges` do **not** return the field. Keep your own
-record of which company a subscription bills for.
+On that date, `GET subscriptions/{id}`, `GET subscriptions` and the items from
+`GET subscriptions/{id}/charges` did **not** return the field. That changed the
+next day — see below.
+
+### ✅ `merchantOrgNr` on subscription reads — 2026-09-22
+
+Plorea added the field to reads. Captured on a trial subscription created with
+a merchant: `GET subscriptions/{id}` returns `merchantOrgNr`
+(`subscription-merchant.json`), and so does each item of `GET subscriptions`
+(`subscription-list-merchant.json`). `GET subscriptions/{id}/charges` carries
+it once, on the envelope — `{subscriptionId, merchantOrgNr, items}` — not on
+each charge (`subscription-charges-merchant.json`). A subscription created
+without a merchant returns the key as `null`. The name and email are still not
+returned anywhere.
 
 ### 📋 What `merchantOrgNr` does on a subscription — Plorea, 2026-09-21
 

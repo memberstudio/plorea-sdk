@@ -175,7 +175,8 @@ class SubscriptionResource extends Resource
      *
      * The response is {subscriptionId, items} — no count and no paging keys
      * of any kind, so a truncated history would be indistinguishable from a
-     * complete one. The longest capture holds two items. Treat a long-lived
+     * complete one. A subscription with a merchant adds merchantOrgNr to the
+     * envelope (not to the items); read it from find() instead. The longest capture holds two items. Treat a long-lived
      * monthly subscription's history as unverified territory.
      *
      * @return Collection<int, SubscriptionCharge>

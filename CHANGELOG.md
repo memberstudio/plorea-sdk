@@ -2,6 +2,24 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.3 - 2026-09-22
+
+Plorea now returns `merchantOrgNr` when a subscription is read, verified
+against the test environment the day it shipped. No code change was needed to
+read it: `Subscription::$merchantOrgNr` was already hydrated from any
+response. Nothing breaks.
+
+### Changed
+
+- **`find()` and `forExternalId()` now carry `Subscription::$merchantOrgNr`**
+  for a subscription created with a merchant. The charge history carries it on
+  its envelope only; `charges()` still returns just the items.
+- **`Plorea::fake()` echoes the organisation number on reads** of a
+  subscription it created with one, as the API does. A test that asserted
+  null on a read after `->merchant()` will now see the number.
+- Docs, rules and the subscriptions skill describe the new read behaviour.
+  Storing the organisation number on your own record is still recommended.
+
 ## v0.3.2 - 2026-09-21
 
 Subscriptions can name the company that receives the money, verified against
