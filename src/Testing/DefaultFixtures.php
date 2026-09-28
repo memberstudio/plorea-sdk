@@ -290,15 +290,14 @@ final class DefaultFixtures
 
     /**
      * Reads return the organisation number sent on create, but not the
-     * merchant's name or email — matching the wire since 2026-09-22.
+     * merchant's name or email — matching the wire since 2026-09-22. A
+     * subscription without a merchant carries the key with null.
      *
-     * @return array{merchantOrgNr?: mixed}
+     * @return array{merchantOrgNr: mixed}
      */
     private static function merchantOf(?RecordedRequest $created): array
     {
-        $orgNr = $created?->input('merchantOrgNr');
-
-        return $orgNr === null ? [] : ['merchantOrgNr' => $orgNr];
+        return ['merchantOrgNr' => $created?->input('merchantOrgNr')];
     }
 
     /**

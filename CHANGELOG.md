@@ -2,6 +2,16 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- **The fake now sends `merchantOrgNr: null`** on reads of a subscription
+  created without a merchant, instead of leaving the key out, matching the API
+  since 2026-09-22.
+- **The Boost guideline no longer says reads omit `merchantOrgNr`.** It has
+  been returned by `find()` and the list since v0.3.3.
+
 ## v0.3.3 - 2026-09-22
 
 Plorea now returns `merchantOrgNr` when a subscription is read, verified

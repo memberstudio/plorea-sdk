@@ -208,9 +208,16 @@ class FakeClientTest extends TestCase
         $this->assertArrayNotHasKey('merchantName', $found->raw);
         $this->assertSame('999999999', Plorea::subscriptions()->forExternalId('ws_1')->first()?->merchantOrgNr);
 
-        // Nothing was created under another id or external id.
-        $this->assertNull(Plorea::subscriptions()->find('sub_other')->merchantOrgNr);
-        $this->assertNull(Plorea::subscriptions()->forExternalId('ws_2')->first()?->merchantOrgNr);
+        // Nothing was created under another id or external id: the key is
+        // present with null, as the API sends for a subscription without one.
+        $other = Plorea::subscriptions()->find('sub_other');
+        $this->assertArrayHasKey('merchantOrgNr', $other->raw);
+        $this->assertNull($other->merchantOrgNr);
+
+        $otherListed = Plorea::subscriptions()->forExternalId('ws_2')->first();
+        $this->assertNotNull($otherListed);
+        $this->assertArrayHasKey('merchantOrgNr', $otherListed->raw);
+        $this->assertNull($otherListed->merchantOrgNr);
     }
 
     public function test_a_subscription_created_with_a_past_trial_is_reported_as_active(): void
