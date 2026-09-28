@@ -2,7 +2,7 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
-## Unreleased
+## v0.3.4 - 2026-09-28
 
 ### Fixed
 
