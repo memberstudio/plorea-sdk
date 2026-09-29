@@ -2,6 +2,14 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.6 - 2026-09-30
+
+### Added
+
+- **`paymentMethods()->setup(...)->merchant($orgNr, $name)`** now also sends
+  `merchantName` on the Drop-in card setup session, as Plorea asked. The name
+  is optional; `merchant($orgNr)` keeps working unchanged.
+
 ## v0.3.5 - 2026-09-29
 
 ### Added
