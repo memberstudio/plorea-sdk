@@ -85,11 +85,32 @@ class PaymentMethodResourceTest extends TestCase
 
         Plorea::paymentMethods()
             ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
-            ->merchant('999999999')
+            ->merchant('999999999', 'Example Gym AS')
             ->session();
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup/session'
-            && $request->data()['merchantOrgNr'] === '999999999');
+            && $request->data()['merchantOrgNr'] === '999999999'
+            && $request->data()['merchantName'] === 'Example Gym AS');
+    }
+
+    public function test_a_drop_in_session_merchant_without_a_name_sends_no_name(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'sessionId' => 'CS123',
+                'sessionData' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->merchant('999999999')
+            ->session();
+
+        Http::assertSent(fn (Request $request): bool => $request->data()['merchantOrgNr'] === '999999999'
+            && ! array_key_exists('merchantName', $request->data()));
     }
 
     public function test_the_hosted_setup_sends_no_merchant(): void
@@ -103,11 +124,12 @@ class PaymentMethodResourceTest extends TestCase
 
         Plorea::paymentMethods()
             ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
-            ->merchant('999999999')
+            ->merchant('999999999', 'Example Gym AS')
             ->create();
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup'
-            && ! array_key_exists('merchantOrgNr', $request->data()));
+            && ! array_key_exists('merchantOrgNr', $request->data())
+            && ! array_key_exists('merchantName', $request->data()));
     }
 
     public function test_a_drop_in_session_without_a_merchant_sends_no_merchant(): void

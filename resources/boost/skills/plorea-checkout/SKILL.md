@@ -42,7 +42,7 @@ Card storage:
 $session = Plorea::paymentMethods()
     ->setup($shopperReference, RecurringType::Subscription, $serverChosenReturnUrl)
     ->channel($channel)
-    ->merchant($companyOrgNr) // the company the card is saved for: its name shows on 3D Secure
+    ->merchant($companyOrgNr, $companyName) // the company the card is saved for: its name shows on 3D Secure
     ->session();
 // store $session->paymentMethodId, then return response()->json($session)
 ```

@@ -49,8 +49,8 @@ Add `->channel(Channel::IOS)` or `->channel(Channel::Android)` for Adyen's
 native SDKs. The web Drop-in needs `PLOREA_ADYEN_CLIENT_KEY` and your origins
 whitelisted by Plorea. See [Embedded and native checkout](checkout.md).
 
-On a platform, add `->merchant($orgNr)` with the organisation number of the
-company the card is saved for. Plorea resolves that company's store from it, so
+On a platform, add `->merchant($orgNr, $name)` with the organisation number
+(and optionally the name) of the company the card is saved for. Plorea resolves that company's store from it, so
 the 3D Secure challenge shows the company's name rather than the platform's
 (stated by Plorea 2026-09-29). Only the Drop-in session sends it; the hosted
 `create()` flow does not.
