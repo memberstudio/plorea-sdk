@@ -26,6 +26,8 @@ class PendingPaymentMethodSetup
 
     protected ?Channel $channel = null;
 
+    protected ?string $merchantOrgNr = null;
+
     /** @var array<string, mixed> */
     protected array $metadata = [];
 
@@ -91,6 +93,19 @@ class PendingPaymentMethodSetup
     }
 
     /**
+     * The company the card is saved for, by Norwegian organisation number.
+     * Only used by the Drop-in session flow: Plorea resolves the company's
+     * store from it, so the 3D Secure challenge shows that company's name
+     * instead of the platform's.
+     */
+    public function merchant(string $orgNr): static
+    {
+        $this->merchantOrgNr = $orgNr;
+
+        return $this;
+    }
+
+    /**
      * @param  array<string, mixed>  $metadata
      */
     public function metadata(array $metadata): static
@@ -138,6 +153,7 @@ class PendingPaymentMethodSetup
             'description' => $includeDescription ? $this->description : null,
             'metadata' => $this->metadata === [] ? null : $this->metadata,
             'channel' => $includeSessionFields ? $this->channel?->value : null,
+            'merchantOrgNr' => $includeSessionFields ? $this->merchantOrgNr : null,
         ]);
     }
 }

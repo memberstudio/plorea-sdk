@@ -2,6 +2,16 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.5 - 2026-09-29
+
+### Added
+
+- **`paymentMethods()->setup(...)->merchant($orgNr)`** sends `merchantOrgNr`
+  on the Drop-in card setup session, so the 3D Secure challenge shows the
+  company the card is saved for instead of the platform. The hosted `create()`
+  flow does not send it. Nothing breaks: without `merchant()`, nothing new is
+  sent.
+
 ## v0.3.4 - 2026-09-28
 
 ### Fixed

@@ -57,6 +57,15 @@ carry the org number (do not model an accessor until one is captured); a
 stored method is tied to the shopper, not a company, and can be charged for
 several org numbers under one tenant.
 
+## Card setup session takes `merchantOrgNr` — Stated by Plorea 2026-09-29
+
+Without it, the 3D Secure challenge on `payment-methods/setup/session` shows
+the wrong company name. `->merchant(orgNr)` on the setup builder sends
+`merchantOrgNr` on the **session only** — the hosted `payment-methods/setup`
+was not named, so it does not send it. Org number only: no name or email was
+asked for. UNOBSERVED on the wire: whether the session response echoes it, and
+whether a non-nine-digit value is rejected. The fake does not model either.
+
 ## Trials — VERIFIED 2026-09-07
 
 `trialUntil()` → status `trialing` (a fourth status), `nextChargeAt` ==
