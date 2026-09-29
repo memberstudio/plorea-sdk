@@ -72,6 +72,62 @@ class PaymentMethodResourceTest extends TestCase
             && $request->data()['doneId'] === 'done_usr_1');
     }
 
+    public function test_it_sends_the_merchant_on_a_drop_in_session(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'sessionId' => 'CS123',
+                'sessionData' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->merchant('999999999')
+            ->session();
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup/session'
+            && $request->data()['merchantOrgNr'] === '999999999');
+    }
+
+    public function test_the_hosted_setup_sends_no_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->merchant('999999999')
+            ->create();
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup'
+            && ! array_key_exists('merchantOrgNr', $request->data()));
+    }
+
+    public function test_a_drop_in_session_without_a_merchant_sends_no_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'sessionId' => 'CS123',
+                'sessionData' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->session();
+
+        Http::assertSent(fn (Request $request): bool => ! array_key_exists('merchantOrgNr', $request->data()));
+    }
+
     public function test_it_finds_a_payment_method(): void
     {
         Http::fake([
