@@ -113,7 +113,7 @@ class PaymentMethodResourceTest extends TestCase
             && ! array_key_exists('merchantName', $request->data()));
     }
 
-    public function test_the_hosted_setup_sends_no_merchant(): void
+    public function test_the_hosted_setup_sends_the_merchant(): void
     {
         Http::fake([
             'payments.plorea.no/payment-methods/setup' => Http::response([
@@ -128,8 +128,8 @@ class PaymentMethodResourceTest extends TestCase
             ->create();
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup'
-            && ! array_key_exists('merchantOrgNr', $request->data())
-            && ! array_key_exists('merchantName', $request->data()));
+            && $request->data()['merchantOrgNr'] === '999999999'
+            && $request->data()['merchantName'] === 'Example Gym AS');
     }
 
     public function test_a_drop_in_session_without_a_merchant_sends_no_merchant(): void
