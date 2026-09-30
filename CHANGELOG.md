@@ -2,6 +2,15 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.7 - 2026-09-30
+
+### Changed
+
+- **`paymentMethods()->setup(...)->merchant($orgNr, $name)` is now also sent
+  by the hosted `create()`**, not only by the Drop-in session, as Plorea
+  confirmed the hosted endpoint accepts it. Calls without `merchant()` send
+  nothing new.
+
 ## v0.3.6 - 2026-09-30
 
 ### Added

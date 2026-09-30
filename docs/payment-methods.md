@@ -50,10 +50,11 @@ native SDKs. The web Drop-in needs `PLOREA_ADYEN_CLIENT_KEY` and your origins
 whitelisted by Plorea. See [Embedded and native checkout](checkout.md).
 
 On a platform, add `->merchant($orgNr, $name)` with the organisation number
-(and optionally the name) of the company the card is saved for. Plorea resolves that company's store from it, so
-the 3D Secure challenge shows the company's name rather than the platform's
-(stated by Plorea 2026-09-29). Only the Drop-in session sends it; the hosted
-`create()` flow does not.
+(and optionally the name) of the company the card is saved for. Plorea resolves
+that company's store from it, so the 3D Secure challenge shows the company's
+name rather than the platform's (stated by Plorea 2026-09-29/30). Both the
+Drop-in `session()` and the hosted `create()` send it; on the hosted page the
+company's name also shows on the page itself.
 
 `shopperReference` (the first argument) is Adyen's identifier for the
 cardholder and is what ties stored cards to a person. Keep it stable per
