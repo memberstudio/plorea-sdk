@@ -53,7 +53,7 @@ Full documentation lives in [`docs/`](docs/README.md).
 | [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in |
 | [Embedded and native checkout](docs/checkout.md) | Drop-in on your domain or in an iOS / Android app |
 | [Going live](docs/going-live.md) | The production checklist |
-| [Subscriptions](docs/subscriptions.md) | Create, trials, update, cancel, reactivate, charges, dunning |
+| [Subscriptions](docs/subscriptions.md) | Create, trials, update, pause/resume, cancel, reactivate, charges, dunning |
 | [Webhooks](docs/webhooks.md) | Signature verification, the event catalogue, what is poll-only |
 | [Testing](docs/testing.md) | `Plorea::fake()`, stubs, assertions |
 | [Error handling](docs/errors.md) | Exceptions, status mapping, retries and idempotency |

@@ -96,6 +96,7 @@ isActive()`, never on `isActive()` alone.
 | --- | --- | --- |
 | `trialing` | `isTrialing()` | In trial, nothing charged yet |
 | `active` | `isActive()` | Billing on schedule |
+| `paused` | `isPaused()` | Billing paused; `nextChargeAt` cleared — see [below](#pause-and-resume) |
 | `canceled` | `isCanceled()` | Cancelled (US spelling) — access runs to `accessEndsAt` |
 | `past_due` | `isPastDue()` | A scheduled charge failed and Plorea is retrying it — see [below](#the-dunning-gap) |
 | `payment_failed` | `hasPaymentFailure()` | Documented by Plorea, **never observed** |
@@ -126,6 +127,67 @@ Plorea::subscriptions()->update($subscription->id)
 
 Only the fields you set are sent. The interval cannot be changed — cancel and
 create a new subscription for that.
+
+## Pause and resume
+
+Recommended by Plorea and captured in the test environment on 2026-10-01.
+Scheduler races, in-flight charges, retries and the later billing anchor still
+require verification in the consuming integration.
+
+```php
+$paused = Plorea::subscriptions()->pause($subscription->id);
+$resumed = Plorea::subscriptions()->resume($subscription->id, $nextChargeAt);
+```
+
+Both use `PATCH subscriptions/{id}`. Pause sends `status: paused`, which
+clears `nextChargeAt`; the card, the last charge and the amounts are kept, and
+`accessEndsAt` stays null. Resume sends `status: active` and an explicit
+`nextChargeAt` in the same request, and the response echoes the date. The date
+is serialized as UTC with milliseconds. The caller owns its value; the SDK does
+not infer paid entitlement or choose a date.
+
+What Plorea refuses (each a 400, `ValidationException`):
+
+- pausing anything but an `active` subscription — a trial included ("Cannot
+  change status from trialing to paused");
+- resuming anything but a `paused` subscription;
+- resuming with a date in the past ("nextChargeAt cannot be in the past") —
+  the subscription stays paused, so to bill now pass a moment a little ahead.
+
+To move the next charge without changing the status, use
+`update($id)->nextChargeAt($date)->save()`. It works on a paused subscription
+(it stays paused) and on a trial — but on a trial only `nextChargeAt` moves,
+`trialEndsAt` keeps its old value.
+
+**Open — no charge was seen after resume.** On three resumed test
+subscriptions the scheduler had not charged 3, 16 and 41 minutes after the
+resume date, and each stayed `active` with the lapsed `nextChargeAt`. Raised
+with Plorea 2026-10-01. Until it is settled, check after a resume date that the
+charge landed — `needingAttention()` reports the subscription as overdue once
+the grace period passes.
+
+The fluent equivalents are `update($id)->pause()->save()` and
+`update($id)->resumeAt($nextChargeAt)->save()`. Calling `pause()` after
+`resumeAt()` on the same builder removes the previously set charge date.
+
+Persist the original billing boundary before pausing, read back provider state
+after uncertain responses, and schedule recovery for failed resumes. Your application chooses the date under its own entitlement rules; for example,
+it may shift the saved boundary by the paused duration. Do not use cancellation/reactivation to implement this pause.
+A paused subscription is excluded from `isOverdue()` even if its response has
+a stale date. Pausing removes the subscription from `needingAttention()`, so track any
+existing debt separately in your app. Check status and charge history before
+pausing; this does not resolve debt or establish that in-flight charges stop.
+
+Only resume a subscription confirmed as `isPaused()`. Transitions from canceled,
+trialing or paused are refused; pausing while past_due and combined updates
+with amount/card changes are unverified. Use `reactivate()` for cancellation recovery.
+Do not blindly retry writes: a delayed resume replay could restore an old charge
+date after the scheduler has advanced it. Persist intent and reconcile readback
+and charges before deciding whether another write is needed.
+
+`Plorea::fake()` returns the pause/resume response but does not persist PATCH
+state for later reads. Use explicit stateful stubs for `find()` and list requests
+when testing a consuming app's recovery and readback lifecycle.
 
 ## Cancel
 

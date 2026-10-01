@@ -1,0 +1,6 @@
+{
+    "error": "Cannot change status from trialing to paused",
+    "subscriptionId": "sub_test_golden_trial",
+    "currentStatus": "trialing",
+    "allowedTransitions": []
+}

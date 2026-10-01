@@ -1,0 +1,25 @@
+{
+    "subscriptionId": "sub_test_golden_trial",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "externalId": "GOLDEN-EXT-TRIAL-001",
+    "title": "Golden fixture trial plan",
+    "description": null,
+    "amount": {
+        "value": 100,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "unit": "month",
+        "count": 1
+    },
+    "trialEndsAt": "2026-10-08T21:04:19+00:00",
+    "nextChargeAt": "2026-10-21T21:04:20.684Z",
+    "status": "trialing",
+    "vatRate": null,
+    "vatAmount": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "updatedAt": "2026-10-01T21:04:21.087Z"
+}

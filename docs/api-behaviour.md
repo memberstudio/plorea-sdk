@@ -331,7 +331,7 @@ Never parse a Plorea validation message.
 
 ## Subscriptions
 
-### ✅ Statuses: `active`, `trialing`, `canceled` — 2026-09-04 / 2026-09-07; `past_due` — 2026-10-01
+### ✅ Statuses: `active`, `trialing`, `canceled` — 2026-09-04 / 2026-09-07; `past_due`, `paused` — 2026-10-01
 
 US spelling. `trialing` is a distinct state, not a flavour of active. `past_due`
 is what a failed scheduled charge produces — see below.
@@ -418,6 +418,47 @@ overdue — `needingAttention()` checks the status as well. What happens after t
 last retry (a terminal status, or `canceled`) is not yet observed.
 
 Fixture: `subscription-past-due.json`.
+
+### ✅ Pause and resume — captured 2026-10-01 (test)
+
+Recommended by Plorea on 2026-10-01: `PATCH subscriptions/{id}` with
+`{"status": "paused"}`, and `{"status": "active", "nextChargeAt": "..."}` to
+resume. Probed the same evening on fresh 1 NOK monthly subscriptions:
+
+| Request | Result |
+| --- | --- |
+| pause an `active` subscription | 200, `status: "paused"`, `nextChargeAt: null` |
+| read it back | `lastChargeAt`, card and amounts kept; `accessEndsAt`, `canceledAt` null; no `pausedAt` key |
+| pause a `trialing` one | 400 "Cannot change status from trialing to paused", `allowedTransitions: []` |
+| pause a `paused` one | 400, `allowedTransitions: ["active"]` |
+| pause a `canceled` one | 400, `allowedTransitions: []` |
+| `status: "frozen"` | 400 "status can only be set to active or paused" |
+| `nextChargeAt` alone on a `paused` one | 200, still `paused`, date set |
+| `nextChargeAt` alone on a `trialing` one | 200, still `trialing`; `trialEndsAt` unchanged |
+| resume with no date (none set) | 400 "nextChargeAt is required when reactivating a paused subscription" |
+| resume with no date (one set while paused) | 200, `active`, keeps that date |
+| resume with a past date | 400 "nextChargeAt cannot be in the past"; stays `paused` |
+| resume with a future date | 200, `active`, `nextChargeAt` exactly as sent |
+| resume an `active` one | 400, `allowedTransitions: ["paused"]` |
+
+Both PATCH responses are the short update projection (no charge history
+fields). A paused subscription is returned by the list endpoint, with and
+without a `status=paused` filter.
+
+**❓ Open: no charge was seen after resume.** Three subscriptions, each with
+one settled charge, were paused and resumed with `nextChargeAt` two minutes
+ahead. None was charged — checked 3, 16 and 41 minutes after the date — and
+each stayed `active` with the lapsed date. Reactivate lag was 7 s to 4.5 min,
+so this is longer than any scheduler delay seen before. Raised with Plorea
+2026-10-01. `isOverdue()` reports this state after the grace period.
+
+Unobserved: whether a webhook fires on pause or resume (the catalogue says
+nothing does), and production.
+
+Fixtures: `subscription-paused.json`, `subscription-paused-find.json`,
+`subscription-resumed.json`, `subscription-pause-trialing-refused.json`,
+`subscription-resume-past-date.json`,
+`subscription-next-charge-moved-trialing.json`.
 
 ### ✅ Not-chargeable returns 400, not 402 — 2026-09-04
 

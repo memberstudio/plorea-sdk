@@ -1,0 +1,41 @@
+{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "shopperReference": "golden-shopper-001",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 100,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "count": 1,
+        "unit": "month"
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": null,
+    "retryPolicy": {
+        "retryIntervalDays": 1,
+        "maxRetries": 3
+    },
+    "retryCount": 0,
+    "lastChargeAt": "2026-10-01T21:04:58.117Z",
+    "lastPaymentReference": "sub_test_golden-chg_test_golden_1",
+    "failureReason": null,
+    "canceledAt": null,
+    "cancelReason": null,
+    "accessEndsAt": null,
+    "status": "paused",
+    "externalId": "GOLDEN-EXT-PAUSE-001",
+    "title": "Golden fixture pause plan",
+    "description": null,
+    "vatRate": null,
+    "vatAmount": null,
+    "merchantOrgNr": null,
+    "metadata": [],
+    "createdAt": "2026-10-01T21:04:22.147Z",
+    "updatedAt": "2026-10-01T21:05:03.507Z"
+}

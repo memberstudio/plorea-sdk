@@ -138,9 +138,9 @@ trialing subscription is not `isActive()`. Cancelling during a trial leaves
 `accessEndsAt` **null** (it is derived from the last charge, and there is
 none) — treat null as "access ends now", not "never ends".
 
-Statuses are `active`, `trialing`, `past_due` and `canceled` (US spelling) — use
-`isActive()`, `isCanceled()`, `isPastDue()`, or `is('...')`, never string
-comparison. Cancelling clears `nextChargeAt` and sets `accessEndsAt` one
+Statuses are `active`, `trialing`, `paused`, `past_due` and `canceled` (US
+spelling) — use `isActive()`, `isPaused()`, `isCanceled()`, `isPastDue()`, or
+`is('...')`, never string comparison. Cancelling clears `nextChargeAt` and sets `accessEndsAt` one
 interval after the last charge; gate access on that date, not on
 `canceledAt`.
 

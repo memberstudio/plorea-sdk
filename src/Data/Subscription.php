@@ -110,6 +110,11 @@ final readonly class Subscription
         return $this->is('active');
     }
 
+    public function isPaused(): bool
+    {
+        return $this->is('paused');
+    }
+
     public function isTrialing(): bool
     {
         return $this->is('trialing');
@@ -159,15 +164,15 @@ final readonly class Subscription
      * subscription turns past_due and nextChargeAt moves to the retry. Use
      * isPastDue() for that case.
      *
-     * A canceled subscription is never overdue: it keeps whatever
-     * nextChargeAt it had when scheduling stopped.
+     * Canceled and paused subscriptions are never overdue, even if a
+     * response retains a stale nextChargeAt.
      *
      * Being overdue says the cycle did not complete, not why. Read
      * subscriptions()->charges() for that.
      */
     public function isOverdue(int $graceMinutes = 60, ?DateTimeInterface $now = null): bool
     {
-        if (! $this->nextChargeAt instanceof CarbonImmutable || $this->isCanceled()) {
+        if (! $this->nextChargeAt instanceof CarbonImmutable || $this->isCanceled() || $this->isPaused()) {
             return false;
         }
 

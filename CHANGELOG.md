@@ -2,6 +2,18 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.9 - 2026-10-02
+
+### Added
+
+- Native subscription `pause()` and `resume($id, $nextChargeAt)`, plus fluent
+  `pause()` / `resumeAt()` / `nextChargeAt()` updates. Dates are sent in UTC.
+- `Subscription::isPaused()`; intentional pauses are excluded from overdue checks
+  and `needingAttention()`. Existing debt must remain tracked by the application.
+
+Captured in the test environment 2026-10-01, with golden fixtures. A charge
+after resume has not yet been observed; see `docs/api-behaviour.md`.
+
 ## v0.3.8 - 2026-10-01
 
 ### Added

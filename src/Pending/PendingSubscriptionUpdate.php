@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Pending;
 
+use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\Subscription;
@@ -79,6 +82,41 @@ class PendingSubscriptionUpdate
     public function paymentMethod(string $paymentMethodId): static
     {
         $this->changes['paymentMethodId'] = $paymentMethodId;
+
+        return $this;
+    }
+
+    /** Plorea clears the next charge date when this update pauses billing. */
+    public function pause(): static
+    {
+        $this->changes['status'] = 'paused';
+        unset($this->changes['nextChargeAt']);
+
+        return $this;
+    }
+
+    /** Resume a confirmed pause with an explicit charge date serialized in UTC. */
+    public function resumeAt(DateTimeInterface $nextChargeAt): static
+    {
+        $this->changes['status'] = 'active';
+
+        return $this->nextChargeAt($nextChargeAt);
+    }
+
+    /**
+     * Move the next scheduled charge without changing the status, serialized
+     * in UTC.
+     *
+     * Captured 2026-10-01 (test): accepted on an active, paused or trialing
+     * subscription. A paused subscription stays paused with the date set,
+     * and a later resume without a new date keeps it. On a trialing
+     * subscription only nextChargeAt moves; trialEndsAt keeps its value.
+     */
+    public function nextChargeAt(DateTimeInterface $nextChargeAt): static
+    {
+        $this->changes['nextChargeAt'] = DateTimeImmutable::createFromInterface($nextChargeAt)
+            ->setTimezone(new DateTimeZone('UTC'))
+            ->format('Y-m-d\TH:i:s.v\Z');
 
         return $this;
     }

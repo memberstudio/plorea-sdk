@@ -258,6 +258,10 @@ final class DefaultFixtures
             $subscription['status'] = 'trialing';
         }
 
+        if ($subscription['status'] === 'paused') {
+            $subscription['nextChargeAt'] = null;
+        }
+
         return $subscription;
     }
 
