@@ -270,18 +270,18 @@ Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `is(string $status)`.
 | `$quantity`, `$vatRate`, `$vatAmount` | |
 | `$externalId`, `$title`, `$description` | |
 | `$interval` | `?BillingInterval` |
-| `$status` | `active` \| `trialing` \| `canceled` \| (`payment_failed`, unobserved) |
+| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| (`payment_failed`, unobserved) |
 | `$trialEndsAt`, `$nextChargeAt`, `$lastChargeAt` | `?CarbonImmutable` |
 | `$lastPaymentReference` | `{subId}-{chgId}` — resolvable as a payment for **manual** charges only |
-| `$retryPolicy`, `$retryCount`, `$failureReason` | Dunning — see [known limitations](api-behaviour.md#what-cannot-be-reproduced-in-test) |
+| `$retryPolicy`, `$retryCount`, `$failureReason` | Dunning — populated on a `past_due` subscription; see [dunning](subscriptions.md#the-dunning-gap) |
 | `$canceledAt`, `$cancelReason`, `$accessEndsAt` | `accessEndsAt` is null when cancelling a trial |
 | `$metadata`, `$createdAt`, `$updatedAt`, `$raw` | |
 
-Helpers: `isActive()`, `isTrialing()`, `isCanceled()`, `hasPaymentFailure()`,
+Helpers: `isActive()`, `isTrialing()`, `isCanceled()`, `isPastDue()`, `hasPaymentFailure()`,
 `is(string $status)`, and
 `isOverdue(int $graceMinutes = 60, ?DateTimeInterface $now = null)` — a
 scheduled charge that has not landed. A canceled subscription is never
-overdue.
+overdue, and neither is a `past_due` one — its `nextChargeAt` is the retry.
 
 ### `SubscriptionCharge`
 

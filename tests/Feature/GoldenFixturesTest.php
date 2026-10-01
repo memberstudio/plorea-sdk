@@ -878,6 +878,36 @@ class GoldenFixturesTest extends TestCase
         $this->assertSame(0, $subscription->retryCount);
     }
 
+    /**
+     * Captured 2026-10-01 from production: a monthly subscription whose first
+     * scheduled charge failed. Plorea reports past_due, counts the failure in
+     * retryCount, and moves nextChargeAt to the retry one day later.
+     */
+    public function test_it_parses_a_real_past_due_subscription_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_past_due?*' => Http::response($this->fixture('subscription-past-due')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->find('sub_test_golden_past_due');
+
+        $this->assertTrue($subscription->isPastDue());
+        $this->assertFalse($subscription->isActive());
+        $this->assertFalse($subscription->isCanceled());
+        $this->assertFalse($subscription->hasPaymentFailure());
+
+        $this->assertSame(1, $subscription->retryCount);
+        $this->assertSame('PaymentDetail not found', $subscription->failureReason);
+        $this->assertNull($subscription->lastChargeAt);
+        $this->assertNotNull($subscription->lastPaymentReference);
+        $this->assertNotNull($subscription->customerId);
+
+        // nextChargeAt is the retry, so the subscription is not overdue —
+        // only the status says something went wrong.
+        $this->assertSame('2026-10-02 12:44:58', $subscription->nextChargeAt?->format('Y-m-d H:i:s'));
+        $this->assertFalse($subscription->isOverdue(now: CarbonImmutable::parse('2026-10-01T16:00:00Z')));
+    }
+
     public function test_a_canceled_trial_has_no_access_end_date(): void
     {
         Http::fake([

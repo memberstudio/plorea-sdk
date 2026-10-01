@@ -2,6 +2,20 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.8 - 2026-10-01
+
+### Added
+
+- **`Subscription::isPastDue()`** for the `past_due` status, captured from
+  production: a failed scheduled charge turns the subscription `past_due`,
+  sets `retryCount` and `failureReason`, and moves `nextChargeAt` to the retry.
+
+### Changed
+
+- **`subscriptions()->needingAttention()` now also returns `past_due`
+  subscriptions.** Before, it missed them: their `nextChargeAt` is the retry,
+  so they are never overdue.
+
 ## v0.3.7 - 2026-09-30
 
 ### Changed

@@ -1,0 +1,41 @@
+{
+    "subscriptionId": "sub_test_golden_past_due",
+    "tenantId": "test-tenant",
+    "customerId": "01TESTGOLDENCUSTOMER000001",
+    "paymentMethodId": "pm_test_golden_method",
+    "shopperReference": "golden-shopper-001",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "unit": "month",
+        "count": 1
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-10-02T12:44:58.594Z",
+    "retryPolicy": {
+        "maxRetries": 3,
+        "retryIntervalDays": 1
+    },
+    "retryCount": 1,
+    "lastChargeAt": null,
+    "lastPaymentReference": "sub_test_golden_past_due-chg_test_golden_past_due",
+    "failureReason": "PaymentDetail not found",
+    "canceledAt": null,
+    "cancelReason": null,
+    "accessEndsAt": null,
+    "status": "past_due",
+    "externalId": "GOLDEN-EXT-PAST-DUE",
+    "title": "Golden fixture plan",
+    "description": null,
+    "vatRate": null,
+    "vatAmount": null,
+    "merchantOrgNr": "999999999",
+    "metadata": [],
+    "createdAt": "2026-10-01T12:44:11.560Z",
+    "updatedAt": "2026-10-01T12:44:58.594Z"
+}
