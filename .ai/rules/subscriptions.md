@@ -173,3 +173,14 @@ Those shapes are modelled from documentation, not observed — write dunning cod
 that tolerates a slightly different shape. The first failure itself (`past_due`,
 `retryCount`, `failureReason`) was CAPTURED in production 2026-10-01; it still
 cannot be produced in test.
+
+## Native pause — stated by Plorea 2026-10-01, not captured
+
+`PATCH subscriptions/{id}` accepts `status: paused`, clears `nextChargeAt`, and
+excludes paused subscriptions from scheduler selection. Resume uses `status:
+active` and an explicit `nextChargeAt` in one PATCH. SDK helpers are `pause()`
+and `resume($id, $nextChargeAt)`, or builder `pause()` / `resumeAt()`.
+
+Persist the original boundary before the provider clears it. In-flight charges,
+retry cancellation, past-date handling and later billing anchors are unverified.
+Constructed tests for this contract are not golden captures.

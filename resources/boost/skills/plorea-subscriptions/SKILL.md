@@ -153,9 +153,12 @@ Plorea::subscriptions()->update($id)->paymentMethod($newMethod->id)->save(); // 
 - Only the fields you set are sent.
 - **The interval cannot be changed.** Moving between monthly and yearly is a
   cancel plus a new subscription; mind the period already paid for.
-- The SDK has no pause call. Model a pause in your own app (for example cancel, and
-  start again with a trial until the resume date) and test what it does to
-  `accessEndsAt`.
+- Pause with `subscriptions()->pause($id)`; resume with `resume($id, $nextChargeAt)`.
+  Plorea states that pause clears the date and excludes scheduler selection.
+  Persist the original billing boundary first; compute the resume charge date
+  from unused paid time, confirm provider state, and recover failed resumes.
+  This contract is stated by Plorea (2026-10-01), not yet captured in TEST.
+  Verify in-flight charges, retries, and future billing anchors before rollout.
 - Proration is yours to compute. A one-off difference can be taken with a manual
   `charge($id, amount: ..., reason: ...)`; a declined manual charge throws
   `ChargeFailedException` (402).

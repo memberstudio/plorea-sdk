@@ -127,6 +127,34 @@ Plorea::subscriptions()->update($subscription->id)
 Only the fields you set are sent. The interval cannot be changed — cancel and
 create a new subscription for that.
 
+## Pause and resume
+
+Plorea confirmed this contract on 2026-10-01. It has not yet been captured in
+TEST; scheduler races, in-flight charges, retries and the later billing anchor
+still require verification in the consuming integration.
+
+```php
+$paused = Plorea::subscriptions()->pause($subscription->id);
+$resumed = Plorea::subscriptions()->resume($subscription->id, $nextChargeAt);
+```
+
+Both use `PATCH subscriptions/{id}`. Pause sends `status: paused`; Plorea says
+this clears `nextChargeAt` and excludes the subscription from its scheduler.
+Resume sends `status: active` and an explicit `nextChargeAt` in the same request.
+The date is serialized as UTC with milliseconds. The caller owns its value;
+the SDK does not infer paid entitlement, choose a date, or reject past dates.
+
+The fluent equivalents are `update($id)->pause()->save()` and
+`update($id)->resumeAt($nextChargeAt)->save()`. Calling `pause()` after
+`resumeAt()` on the same builder removes the previously set charge date.
+
+Persist the original billing boundary before pausing, read back provider state
+after uncertain responses, and schedule recovery for failed resumes. A member
+can have unused paid days after access resumes; do not automatically charge on
+the resume day. Do not use cancellation/reactivation to implement this pause.
+A paused subscription is excluded from `isOverdue()` even if its response has
+a stale date. This does not resolve earlier debt or cancel an in-flight charge.
+
 ## Cancel
 
 ```php

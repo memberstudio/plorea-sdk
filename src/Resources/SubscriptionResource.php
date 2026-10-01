@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Resources;
 
+use DateTimeInterface;
 use Illuminate\Support\Collection;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
@@ -68,6 +69,18 @@ class SubscriptionResource extends Resource
     public function update(string $subscriptionId): PendingSubscriptionUpdate
     {
         return new PendingSubscriptionUpdate($this->client, $subscriptionId);
+    }
+
+    /** Plorea states that pausing clears nextChargeAt and stops scheduler selection. */
+    public function pause(string $subscriptionId): Subscription
+    {
+        return $this->update($subscriptionId)->pause()->save();
+    }
+
+    /** Resume a paused subscription with the caller's explicit billing date. */
+    public function resume(string $subscriptionId, DateTimeInterface $nextChargeAt): Subscription
+    {
+        return $this->update($subscriptionId)->resumeAt($nextChargeAt)->save();
     }
 
     /**

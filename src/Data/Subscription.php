@@ -110,6 +110,11 @@ final readonly class Subscription
         return $this->is('active');
     }
 
+    public function isPaused(): bool
+    {
+        return $this->is('paused');
+    }
+
     public function isTrialing(): bool
     {
         return $this->is('trialing');
@@ -167,7 +172,7 @@ final readonly class Subscription
      */
     public function isOverdue(int $graceMinutes = 60, ?DateTimeInterface $now = null): bool
     {
-        if (! $this->nextChargeAt instanceof CarbonImmutable || $this->isCanceled()) {
+        if (! $this->nextChargeAt instanceof CarbonImmutable || $this->isCanceled() || $this->isPaused()) {
             return false;
         }
 

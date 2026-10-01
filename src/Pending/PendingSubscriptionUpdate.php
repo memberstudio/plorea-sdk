@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Pending;
 
+use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\Subscription;
@@ -79,6 +82,24 @@ class PendingSubscriptionUpdate
     public function paymentMethod(string $paymentMethodId): static
     {
         $this->changes['paymentMethodId'] = $paymentMethodId;
+
+        return $this;
+    }
+
+    public function pause(): static
+    {
+        $this->changes['status'] = 'paused';
+        unset($this->changes['nextChargeAt']);
+
+        return $this;
+    }
+
+    public function resumeAt(DateTimeInterface $nextChargeAt): static
+    {
+        $this->changes['status'] = 'active';
+        $this->changes['nextChargeAt'] = DateTimeImmutable::createFromInterface($nextChargeAt)
+            ->setTimezone(new DateTimeZone('UTC'))
+            ->format('Y-m-d\TH:i:s.v\Z');
 
         return $this;
     }
