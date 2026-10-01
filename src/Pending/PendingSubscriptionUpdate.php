@@ -86,6 +86,7 @@ class PendingSubscriptionUpdate
         return $this;
     }
 
+    /** Plorea clears the next charge date when this update pauses billing. */
     public function pause(): static
     {
         $this->changes['status'] = 'paused';
@@ -94,6 +95,7 @@ class PendingSubscriptionUpdate
         return $this;
     }
 
+    /** Resume a confirmed pause with an explicit charge date serialized in UTC. */
     public function resumeAt(DateTimeInterface $nextChargeAt): static
     {
         $this->changes['status'] = 'active';

@@ -96,6 +96,7 @@ isActive()`, never on `isActive()` alone.
 | --- | --- | --- |
 | `trialing` | `isTrialing()` | In trial, nothing charged yet |
 | `active` | `isActive()` | Billing on schedule |
+| `paused` | `isPaused()` | Scheduler excluded and next date cleared; stated by Plorea, not captured |
 | `canceled` | `isCanceled()` | Cancelled (US spelling) — access runs to `accessEndsAt` |
 | `past_due` | `isPastDue()` | A scheduled charge failed and Plorea is retrying it — see [below](#the-dunning-gap) |
 | `payment_failed` | `hasPaymentFailure()` | Documented by Plorea, **never observed** |
@@ -149,11 +150,23 @@ The fluent equivalents are `update($id)->pause()->save()` and
 `resumeAt()` on the same builder removes the previously set charge date.
 
 Persist the original billing boundary before pausing, read back provider state
-after uncertain responses, and schedule recovery for failed resumes. A member
-can have unused paid days after access resumes; do not automatically charge on
-the resume day. Do not use cancellation/reactivation to implement this pause.
+after uncertain responses, and schedule recovery for failed resumes. Your application chooses the date under its own entitlement rules; for example,
+it may shift the saved boundary by the paused duration. Do not use cancellation/reactivation to implement this pause.
 A paused subscription is excluded from `isOverdue()` even if its response has
-a stale date. This does not resolve earlier debt or cancel an in-flight charge.
+a stale date. Pausing removes the subscription from `needingAttention()`, so track any
+existing debt separately in your app. Check status and charge history before
+pausing; this does not resolve debt or establish that in-flight charges stop.
+
+Only resume a subscription confirmed as `isPaused()`. Transitions from canceled,
+trialing or past_due, pausing while trialing/past_due, and combined updates with
+amount/card changes are unverified. Use `reactivate()` for cancellation recovery.
+Do not blindly retry writes: a delayed resume replay could restore an old charge
+date after the scheduler has advanced it. Persist intent and reconcile readback
+and charges before deciding whether another write is needed.
+
+`Plorea::fake()` returns the pause/resume response but does not persist PATCH
+state for later reads. Use explicit stateful stubs for `find()` and list requests
+when testing a consuming app's recovery and readback lifecycle.
 
 ## Cancel
 

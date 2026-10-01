@@ -184,3 +184,7 @@ and `resume($id, $nextChargeAt)`, or builder `pause()` / `resumeAt()`.
 Persist the original boundary before the provider clears it. In-flight charges,
 retry cancellation, past-date handling and later billing anchors are unverified.
 Constructed tests for this contract are not golden captures.
+
+Only resume a confirmed pause; other source states and combined updates remain
+unverified. Pausing a trial or past_due subscription is unverified. Do not
+assume a repeated resume is safe after the scheduler has advanced the date.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Tests\Feature;
 
+use DateTime;
 use DateTimeImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -37,7 +38,7 @@ class SubscriptionPauseTest extends TestCase
         Http::fake(['*' => Http::response([
             'subscriptionId' => 'sub_1', 'status' => 'active', 'nextChargeAt' => '2026-11-02T23:00:00.123Z',
         ])]);
-        $nextChargeAt = new DateTimeImmutable('2026-11-03T00:00:00.123+01:00');
+        $nextChargeAt = new DateTime('2026-11-03T00:00:00.123+01:00');
 
         $subscription = Plorea::subscriptions()->resume('sub_1', $nextChargeAt);
 

@@ -164,8 +164,8 @@ final readonly class Subscription
      * subscription turns past_due and nextChargeAt moves to the retry. Use
      * isPastDue() for that case.
      *
-     * A canceled subscription is never overdue: it keeps whatever
-     * nextChargeAt it had when scheduling stopped.
+     * Canceled and paused subscriptions are never overdue, even if a
+     * response retains a stale nextChargeAt.
      *
      * Being overdue says the cycle did not complete, not why. Read
      * subscriptions()->charges() for that.
