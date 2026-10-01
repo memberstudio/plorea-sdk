@@ -154,15 +154,19 @@ Plorea::subscriptions()->update($id)->paymentMethod($newMethod->id)->save(); // 
 - **The interval cannot be changed.** Moving between monthly and yearly is a
   cancel plus a new subscription; mind the period already paid for.
 - Pause with `subscriptions()->pause($id)`; resume with `resume($id, $nextChargeAt)`.
-  Plorea states that pause clears the date and excludes scheduler selection.
+  Pause clears `nextChargeAt` and keeps the card. Only `active` ⇄ `paused` is
+  allowed: pausing a trial is a 400 (move its date with
+  `update($id)->nextChargeAt()` instead), and a past resume date is a 400.
   Persist the original billing boundary first and choose the resume date under
   your application's entitlement rules. Only resume a confirmed `isPaused()`
   subscription. Reconcile uncertain writes before retrying; a late replay can
   restore an old date after a charge. Track existing debt separately because
   paused subscriptions disappear from `needingAttention()`.
-  This contract is stated by Plorea (2026-10-01), not yet captured in TEST.
-  Verify in-flight charges, retries, future billing anchors, trial/past_due
-  pauses and combined updates before rollout. For recovery tests, use stateful
+  Captured in test 2026-10-01. No charge has yet been seen after a resume
+  (open with Plorea): verify the charge lands, and rely on
+  `needingAttention()` to flag it once overdue. Verify in-flight charges,
+  retries, future billing anchors, past_due pauses and combined updates before
+  rollout. For recovery tests, use stateful
   stubs: the default fake does not persist subscription PATCH state to reads.
 - Proration is yours to compute. A one-off difference can be taken with a manual
   `charge($id, amount: ..., reason: ...)`; a declined manual charge throws

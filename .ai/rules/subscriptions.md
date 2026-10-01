@@ -174,17 +174,30 @@ that tolerates a slightly different shape. The first failure itself (`past_due`,
 `retryCount`, `failureReason`) was CAPTURED in production 2026-10-01; it still
 cannot be produced in test.
 
-## Native pause — stated by Plorea 2026-10-01, not captured
+## Native pause — CAPTURED 2026-10-01 (test)
 
-`PATCH subscriptions/{id}` accepts `status: paused`, clears `nextChargeAt`, and
-excludes paused subscriptions from scheduler selection. Resume uses `status:
-active` and an explicit `nextChargeAt` in one PATCH. SDK helpers are `pause()`
-and `resume($id, $nextChargeAt)`, or builder `pause()` / `resumeAt()`.
+`PATCH subscriptions/{id}` with `status: paused` clears `nextChargeAt`; resume
+is `status: active` plus `nextChargeAt` in one PATCH. SDK helpers are `pause()`
+and `resume($id, $nextChargeAt)`, or builder `pause()` / `resumeAt()` /
+`nextChargeAt()`. Full matrix in `docs/api-behaviour.md`; golden fixtures
+`subscription-paused*.json`, `subscription-resumed.json`,
+`subscription-pause-trialing-refused.json`, `subscription-resume-past-date.json`,
+`subscription-next-charge-moved-trialing.json`.
+
+- Only `active` ⇄ `paused`. Pausing `trialing`, `canceled` or `paused`, and
+  resuming anything not paused, is a 400. Any other status value is a 400.
+- Resume with a past date is a 400 and the subscription stays paused. Resume
+  without a date is a 400 unless one was set while paused.
+- `nextChargeAt` alone is accepted on paused (stays paused) and trialing
+  (`trialEndsAt` does not move).
+- A paused read keeps `lastChargeAt` and the card; `accessEndsAt`/`canceledAt`
+  stay null; there is no `pausedAt`.
+- **OPEN: no charge was seen after resume** — 3, 16 and 41 minutes past the
+  date, status `active`, date lapsed. Raised with Plorea. Do not document
+  resume as "billing restarts" until a post-resume charge is observed; the
+  overdue check is what catches it meanwhile.
 
 Persist the original boundary before the provider clears it. In-flight charges,
-retry cancellation, past-date handling and later billing anchors are unverified.
-Constructed tests for this contract are not golden captures.
-
-Only resume a confirmed pause; other source states and combined updates remain
-unverified. Pausing a trial or past_due subscription is unverified. Do not
-assume a repeated resume is safe after the scheduler has advanced the date.
+retry cancellation, pausing `past_due`, later billing anchors and combined
+updates (amount/card with status) are unverified. Do not assume a repeated
+resume is safe after the scheduler has advanced the date.

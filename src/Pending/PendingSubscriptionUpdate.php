@@ -99,6 +99,21 @@ class PendingSubscriptionUpdate
     public function resumeAt(DateTimeInterface $nextChargeAt): static
     {
         $this->changes['status'] = 'active';
+
+        return $this->nextChargeAt($nextChargeAt);
+    }
+
+    /**
+     * Move the next scheduled charge without changing the status, serialized
+     * in UTC.
+     *
+     * Captured 2026-10-01 (test): accepted on an active, paused or trialing
+     * subscription. A paused subscription stays paused with the date set,
+     * and a later resume without a new date keeps it. On a trialing
+     * subscription only nextChargeAt moves; trialEndsAt keeps its value.
+     */
+    public function nextChargeAt(DateTimeInterface $nextChargeAt): static
+    {
         $this->changes['nextChargeAt'] = DateTimeImmutable::createFromInterface($nextChargeAt)
             ->setTimezone(new DateTimeZone('UTC'))
             ->format('Y-m-d\TH:i:s.v\Z');

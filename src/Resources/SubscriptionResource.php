@@ -71,13 +71,29 @@ class SubscriptionResource extends Resource
         return new PendingSubscriptionUpdate($this->client, $subscriptionId);
     }
 
-    /** Plorea states that pausing clears nextChargeAt and stops scheduler selection. */
+    /**
+     * Pause billing. Plorea clears nextChargeAt and its scheduler skips the
+     * subscription; the stored payment method and charge history are kept.
+     *
+     * Captured 2026-10-01 (test): only an active subscription can be paused.
+     * A trialing, canceled or already paused one is refused with 400
+     * (ValidationException), e.g. "Cannot change status from trialing to
+     * paused". To hold a trial, move its date with update()->nextChargeAt().
+     */
     public function pause(string $subscriptionId): Subscription
     {
         return $this->update($subscriptionId)->pause()->save();
     }
 
-    /** Resume a paused subscription with the caller's explicit billing date. */
+    /**
+     * Resume a paused subscription with the caller's explicit billing date.
+     *
+     * Captured 2026-10-01 (test): the response echoes nextChargeAt exactly
+     * as sent. A date in the past is refused with 400 ("nextChargeAt cannot
+     * be in the past") and the subscription stays paused, so to bill now
+     * pass a moment a little ahead. Only a paused subscription can be
+     * resumed; anything else is refused with 400.
+     */
     public function resume(string $subscriptionId, DateTimeInterface $nextChargeAt): Subscription
     {
         return $this->update($subscriptionId)->resumeAt($nextChargeAt)->save();

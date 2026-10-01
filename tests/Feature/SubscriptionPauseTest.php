@@ -76,6 +76,21 @@ class SubscriptionPauseTest extends TestCase
         $this->assertSame('2026-12-01T00:00:00+00:00', $subscription->nextChargeAt?->toIso8601String());
     }
 
+    public function test_the_next_charge_moves_without_changing_the_status(): void
+    {
+        Http::fake(['*' => Http::response([
+            'subscriptionId' => 'sub_1', 'status' => 'paused', 'nextChargeAt' => '2026-11-30T23:00:00.000Z',
+        ])]);
+
+        Plorea::subscriptions()->update('sub_1')
+            ->nextChargeAt(new DateTimeImmutable('2026-12-01T00:00:00+01:00'))
+            ->save();
+
+        Http::assertSent(fn (Request $request): bool => $request->data() === [
+            'nextChargeAt' => '2026-11-30T23:00:00.000Z', 'platform' => 'memberflow',
+        ]);
+    }
+
     public function test_paused_subscriptions_are_not_overdue_even_with_a_stale_date(): void
     {
         $subscription = Subscription::fromArray([

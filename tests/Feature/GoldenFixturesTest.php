@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MemberFlow\Plorea\Tests\Feature;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
@@ -703,6 +704,124 @@ class GoldenFixturesTest extends TestCase
             );
             $this->assertSame(400, $caught->status);
         }
+    }
+
+    /**
+     * Captured 2026-10-01 (test environment). Pausing an active subscription
+     * answers with the PATCH projection — no charge history fields — and
+     * clears nextChargeAt. A follow-up read shows the last charge is kept and
+     * accessEndsAt stays null: a pause is not a cancellation.
+     */
+    public function test_it_parses_a_real_pause_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden?*' => Http::response($this->fixture('subscription-paused-find')),
+            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-paused')),
+        ]);
+
+        $paused = Plorea::subscriptions()->pause('sub_test_golden');
+
+        $this->assertTrue($paused->isPaused());
+        $this->assertFalse($paused->isActive());
+        $this->assertNull($paused->nextChargeAt);
+        $this->assertArrayHasKey('nextChargeAt', $paused->raw);
+        $this->assertSame('pm_test_golden_method', $paused->paymentMethodId);
+        $this->assertNull($paused->lastChargeAt);
+        $this->assertArrayNotHasKey('lastChargeAt', $paused->raw);
+
+        $found = Plorea::subscriptions()->find('sub_test_golden');
+
+        $this->assertTrue($found->isPaused());
+        $this->assertNull($found->nextChargeAt);
+        $this->assertSame('2026-10-01 21:04:58', $found->lastChargeAt?->utc()->format('Y-m-d H:i:s'));
+        $this->assertNull($found->accessEndsAt);
+        $this->assertNull($found->canceledAt);
+        $this->assertArrayNotHasKey('pausedAt', $found->raw);
+        $this->assertFalse($found->isOverdue());
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === ['status' => 'paused', 'platform' => 'memberflow']);
+    }
+
+    /**
+     * Captured 2026-10-01 (test environment). Resuming answers with the
+     * subscription active and nextChargeAt exactly as sent.
+     */
+    public function test_it_parses_a_real_resume_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-resumed')),
+        ]);
+
+        $resumed = Plorea::subscriptions()->resume('sub_test_golden', CarbonImmutable::parse('2026-10-01T23:10:40.684+02:00'));
+
+        $this->assertTrue($resumed->isActive());
+        $this->assertSame('2026-10-01T21:10:40.684Z', $resumed->raw['nextChargeAt']);
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === ['status' => 'active', 'nextChargeAt' => '2026-10-01T21:10:40.684Z', 'platform' => 'memberflow']);
+    }
+
+    public function test_it_maps_a_real_pause_on_a_trialing_subscription_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_trial' => Http::response(
+                $this->fixture('subscription-pause-trialing-refused'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-10-01. Only active -> paused and paused -> active are
+        // allowed; a trialing (or canceled) subscription answers with an
+        // empty allowedTransitions list.
+        try {
+            Plorea::subscriptions()->pause('sub_test_golden_trial');
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('Cannot change status from trialing to paused', $caught->getMessage());
+            $this->assertSame('trialing', $caught->response?->json('currentStatus'));
+            $this->assertSame([], $caught->response?->json('allowedTransitions'));
+        }
+    }
+
+    public function test_it_maps_a_real_resume_with_a_past_date_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response(
+                $this->fixture('subscription-resume-past-date'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-10-01. A past nextChargeAt is refused rather than
+        // charged at once, and the subscription stays paused.
+        try {
+            Plorea::subscriptions()->resume('sub_test_golden', CarbonImmutable::parse('2026-10-01T21:00:04.842Z'));
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('nextChargeAt cannot be in the past', $caught->getMessage());
+            $this->assertSame(400, $caught->status);
+        }
+    }
+
+    /**
+     * Captured 2026-10-01 (test environment). Moving the date on a trialing
+     * subscription moves nextChargeAt only: trialEndsAt keeps its value, so
+     * the two no longer match.
+     */
+    public function test_it_parses_a_real_next_charge_move_on_a_trialing_subscription(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_trial' => Http::response($this->fixture('subscription-next-charge-moved-trialing')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->update('sub_test_golden_trial')
+            ->nextChargeAt(CarbonImmutable::parse('2026-10-21T21:04:20.684Z'))
+            ->save();
+
+        $this->assertTrue($subscription->isTrialing());
+        $this->assertSame('2026-10-21 21:04:20', $subscription->nextChargeAt?->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-08 21:04:19', $subscription->trialEndsAt?->utc()->format('Y-m-d H:i:s'));
     }
 
     public function test_it_maps_a_real_reactivate_on_active_subscription_to_a_validation_error(): void
