@@ -171,19 +171,23 @@ class SubscriptionResourceTest extends TestCase
 
     /**
      * The polling half of dunning. A failed scheduler charge emits no
-     * webhook, so the helper catches both the documented-but-never-observed
-     * payment_failed status and the overdue nextChargeAt that a real decline
-     * would leave behind whatever Plorea names the status.
+     * webhook, so the helper catches the past_due status Plorea reports
+     * while retrying (captured 2026-10-01), the documented-but-never-observed
+     * payment_failed status, and an overdue nextChargeAt left by a cycle that
+     * stalled without any failure status.
      */
     public function test_it_lists_subscriptions_needing_attention(): void
     {
         Http::fake([
             'payments.plorea.no/subscriptions?*' => Http::response([
                 'externalId' => 'ws_acme_456',
-                'count' => 4,
+                'count' => 5,
                 'items' => [
                     // Healthy: the scheduler has already moved the date on.
                     ['subscriptionId' => 'sub_ok', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    // A failed charge being retried: the date has moved to the
+                    // retry, so only the status gives it away.
+                    ['subscriptionId' => 'sub_past_due', 'status' => 'past_due', 'retryCount' => 1, 'nextChargeAt' => '2099-01-01T00:00:00Z'],
                     // The documented failure status.
                     ['subscriptionId' => 'sub_failed', 'status' => 'payment_failed', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
                     // Still active, but the charge that was due never landed.
@@ -196,11 +200,11 @@ class SubscriptionResourceTest extends TestCase
 
         $needsAttention = Plorea::subscriptions()->needingAttention('ws_acme_456');
 
-        $this->assertSame(['sub_failed', 'sub_stuck'], $needsAttention->pluck('id')->all());
+        $this->assertSame(['sub_past_due', 'sub_failed', 'sub_stuck'], $needsAttention->pluck('id')->all());
 
-        // The status filter is deliberately not sent: payment_failed has
-        // never been observed, so filtering server-side on it could drop the
-        // overdue subscriptions this exists to find.
+        // The status filter is deliberately not sent: a server-side filter on
+        // one failure status would drop the overdue subscriptions this also
+        // exists to find.
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456&platform=memberflow');
     }
 

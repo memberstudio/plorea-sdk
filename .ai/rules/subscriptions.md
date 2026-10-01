@@ -10,7 +10,9 @@ terminal** — the 1 NOK setup verification auth was refused and no card was
 stored, so start a new setup rather than retrying the charge. `failureReason`
 is null even on a real refusal, so branch on `status` alone.
 
-Subscriptions: `active` / `trialing` / `canceled` (US spelling).
+Subscriptions: `active` / `trialing` / `past_due` / `canceled` (US spelling).
+`past_due` = a scheduled charge failed and Plorea is retrying (CAPTURED from
+production 2026-10-01, fixture `subscription-past-due.json`).
 `accessEndsAt` = last charge + one interval; gate access on that, not on
 `canceledAt`.
 
@@ -102,23 +104,24 @@ Reported to Plorea 2026-09-04. `payments/status/{subId}-{chgId}` fails for
 Read scheduled outcomes from `charges()`. **Dunning must poll that, never
 `payments()->status()`.**
 
-## Dunning: `needingAttention()` leans on overdue, not on `payment_failed`
+## Dunning: `needingAttention()` = `past_due` + `payment_failed` + overdue
 
 `subscriptions()->needingAttention($externalId)` returns a subscription when it
-reports `payment_failed` **or** when `Subscription::isOverdue()` fires —
+reports `past_due` or `payment_failed`, **or** when `Subscription::isOverdue()` fires —
 `nextChargeAt` more than `$graceMinutes` (default 60) in the past, canceled
 subscriptions excluded because they keep a stale date.
 
-The overdue test is the load-bearing one **on purpose**. `payment_failed` is
-modelled from Plorea's documentation and has never been observed (see the dead
-end below), while `nextChargeAt` is captured. The scheduler charges within
+`past_due` is **not** overdue: Plorea moves `nextChargeAt` to the retry
+(failure + `retryIntervalDays`), so the status check is required — CAPTURED
+2026-10-01. `payment_failed` is documented, never observed. The overdue test
+stays **on purpose**, for a cycle that stalls without any failure status;
+`nextChargeAt` is captured. The scheduler charges within
 seconds of the due time and moves the date forward as it does, so a date still
 in the past means the cycle did not complete whatever Plorea names the status.
-If the documented failure shape turns out to be wrong, the overdue check still
-fires. **Do not reduce this to a status check.**
+**Do not reduce this to a status check, nor drop the status checks.**
 
 It deliberately sends no `status` filter to the list endpoint: filtering
-server-side on a never-observed value could drop the overdue subscriptions the
+server-side on one failure status could drop the overdue subscriptions the
 helper exists to find.
 
 It says *which* subscriptions to look at, never *why*. Read `charges()` for
@@ -163,8 +166,10 @@ setup verification itself, so the PM never activates
 (`storedPaymentMethodId: null`). An active-but-later-declining card is
 unreachable.
 
-Therefore the 402 body, a `payment_failed` subscription, `retryCount` /
-`failureReason`, and any `subscription.charge_failed` webhook are **all**
-blocked on Plorea provisioning a store-OK-decline-later test card (asked
-2026-09-08). Those shapes are modelled from documentation, not observed — write
-dunning code that tolerates a slightly different shape.
+Therefore the 402 body, a `payment_failed` subscription, the state after the
+last retry, and any `subscription.charge_failed` webhook are **all** blocked on
+Plorea provisioning a store-OK-decline-later test card (asked 2026-09-08).
+Those shapes are modelled from documentation, not observed — write dunning code
+that tolerates a slightly different shape. The first failure itself (`past_due`,
+`retryCount`, `failureReason`) was CAPTURED in production 2026-10-01; it still
+cannot be produced in test.

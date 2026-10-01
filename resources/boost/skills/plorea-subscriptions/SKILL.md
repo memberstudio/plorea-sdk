@@ -129,11 +129,12 @@ foreach (Plorea::subscriptions()->needingAttention($externalId) as $subscription
 }
 ```
 
-`needingAttention()` returns a subscription that reports `payment_failed` **or**
-whose `nextChargeAt` is more than an hour past (`graceMinutes:` to tune). Build
-on the overdue half. `payment_failed`, `failureReason` and `retryCount` are
-modelled from documentation and have not been observed, because no test card
-stores successfully and then declines. Do not branch on a failure reason.
+`needingAttention()` returns a subscription that reports `past_due` (or the
+documented, never-observed `payment_failed`) **or** whose `nextChargeAt` is more
+than an hour past (`graceMinutes:` to tune). A failed scheduled charge turns
+the subscription `past_due` (`isPastDue()`): `retryCount` counts the failures,
+`failureReason` holds the provider's message, and `nextChargeAt` moves to the
+retry, so it is not overdue. Do not branch on a failure reason.
 
 The same job should also settle anything the webhook missed: a pending entity
 whose latest charge is authorised gets activated here.

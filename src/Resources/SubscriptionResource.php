@@ -108,14 +108,13 @@ class SubscriptionResource extends Resource
      * 2026-09-09), so the only way to notice one is to ask. Run this on a
      * schedule for each of your billed entities.
      *
-     * A subscription is returned when it reports the payment_failed status,
-     * or when its nextChargeAt is more than $graceMinutes in the past. The
-     * second test is the one that carries the weight: payment_failed is
-     * modelled from Plorea's documentation and has never been observed,
-     * because no test card can store successfully and then decline, while an
-     * overdue nextChargeAt is derived from fields captured on the wire. If
-     * Plorea's failure shape turns out to differ from the documentation, the
-     * overdue check still fires.
+     * A subscription is returned when it reports past_due (a failed charge
+     * Plorea is retrying, captured from production 2026-10-01) or
+     * payment_failed (documented, never observed), or when its nextChargeAt
+     * is more than $graceMinutes in the past. The checks are independent: a
+     * past_due subscription has its nextChargeAt moved to the retry, so it is
+     * not overdue, and the overdue check catches a cycle that stalled without
+     * any failure status.
      *
      * This tells you which subscriptions to look at, not what went wrong.
      * Read charges() for that — a scheduler charge cannot be resolved
@@ -127,7 +126,7 @@ class SubscriptionResource extends Resource
      *
      *     if ($latest?->isAuthorised() !== true) {
      *         // Prompt for a new card. Do not branch on failureReason — it
-     *         // is null even for a genuine refusal.
+     *         // is the provider's free-text message, not a stable code.
      *     }
      * }
      * ```
@@ -140,7 +139,8 @@ class SubscriptionResource extends Resource
         int $graceMinutes = 60,
     ): Collection {
         return $this->forExternalId($externalId, $tenantId)
-            ->filter(fn (Subscription $subscription): bool => $subscription->hasPaymentFailure()
+            ->filter(fn (Subscription $subscription): bool => $subscription->isPastDue()
+                || $subscription->hasPaymentFailure()
                 || $subscription->isOverdue($graceMinutes))
             ->values();
     }

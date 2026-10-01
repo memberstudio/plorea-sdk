@@ -138,8 +138,8 @@ trialing subscription is not `isActive()`. Cancelling during a trial leaves
 `accessEndsAt` **null** (it is derived from the last charge, and there is
 none) — treat null as "access ends now", not "never ends".
 
-Statuses are `active`, `trialing` and `canceled` (US spelling) — use `isActive()`,
-`isCanceled()`, `hasPaymentFailure()`, or `is('...')`, never string
+Statuses are `active`, `trialing`, `past_due` and `canceled` (US spelling) — use
+`isActive()`, `isCanceled()`, `isPastDue()`, or `is('...')`, never string
 comparison. Cancelling clears `nextChargeAt` and sets `accessEndsAt` one
 interval after the last charge; gate access on that date, not on
 `canceledAt`.
@@ -168,20 +168,19 @@ foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $s
     $latest = Plorea::subscriptions()->charges($subscription->id)->first();
 
     if ($latest?->isAuthorised() !== true) {
-        // prompt for a new card — do not branch on failureReason, it is null
-        // even for a genuine refusal
+        // prompt for a new card — do not branch on failureReason, it is
+        // the provider's free-text message, not a stable code
     }
 }
 ```
 
-`needingAttention()` returns a subscription reporting `payment_failed` **or**
-one whose `nextChargeAt` is more than `$graceMinutes` (default 60) in the past.
-Lean on the overdue half: `payment_failed`, `failureReason` and `retryCount`
-are modelled from Plorea's documentation and have never been observed, because
-no test card can store successfully and then decline. The scheduler charges
-within seconds of `nextChargeAt` and moves the date forward, so a date still in
-the past means the cycle did not complete whatever the status ends up being.
-Canceled subscriptions are never overdue.
+`needingAttention()` returns a subscription reporting `past_due` (or the
+documented, never-observed `payment_failed`) **or** one whose `nextChargeAt` is
+more than `$graceMinutes` (default 60) in the past. A failed scheduled charge
+turns the subscription `past_due` with `retryCount` and `failureReason` set and
+`nextChargeAt` moved to the retry, so it is not overdue — the status check
+catches it. The overdue check catches a cycle that stalled without any failure
+status. Canceled subscriptions are never overdue.
 
 Neither `forExternalId()` nor `charges()` has been observed to paginate, and
 neither sends paging parameters. Verify large result sets against your own

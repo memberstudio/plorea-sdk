@@ -97,7 +97,8 @@ isActive()`, never on `isActive()` alone.
 | `trialing` | `isTrialing()` | In trial, nothing charged yet |
 | `active` | `isActive()` | Billing on schedule |
 | `canceled` | `isCanceled()` | Cancelled (US spelling) — access runs to `accessEndsAt` |
-| `payment_failed` | `hasPaymentFailure()` | Modelled, **never observed** — see [below](#the-dunning-gap) |
+| `past_due` | `isPastDue()` | A scheduled charge failed and Plorea is retrying it — see [below](#the-dunning-gap) |
+| `payment_failed` | `hasPaymentFailure()` | Documented by Plorea, **never observed** |
 
 Use the helpers or `is('...')`, never a bare string comparison.
 
@@ -257,10 +258,15 @@ Read this before building retry logic.
 
 - There is **no webhook for a failed scheduler charge**. Plorea confirmed on
   2026-09-09 that failures are poll-only.
-- `payment_failed`, a populated `failureReason`, and a non-zero `retryCount`
-  are all modelled from Plorea's documentation but have **never been
-  observed** — no test-environment card can store successfully and then
-  decline. See [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
+- A failed scheduled charge turns the subscription **`past_due`** (captured
+  from production 2026-10-01). `retryCount` counts the failed attempts,
+  `failureReason` carries the provider's message, `lastChargeAt` stays at the
+  last *successful* charge, and `nextChargeAt` moves to the retry —
+  `retryPolicy.retryIntervalDays` later, up to `retryPolicy.maxRetries`
+  attempts. The charge appears in `charges()` with `status: failed`.
+- What happens after the last retry is **not yet observed**. The documented
+  `payment_failed` status has never been seen. See
+  [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
 
 So dunning must poll, and must not assume the shape of what it finds.
 `needingAttention()` is the polling half:
@@ -271,24 +277,26 @@ foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $s
     $latest = Plorea::subscriptions()->charges($subscription->id)->first();
 
     if ($latest?->isAuthorised() !== true) {
-        // Prompt for a new card. Do not branch on failureReason — it is null
-        // even for a genuine refusal.
+        // Prompt for a new card. Do not branch on failureReason — it is the
+        // provider's free-text message, not a stable code.
     }
 }
 ```
 
-It returns a subscription when either test fires:
+It returns a subscription when any test fires:
 
 | Test | Basis |
 | --- | --- |
-| `hasPaymentFailure()` — status is `payment_failed` | Modelled from Plorea's documentation, **never observed** |
+| `isPastDue()` — status is `past_due` | Captured from production 2026-10-01 |
+| `hasPaymentFailure()` — status is `payment_failed` | Documented by Plorea, **never observed** |
 | `isOverdue()` — `nextChargeAt` is more than an hour in the past | Derived from fields captured on the wire |
 
-The second test is the one carrying the weight. Plorea's scheduler charges
-within seconds of `nextChargeAt` and moves the date forward as it does, so a
-date still in the past means the cycle did not complete — whatever Plorea ends
-up calling the status. If the documented failure shape turns out to be wrong,
-the overdue check still fires.
+The tests are independent. A `past_due` subscription is **not** overdue: its
+`nextChargeAt` has already moved to the retry, so only the status gives it
+away. The overdue test covers a cycle that stalled without any failure status —
+Plorea's scheduler charges within seconds of `nextChargeAt` and moves the date
+forward as it does, so a date still in the past means the cycle did not
+complete.
 
 Tune the grace period for your billing cadence, and pass a fixed clock in tests:
 

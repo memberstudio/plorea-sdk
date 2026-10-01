@@ -120,6 +120,27 @@ final readonly class Subscription
         return $this->is('canceled');
     }
 
+    /**
+     * Whether a scheduled charge failed and Plorea is retrying it.
+     *
+     * Captured from production 2026-10-01: after a failed scheduler charge
+     * the subscription reports past_due, retryCount counts the failed
+     * attempts, failureReason carries the provider's message, and
+     * nextChargeAt moves to the next retry (retryPolicy.retryIntervalDays
+     * later). Because the date moves forward, a past_due subscription is not
+     * overdue — check this status as well as isOverdue().
+     */
+    public function isPastDue(): bool
+    {
+        return $this->is('past_due');
+    }
+
+    /**
+     * Whether the subscription reports payment_failed.
+     *
+     * Modelled from Plorea's documentation and never observed; the failure
+     * status seen on the wire is past_due (see isPastDue()).
+     */
     public function hasPaymentFailure(): bool
     {
         return $this->is('payment_failed');
@@ -132,8 +153,11 @@ final readonly class Subscription
      * date forward as it does, so a nextChargeAt still in the past after the
      * grace period means the cycle did not complete — a decline, a retry in
      * progress, or a subscription stuck for some other reason. This is
-     * derived entirely from observed fields, which is why dunning should lean
-     * on it rather than on the never-observed payment_failed status.
+     * derived entirely from observed fields.
+     *
+     * A failed charge that Plorea is retrying is not overdue: the
+     * subscription turns past_due and nextChargeAt moves to the retry. Use
+     * isPastDue() for that case.
      *
      * A canceled subscription is never overdue: it keeps whatever
      * nextChargeAt it had when scheduling stopped.

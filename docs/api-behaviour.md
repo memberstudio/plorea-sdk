@@ -331,9 +331,10 @@ Never parse a Plorea validation message.
 
 ## Subscriptions
 
-### ✅ Statuses: `active`, `trialing`, `canceled` — 2026-09-04 / 2026-09-07
+### ✅ Statuses: `active`, `trialing`, `canceled` — 2026-09-04 / 2026-09-07; `past_due` — 2026-10-01
 
-US spelling. `trialing` is a distinct fourth state, not a flavour of active.
+US spelling. `trialing` is a distinct state, not a flavour of active. `past_due`
+is what a failed scheduled charge produces — see below.
 
 ### ✅ Billing starts immediately
 
@@ -394,6 +395,29 @@ way.
 `resultCode`. History items from `charges()` report the settled
 `status: "authorised"` with `reason: "manual_charge" | "scheduled_charge"`.
 A charge's payment reference is `{subscriptionId}-{chargeId}`.
+
+### ✅ A failed scheduled charge: `past_due` — captured 2026-10-01 (production)
+
+Seen on a live monthly subscription whose first scheduled charge failed
+because the stored card could not be found by the provider. The subscription
+read back:
+
+- `status: "past_due"`, `retryCount: 1`;
+- `failureReason` populated with the provider's message (`"PaymentDetail not found"`);
+- `lastChargeAt` unchanged (null, as nothing had ever succeeded) and
+  `lastPaymentReference` set to the failed charge's `{subscriptionId}-{chargeId}`;
+- `nextChargeAt` moved to the failure time plus `retryPolicy.retryIntervalDays`
+  (one day with the default `{maxRetries: 3, retryIntervalDays: 1}`);
+- `customerId` populated — the first time it was seen non-null.
+
+The `charges()` item reported `status: "failed"`, `reason: "scheduled_charge"`,
+`retryNumber: 0` and the same `failureReason`. No webhook was sent.
+
+Because `nextChargeAt` moves forward, a `past_due` subscription is **not**
+overdue — `needingAttention()` checks the status as well. What happens after the
+last retry (a terminal status, or `canceled`) is not yet observed.
+
+Fixture: `subscription-past-due.json`.
 
 ### ✅ Not-chargeable returns 400, not 402 — 2026-09-04
 
@@ -587,8 +611,10 @@ break verification while the payload still looks valid.
 independently. The reasoning below is why, so you do not have to repeat it.
 
 The blocked shapes are: the 402 `ChargeFailedException` body, a
-`payment_failed` subscription, a populated `failureReason` or non-zero
-`retryCount`, and any `subscription.charge_failed` webhook.
+`payment_failed` subscription, the state after the last retry, and any
+`subscription.charge_failed` webhook. A failed scheduled charge itself —
+`past_due`, a populated `failureReason`, a non-zero `retryCount` — was captured
+in production on 2026-10-01 (see above); it still cannot be produced in test.
 
 Why it cannot be done:
 
@@ -619,7 +645,7 @@ successfully and declines on a later charge, or by exposing
 `POST subscriptions/{id}/charge`. Both have been requested.
 
 Consequently: the fake's 402 stub and the `payment_failed` status are modelled
-from Plorea's documentation, not from an observation. Write dunning code that
+from Plorea's documentation, not from an observation; `past_due` is observed. Write dunning code that
 tolerates a shape slightly different from what the SDK models — branch on
 `status`, and do not require `failureReason` to be present.
 
