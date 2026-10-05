@@ -37,4 +37,14 @@ interface Client
      * @throws PloreaException
      */
     public function patch(string $uri, array $payload = []): array;
+
+    /**
+     * Send a DELETE request to the Plorea API.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @throws PloreaException
+     */
+    public function delete(string $uri, array $payload = []): array;
 }

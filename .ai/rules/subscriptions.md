@@ -196,6 +196,14 @@ and `resume($id, $nextChargeAt)`, or builder `pause()` / `resumeAt()` /
   date, status `active`, date lapsed. Raised with Plorea. Do not document
   resume as "billing restarts" until a post-resume charge is observed; the
   overdue check is what catches it meanwhile.
+- **Narrowed 2026-10-04/05 (test):** not specific to resume. On an `active`
+  subscription that has already been charged, a moved `nextChargeAt` (plain
+  PATCH, or pause then resume; `.000Z` and `+00:00` alike) is stored but was
+  not charged in four scheduler runs after the date. Overnight with daily
+  subscriptions, the moved ones were not charged on the original date either,
+  while the unmoved baseline was. A `trialing` subscription with a moved date
+  is charged in the next run. Do not rely on moving the date of an active
+  subscription until a charge on a moved date is observed.
 
 Persist the original boundary before the provider clears it. In-flight charges,
 retry cancellation, pausing `past_due`, later billing anchors and combined
