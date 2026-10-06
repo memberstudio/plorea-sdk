@@ -50,7 +50,7 @@ Full documentation lives in [`docs/`](docs/README.md).
 | --- | --- |
 | [Getting started](docs/getting-started.md) | Installation, the full configuration reference, the facade |
 | [Payments](docs/payments.md) | Payment links, `firstOrCreate`, status, refunds, cancellations |
-| [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in |
+| [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in, deleting them |
 | [Embedded and native checkout](docs/checkout.md) | Drop-in on your domain or in an iOS / Android app |
 | [Going live](docs/going-live.md) | The production checklist |
 | [Subscriptions](docs/subscriptions.md) | Create, trials, update, pause/resume, cancel, reactivate, charges, dunning |

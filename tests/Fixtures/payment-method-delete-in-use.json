@@ -1,0 +1,15 @@
+{
+    "error": "Payment method is attached to active subscriptions",
+    "paymentMethodId": "pm_test_golden_method",
+    "activeSubscriptionIds": [
+        "sub_test_golden_trialing"
+    ],
+    "activeSubscriptions": [
+        {
+            "subscriptionId": "sub_test_golden_trialing",
+            "status": "trialing",
+            "nextChargeAt": "2026-10-13T09:49:57+00:00",
+            "title": "Golden membership"
+        }
+    ]
+}

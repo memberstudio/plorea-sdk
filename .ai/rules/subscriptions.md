@@ -5,7 +5,8 @@ anonymised into `tests/Fixtures/` and asserted in `GoldenFixturesTest`.
 
 ## Statuses
 
-Payment methods: `pending_setup` → `active` | `failed`. **`failed` is
+Payment methods: `pending_setup` → `active` | `failed`, and `active` →
+`cancelled` by `delete()` (UK spelling, unlike subscriptions). **`failed` is
 terminal** — the 1 NOK setup verification auth was refused and no card was
 stored, so start a new setup rather than retrying the charge. `failureReason`
 is null even on a real refusal, so branch on `status` alone.
@@ -69,6 +70,25 @@ maps the org number to the company's store, and the hosted page shows the
 company's name on 3DS and on the page). Org number and name only; no email
 was asked for. UNOBSERVED on the wire: whether the session response echoes it, and
 whether a non-nine-digit value is rejected. The fake does not model either.
+
+## Delete — CAPTURED 2026-10-06 (test)
+
+`paymentMethods()->delete()` → `DELETE payment-methods/{id}`, fixtures
+`payment-method-deleted*.json`, `payment-method-delete-in-use.json`,
+`payment-method-cancelled.json`.
+
+- A 400 carrying `activeSubscriptionIds` becomes `PaymentMethodInUseException`
+  (extends `ValidationException`). **Keyed on that field, never on the
+  message.** Trialing subscriptions block it as well.
+- A repeat delete is a 200 with `alreadyCancelled: true`, not an error.
+- **UNOBSERVED:** whether a sibling method sharing the same
+  `storedPaymentMethodId` can still be charged. It still reads `active`; do
+  not claim more until a charge on it is seen.
+- The cancelled method stays readable, card and stored id included. The read
+  has no `cancelledAt`; the delete response does.
+- A bare 404 `{"message":"Not Found"}` is API Gateway's "no such route" (seen
+  before the route was deployed 2026-10-05). The real not-found is
+  `{"error":"Payment method not found", ...}`.
 
 ## Trials — VERIFIED 2026-09-07
 

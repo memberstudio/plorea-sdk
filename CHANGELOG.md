@@ -2,6 +2,24 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.10 - 2026-10-06
+
+### Added
+
+- `Plorea::paymentMethods()->delete($id)` cancels a stored payment method and
+  returns a `PaymentMethodCancellation` (`status`, `previousStatus`,
+  `alreadyCancelled`, `cancelledAt`). A repeat call succeeds with
+  `alreadyCancelled`.
+- `PaymentMethodInUseException` (extends `ValidationException`) when
+  subscriptions, trialing ones included, still use the method;
+  `activeSubscriptionIds()` and `activeSubscriptions()` list them.
+- `PaymentMethod::isCancelled()`.
+- `Client::delete()`. **Custom `Client` implementations must add it.**
+- The fake answers `DELETE payment-methods/{id}`, and reads the method back
+  as `cancelled` afterwards.
+
+Captured in the test environment 2026-10-06, with golden fixtures.
+
 ## v0.3.9 - 2026-10-02
 
 ### Added

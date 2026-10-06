@@ -45,6 +45,7 @@ All classes live under `MemberFlow\Plorea\`.
 | --- | --- |
 | `setup(string $shopperReference, RecurringType $recurringType, string $returnUrl)` | `PendingPaymentMethodSetup` |
 | `find(string $paymentMethodId)` | `Data\PaymentMethod` |
+| `delete(string $paymentMethodId)` | `Data\PaymentMethodCancellation` — throws `PaymentMethodInUseException` while subscriptions use it |
 
 ### `SubscriptionResource` — `Plorea::subscriptions()`
 
@@ -245,7 +246,7 @@ client.
 | --- | --- |
 | `$id`, `$tenantId`, `$customerId`, `$doneId`, `$shopperReference` | |
 | `$recurringType` | `?Enums\RecurringType` |
-| `$status` | `pending_setup` \| `active` \| `failed` |
+| `$status` | `pending_setup` \| `active` \| `failed` \| `cancelled` |
 | `$adyenReference`, `$adyenPaymentLinkId`, `$adyenPaymentLinkUrl` | Hosted setup |
 | `$storedPaymentMethodId` | Adyen's token — null until `active` |
 | `$setupPspReference` | |
@@ -253,7 +254,21 @@ client.
 | `$consentAt`, `$expiresAt`, `$createdAt`, `$updatedAt` | `?CarbonImmutable` |
 | `$metadata`, `$raw` | `array` |
 
-Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `is(string $status)`.
+Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `isCancelled()`, `is(string $status)`.
+
+### `PaymentMethodCancellation`
+
+| Property | Notes |
+| --- | --- |
+| `$paymentMethodId` | |
+| `$status` | `cancelled` |
+| `$previousStatus` | Null on a repeat call |
+| `$alreadyCancelled` | `bool` — true when the method was already cancelled |
+| `$cancelledAt` | Null on a repeat call |
+| `$updatedAt` | `?CarbonImmutable` |
+| `$raw` | `array` |
+
+Helper: `isCancelled()`.
 
 ### `PaymentMethodSession`
 

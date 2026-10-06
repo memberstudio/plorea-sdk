@@ -31,6 +31,7 @@ class RequestException extends PloreaException
         $message = self::messageFor($response, $status);
 
         return match (true) {
+            $status === 400 && is_array($response->json('activeSubscriptionIds')) => new PaymentMethodInUseException($message, $status, $response),
             $status === 400 => new ValidationException($message, $status, $response),
             $status === 401, $status === 403 => new AuthenticationException($message, $status, $response),
             $status === 402 => new ChargeFailedException($message, $status, $response),
