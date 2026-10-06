@@ -62,8 +62,8 @@ class PaymentMethodResource extends Resource
      * details included. Repeating the call succeeds with `alreadyCancelled`.
      *
      * Another payment method for the same shopper can share its
-     * `storedPaymentMethodId`; it stays `active`. Whether it can still be
-     * charged has not been observed.
+     * `storedPaymentMethodId`; it stays `active` and can still be charged
+     * (observed in the test environment).
      *
      * @throws PaymentMethodInUseException When subscriptions, trialing
      *                                     ones included, still use it.

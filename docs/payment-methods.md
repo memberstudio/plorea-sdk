@@ -160,7 +160,7 @@ try {
   `cancelledAt`, so `updatedAt` is the cancellation time.
 - **A sibling stays active.** Another method for the same shopper may share
   the stored card (`storedPaymentMethodId`). It still reads `active` after the
-  delete; whether it can still be charged has not been observed.
+  delete and can still be charged (seen in the test environment).
 - **It cannot be reused.** Creating a subscription on it is a 400, "Payment
   method is not active".
 - **Spelling:** payment methods say `cancelled`; subscriptions say `canceled`.

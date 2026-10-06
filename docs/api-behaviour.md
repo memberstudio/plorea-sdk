@@ -347,10 +347,9 @@ subscriptions say `canceled`). Fixtures `payment-method-deleted.json`,
   `storedPaymentMethodId` and card details unchanged, no `cancelledAt` key.
 - **Subscription on a cancelled method:** 400 `"Payment method is not active"`.
 - **A sibling sharing the stored card** (same shopper, same
-  `storedPaymentMethodId`) still reads `active`. ❓ Whether it can still be
-  charged is unproven: the test sibling was not charged before the delete
-  either (the scheduler moved its `nextChargeAt` forward without a charge or
-  a failure reason), so the test says nothing either way. Asked Plorea.
+  `storedPaymentMethodId`) still reads `active` and **can still be charged**:
+  a manual charge on a new subscription on the sibling was `Authorised`
+  (test, 2026-10-06, after the delete). Production is unobserved.
 
 Until 2026-10-05 the route was missing in API Gateway: every DELETE answered a
 bare 404 `{"message":"Not Found"}`, the same as a non-existent path. That body

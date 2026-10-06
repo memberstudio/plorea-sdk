@@ -23,6 +23,13 @@ Billing starts **immediately** on create — `create()` already returns the firs
 `nextChargeAt` and the scheduler charges within seconds unless a trial is set.
 Plorea owns the schedule; the app never triggers a recurring charge.
 
+**OPEN, seen 2026-10-06 (test):** new no-trial subscriptions, including one
+on a card the scheduler had charged before, were **not** charged. Each
+scheduler run pushed `nextChargeAt` ~15–20 min forward instead, with no
+charge, no `failureReason` and `retryCount` 0. A manual charge on the same
+subscription was authorised. Raised with Plorea. The overdue check does not
+catch this, because the date keeps moving forward.
+
 Charge POST returns `status: charge_created` + `resultCode`; history items
 return `status: authorised` + `reason: manual_charge|scheduled_charge`. The
 charge payment reference is `{subId}-{chgId}`.
@@ -81,9 +88,9 @@ whether a non-nine-digit value is rejected. The fake does not model either.
   (extends `ValidationException`). **Keyed on that field, never on the
   message.** Trialing subscriptions block it as well.
 - A repeat delete is a 200 with `alreadyCancelled: true`, not an error.
-- **UNOBSERVED:** whether a sibling method sharing the same
-  `storedPaymentMethodId` can still be charged. It still reads `active`; do
-  not claim more until a charge on it is seen.
+- A sibling method sharing the same `storedPaymentMethodId` stays `active`
+  and **can still be charged** — a manual charge on it was `Authorised` after
+  the delete (CAPTURED 2026-10-06, test). Production unobserved.
 - The cancelled method stays readable, card and stored id included. The read
   has no `cancelledAt`; the delete response does.
 - A bare 404 `{"message":"Not Found"}` is API Gateway's "no such route" (seen
