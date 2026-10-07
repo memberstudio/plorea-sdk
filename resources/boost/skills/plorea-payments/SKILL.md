@@ -161,7 +161,9 @@ must poll that, never `payments()->status()`.
 
 ### Dunning
 
-A failed scheduler charge emits no webhook, so poll for it:
+A failed scheduler charge emits `subscription.charge_failed` →
+`SubscriptionChargeFailed`, but a lost delivery is never retried, so poll as
+well:
 
 ```php
 foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
@@ -216,9 +218,10 @@ Verified from real deliveries (2026-09-04). A **scheduler** charge emits
 `subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. A **manual**
 `charge()` emits `payment.authorised` → `PaymentStatusUpdated`. Plorea
 confirmed on 2026-09-09 that nothing is emitted for card setup (success or
-failure), cancel, reactivate, or a **failed** scheduler charge — those are
-poll-only. A failed recurring charge never announces itself, so poll
-`subscriptions()->needingAttention()` if you need dunning.
+failure), cancel or reactivate — those are poll-only. A **failed** scheduler
+charge emits `subscription.charge_failed` → `SubscriptionChargeFailed`
+(captured 2026-10-01/06; adds `failureReason`, `retryCount`). Keep polling
+`subscriptions()->needingAttention()` too: deliveries are never retried.
 
 ```php
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;

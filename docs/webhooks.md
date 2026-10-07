@@ -87,6 +87,7 @@ open.
 | `payment.failed` | `PaymentStatusUpdated` | Yes |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
+| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes — sent, though not in Plorea's catalogue |
 
 The type string is what you would expect from the status endpoint, not from
 the English: a refusal is `payment.failed`, never `payment.refused`.
@@ -103,11 +104,15 @@ Plorea confirmed on 2026-09-09 that **nothing** is emitted for:
 - card setup, success or failure
 - subscription cancellation
 - subscription reactivation
-- a **failed** scheduler charge
 
 These transitions are **poll-only**. Read them from `paymentMethods()->find()`,
-`subscriptions()->find()` and `payments()->status()`. A failed recurring charge
-in particular will never announce itself — if you need dunning, you must poll.
+`subscriptions()->find()` and `payments()->status()`.
+
+Plorea also listed a **failed** scheduler charge here, but
+`subscription.charge_failed` has since been captured (2026-10-01 and
+2026-10-06). Listen for it, and keep polling
+`subscriptions()->needingAttention()` anyway: a failed delivery is never
+redelivered, and a cycle that stalls without failing sends nothing.
 
 ## Payload shape
 
@@ -187,6 +192,7 @@ Captured from real deliveries on 2026-09-04:
 | Trigger | Type | SDK event |
 | --- | --- | --- |
 | Scheduler charges the card | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` |
+| Scheduler charge fails | `subscription.charge_failed` | `SubscriptionChargeFailed` |
 | Manual `charge()` | `payment.authorised` | `PaymentStatusUpdated` |
 
 A manual charge produces an ordinary flat payment payload, which is why it
@@ -214,6 +220,26 @@ charge twice, and the `{subId}-{chgId}` reference is not resolvable through the
 payment status endpoint for scheduler charges anyway
 ([details](subscriptions.md#looking-a-charge-up-as-a-payment)). Read the charge
 from `charges()`.
+
+A failed scheduler charge (captured 2026-10-01 and 2026-10-06) raises
+`SubscriptionChargeFailed`, with the same properties plus `failureReason` and
+`retryCount`:
+
+```php
+use MemberFlow\Plorea\Events\SubscriptionChargeFailed;
+
+Event::listen(SubscriptionChargeFailed::class, function (SubscriptionChargeFailed $event) {
+    $event->failureReason; // provider free text — show it, never branch on it
+    $event->retryCount;    // attempts so far, as Plorea reported them
+
+    $subscription = Plorea::subscriptions()->find($event->subscriptionId);
+
+    // Start dunning idempotently — your poll may have seen it first
+});
+```
+
+Its payload has no `pspReference` and no `nextChargeAt`; read the retry date
+from `find()`. Whether the last retry also emits one is unobserved.
 
 ## Everything else
 

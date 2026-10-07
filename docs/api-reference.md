@@ -339,6 +339,7 @@ not authorised yet — read it back from `charges()`.
 | --- | --- |
 | `Events\PaymentStatusUpdated` | `$reference`, `$status`, `$payload`, `$eventId`, `$type` |
 | `Events\SubscriptionChargeSucceeded` | `$subscriptionId`, `$chargeId`, `$reference`, `$externalId`, `$payload`, `$eventId`, `$type` |
+| `Events\SubscriptionChargeFailed` | `$subscriptionId`, `$chargeId`, `$reference`, `$externalId`, `$failureReason`, `$retryCount`, `$payload`, `$eventId`, `$type` |
 | `Events\WebhookReceived` | `$payload`, `$eventId`, `$type` — dispatched for **every** delivery |
 | `Events\RequestSent` | `$method`, `$uri`, `$payload` |
 | `Events\ResponseReceived` | `$method`, `$uri`, `$payload`, `$status`, `$response`, `$durationMs` |

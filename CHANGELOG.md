@@ -2,6 +2,21 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.11 - 2026-10-07
+
+### Added
+
+- `Events\SubscriptionChargeFailed` for the `subscription.charge_failed`
+  webhook: `subscriptionId`, `chargeId`, `reference`, `externalId`,
+  `failureReason`, `retryCount`, `payload`, `eventId`, `type`. It does not
+  also raise `PaymentStatusUpdated`.
+
+Plorea had said a failed scheduler charge emits nothing, and the type is not in
+their catalogue, but three deliveries were captured in the test environment on
+2026-10-01 and 2026-10-06 (`failureReason` "PaymentDetail not found",
+`retryCount` 1), with a golden fixture. Keep polling `needingAttention()`:
+deliveries are never redelivered.
+
 ## v0.3.10 - 2026-10-06
 
 ### Added

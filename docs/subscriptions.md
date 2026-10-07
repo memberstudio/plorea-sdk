@@ -318,8 +318,10 @@ not-active payment method return **400**, not 402.
 
 Read this before building retry logic.
 
-- There is **no webhook for a failed scheduler charge**. Plorea confirmed on
-  2026-09-09 that failures are poll-only.
+- A failed scheduler charge emits `subscription.charge_failed` →
+  `SubscriptionChargeFailed` (captured 2026-10-01 and 2026-10-06, though
+  Plorea had said failures were poll-only). A delivery is never retried, so
+  the event speeds dunning up; polling is still what guarantees it.
 - A failed scheduled charge turns the subscription **`past_due`** (captured
   from production 2026-10-01). `retryCount` counts the failed attempts,
   `failureReason` carries the provider's message, `lastChargeAt` stays at the
@@ -398,7 +400,8 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
         ->first()?->extendAccessTo($subscription->nextChargeAt);  // idempotently
 });
 
-// 4. Poll on a schedule — for failures, which never arrive as webhooks.
+// 4. Start dunning on SubscriptionChargeFailed, and poll needingAttention()
+//    on a schedule — a lost webhook is never redelivered.
 
 // 5. On cancellation, keep access until accessEndsAt (or now, if it is null).
 ```
