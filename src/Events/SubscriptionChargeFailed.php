@@ -9,9 +9,14 @@ namespace MemberFlow\Plorea\Events;
  * scheduler tried to charge the stored card and failed. The subscription
  * normally moves to past_due, and Plorea retries on its own schedule.
  *
- * Captured 2026-10-01 and 2026-10-06 (test environment, failureReason
- * "PaymentDetail not found", retryCount 1). Unlike the success event, the
+ * Observed 2026-10-01 to 2026-10-08: one delivery per attempt, the last
+ * retry included, with retryCount 1, 2, 3. Every one so far carried
+ * failureReason "PaymentDetail not found". Unlike the success event, the
  * payload carries no pspReference and no nextChargeAt.
+ *
+ * These were live charges, but Plorea delivered them to the test URL with
+ * data.environment "test" (observed 2026-10-08, reported to Plorea
+ * 2026-10-09). Do not trust data.environment on a subscription.* delivery.
  *
  * Treat it as a ping: fetch the subscription with
  * Plorea::subscriptions()->find($subscriptionId) and read the history from

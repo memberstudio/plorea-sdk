@@ -31,8 +31,9 @@ Intervals: `BillingInterval::daily()`, `weekly()`, `monthly()`, `yearly()`,
 each taking an optional count — `BillingInterval::monthly(3)` is quarterly.
 
 **Billing starts immediately.** The create response already carries the first
-`nextChargeAt`, and the scheduler charges the card within seconds unless you
-set a trial. There is no "start on the 1st" option; if you need one, use a
+`nextChargeAt`, and the scheduler charges the card unless you set a trial:
+within seconds in test, 15–25 minutes after create in live (7 of 7, 2026-10;
+the scheduler runs about every 5 minutes). There is no "start on the 1st" option; if you need one, use a
 trial that ends then.
 
 Always set `externalId` — it is how you find the subscription again, and it is
@@ -99,7 +100,7 @@ isActive()`, never on `isActive()` alone.
 | `paused` | `isPaused()` | Billing paused; `nextChargeAt` cleared — see [below](#pause-and-resume) |
 | `canceled` | `isCanceled()` | Cancelled (US spelling) — access runs to `accessEndsAt` |
 | `past_due` | `isPastDue()` | A scheduled charge failed and Plorea is retrying it — see [below](#the-dunning-gap) |
-| `payment_failed` | `hasPaymentFailure()` | Documented by Plorea, **never observed** |
+| `payment_failed` | `hasPaymentFailure()` | The last retry failed; Plorea stops — observed live 2026-10-08 |
 
 Use the helpers or `is('...')`, never a bare string comparison.
 
@@ -266,13 +267,19 @@ request, `resultCode` is the acquirer's. Read `resultCode` for the money.
 ### History
 
 ```php
-$charges = Plorea::subscriptions()->charges($subscription->id);  // Collection<SubscriptionCharge>, newest first
+$charges = Plorea::subscriptions()->charges($subscription->id);  // Collection<SubscriptionCharge>, not reliably ordered
+$latest = $charges->sortByDesc('createdAt')->first();
 
-$charges->first()->status;   // "authorised"
-$charges->first()->reason;   // "scheduled_charge" | "manual_charge"
-$charges->first()->amount;
-$charges->first()->retryNumber;
+$latest->status;        // "authorised" | "failed"
+$latest->reason;        // "scheduled_charge" | "manual_charge"
+$latest->amount;
+$latest->retryNumber;   // 0 on the first attempt, 1, 2 on retries
 ```
+
+Sort by `createdAt` yourself. The test capture came back newest first, but a
+live read on 2026-10-08 returned the 2nd, 3rd, then 1st attempt. Failed
+attempts are listed too, with `status: failed`, a `pspReference` and a
+`failureReason` (observed live 2026-10).
 
 `charges()` is the authoritative record of scheduled billing. **Poll it.**
 
@@ -319,18 +326,24 @@ not-active payment method return **400**, not 402.
 Read this before building retry logic.
 
 - A failed scheduler charge emits `subscription.charge_failed` →
-  `SubscriptionChargeFailed` (captured 2026-10-01 and 2026-10-06, though
-  Plorea had said failures were poll-only). A delivery is never retried, so
-  the event speeds dunning up; polling is still what guarantees it.
+  `SubscriptionChargeFailed`, one per attempt (observed 2026-10-01 to
+  2026-10-08, though Plorea had said failures were poll-only). A delivery is
+  never retried, so the event speeds dunning up; polling is still what
+  guarantees it.
+- **Live `subscription.*` webhooks currently go to the test URL**, labelled
+  `environment: "test"` (observed 2026-10-08, reported to Plorea 2026-10-09).
+  See [Webhooks](webhooks.md#live-subscription-webhooks-go-to-the-test-url).
+  Until Plorea fixes it, polling is the live app's only signal.
 - A failed scheduled charge turns the subscription **`past_due`** (captured
   from production 2026-10-01). `retryCount` counts the failed attempts,
   `failureReason` carries the provider's message, `lastChargeAt` stays at the
   last *successful* charge, and `nextChargeAt` moves to the retry —
   `retryPolicy.retryIntervalDays` later, up to `retryPolicy.maxRetries`
   attempts. The charge appears in `charges()` with `status: failed`.
-- What happens after the last retry is **not yet observed**. The documented
-  `payment_failed` status has never been seen. See
-  [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
+- After the last retry the subscription turns **`payment_failed`**, not
+  `canceled` (observed live 2026-10-08): `retryCount: 3`, `nextChargeAt:
+  null`. Plorea stops charging. Retries came about 24 hours apart. See
+  [Verified API behaviour](api-behaviour.md#-after-the-last-retry-payment_failed--2026-10-06-to-2026-10-08-production).
 
 So dunning must poll, and must not assume the shape of what it finds.
 `needingAttention()` is the polling half:
@@ -338,7 +351,9 @@ So dunning must poll, and must not assume the shape of what it finds.
 ```php
 // Scheduled, e.g. hourly, per billed entity.
 foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
-    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+    $latest = Plorea::subscriptions()->charges($subscription->id)
+        ->sortByDesc('createdAt')
+        ->first();
 
     if ($latest?->isAuthorised() !== true) {
         // Prompt for a new card. Do not branch on failureReason — it is the
@@ -352,22 +367,24 @@ It returns a subscription when any test fires:
 | Test | Basis |
 | --- | --- |
 | `isPastDue()` — status is `past_due` | Captured from production 2026-10-01 |
-| `hasPaymentFailure()` — status is `payment_failed` | Documented by Plorea, **never observed** |
+| `hasPaymentFailure()` — status is `payment_failed` | Observed live 2026-10-08, after the last retry |
 | `isOverdue()` — `nextChargeAt` is more than an hour in the past | Derived from fields captured on the wire |
 
 The tests are independent. A `past_due` subscription is **not** overdue: its
 `nextChargeAt` has already moved to the retry, so only the status gives it
 away. The overdue test covers a cycle that stalled without any failure status —
-Plorea's scheduler charges within seconds of `nextChargeAt` and moves the date
-forward as it does, so a date still in the past means the cycle did not
-complete.
+Plorea's scheduler charges within minutes of `nextChargeAt` (seconds in test,
+up to about 25 minutes in live) and moves the date forward as it does, so a
+date well past the grace period means the cycle did not complete. Keep the
+grace period above 25 minutes in live, or a new subscription can show as
+overdue before its first charge.
 
 Tune the grace period for your billing cadence, and pass a fixed clock in tests:
 
 ```php
-Plorea::subscriptions()->needingAttention($externalId, graceMinutes: 15);
+Plorea::subscriptions()->needingAttention($externalId, graceMinutes: 30);
 
-$subscription->isOverdue(graceMinutes: 15, now: $this->knownTime);
+$subscription->isOverdue(graceMinutes: 30, now: $this->knownTime);
 ```
 
 A canceled subscription is never overdue — it keeps whatever `nextChargeAt` it

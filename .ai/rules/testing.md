@@ -50,6 +50,16 @@ Two rules keep those answers honest:
   else.
 - Illuminate's HTTP-client `Request` has **`data()`**, not `input()`.
 
+## Driving the Adyen test pay page — VERIFIED 2026-10-09 (test)
+
+When a browser drives Plorea's hosted test pay page (manual captures, not the
+suite):
+
+- The card fields are Adyen iframes that **drop typed keys after the first
+  character**. Insert the whole value at once with CDP `Input.insertText`.
+- Test card `4111 1111 4555 1142`, expiry `03/30`, CVC `737` pays
+  successfully. These are Adyen's public test values, not secrets.
+
 ## Verification scripts
 
 Do not write verification scripts when a test covers the functionality. Unit

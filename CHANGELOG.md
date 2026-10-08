@@ -2,6 +2,36 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Docs
+
+No behaviour changes. Docs, rules and docblocks record field findings from
+2026-10-06 to 2026-10-09:
+
+- `PaymentStatus::isPaid()` means "authorised by Adyen". `authorised` is the
+  only success status ever observed; `paid` never has been. Capture is not
+  observable through the API.
+- A partial or full refund on an `authorised` payment stays a refund, not a
+  cancel (test, 2026-10-09). `refund_requested` means accepted, not settled.
+- Live `subscription.*` webhooks arrive at the test URL, labelled
+  `environment: "test"` (reported to Plorea 2026-10-09). The
+  `subscription.charge_failed` deliveries from v0.3.11 were live events, not
+  test events. Keep polling `needingAttention()`.
+- `payment_failed` is observed (live, 2026-10-08): after 3 attempts,
+  `retryCount` 3, `nextChargeAt` null. One `subscription.charge_failed`
+  arrives per attempt.
+- `charges()` is not reliably newest first. Sort by `createdAt`.
+- The first live charge of a no-trial subscription comes 15–25 minutes after
+  create.
+- Open incident: every live scheduled charge failed with "PaymentDetail not
+  found" from 2026-10-01 to 2026-10-09.
+
+### Changed
+
+- The fixture `payment-status-paid.json` is now `payment-status-authorised.json`
+  (test-only; its content is unchanged).
+
 ## v0.3.11 - 2026-10-07
 
 ### Added

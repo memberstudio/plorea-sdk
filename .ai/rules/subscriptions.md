@@ -20,8 +20,15 @@ production 2026-10-01, fixture `subscription-past-due.json`).
 ## Billing
 
 Billing starts **immediately** on create — `create()` already returns the first
-`nextChargeAt` and the scheduler charges within seconds unless a trial is set.
-Plorea owns the schedule; the app never triggers a recurring charge.
+`nextChargeAt` and the scheduler charges unless a trial is set: within
+seconds in test, **15–25 min after create in live** (7 of 7 no-trial
+subscriptions, 2026-10; the scheduler runs about every 5 min). Plorea owns the
+schedule; the app never triggers a recurring charge.
+
+**OPEN incident, live 2026-10-01 to 2026-10-09:** every scheduled live charge
+failed — 12 attempts, all `failureReason: "PaymentDetail not found"`, on cards
+that were stored and activated without error. Reported to Plorea 2026-10-09;
+cause unknown. This is an incident, **not** API behaviour: do not model it.
 
 **OPEN, seen 2026-10-06 (test):** new no-trial subscriptions, including one
 on a card the scheduler had charged before, were **not** charged. Each
@@ -33,6 +40,15 @@ catch this, because the date keeps moving forward.
 Charge POST returns `status: charge_created` + `resultCode`; history items
 return `status: authorised` + `reason: manual_charge|scheduled_charge`. The
 charge payment reference is `{subId}-{chgId}`.
+
+Failed charges are listed too — VERIFIED live 2026-10-01 to 2026-10-08: every
+failed attempt is an item with `status: failed`, a `pspReference` and a
+`failureReason`.
+
+**`charges()` is not reliably ordered.** The test capture
+(`subscription-charges.json`, n=2) is newest first; a live read on 2026-10-08
+returned the 2nd, 3rd, then 1st attempt. Sort by `createdAt`; never take
+`->first()` as the latest charge.
 
 **A not-chargeable subscription and a not-active payment method both return
 400, not 402.** 402 is a card decline only — different failures, handled
@@ -140,11 +156,16 @@ subscriptions excluded because they keep a stale date.
 
 `past_due` is **not** overdue: Plorea moves `nextChargeAt` to the retry
 (failure + `retryIntervalDays`), so the status check is required — CAPTURED
-2026-10-01. `payment_failed` is documented, never observed. The overdue test
-stays **on purpose**, for a cycle that stalls without any failure status;
-`nextChargeAt` is captured. The scheduler charges within
-seconds of the due time and moves the date forward as it does, so a date still
-in the past means the cycle did not complete whatever Plorea names the status.
+2026-10-01. `payment_failed` — VERIFIED live 2026-10-06 to 2026-10-08: 3
+attempts about 24 h apart (the slot drifts ~5 min each time), then
+`payment_failed` (not `canceled`), `retryCount: 3`, `nextChargeAt: null`.
+`lastChargeAt` does not move on a retry. Each charge item's `retryNumber` is
+0, 1, 2; the webhooks carry `retryCount` 1, 2, 3. No fixture.
+The overdue test stays **on purpose**, for a cycle that stalls without any
+failure status; `nextChargeAt` is captured. The scheduler charges within
+minutes of the due time (seconds in test, up to ~25 min in live) and moves the
+date forward as it does, so a date well past the grace window means the cycle
+did not complete whatever Plorea names the status.
 **Do not reduce this to a status check, nor drop the status checks.**
 
 It deliberately sends no `status` filter to the list endpoint: filtering
@@ -193,16 +214,17 @@ setup verification itself, so the PM never activates
 (`storedPaymentMethodId: null`). An active-but-later-declining card is
 unreachable.
 
-Therefore the 402 body, a `payment_failed` subscription and the state after
-the last retry are **all** blocked on Plorea provisioning a
-store-OK-decline-later test card (asked 2026-09-08, dropped 2026-10-07). The
-`subscription.charge_failed` webhook itself was captured 2026-10-01/06 in
-test, from a method whose stored card was gone ("PaymentDetail not found") —
-see [webhooks.md](webhooks.md).
-Those shapes are modelled from documentation, not observed — write dunning code
-that tolerates a slightly different shape. The first failure itself (`past_due`,
-`retryCount`, `failureReason`) was CAPTURED in production 2026-10-01; it still
-cannot be produced in test.
+Therefore the 402 body and any real card decline are blocked on Plorea
+provisioning a store-OK-decline-later test card (asked 2026-09-08, dropped
+2026-10-07). The 402 shape is modelled from documentation, not observed —
+write dunning code that tolerates a slightly different shape.
+
+The failure path itself was observed in **production** 2026-10-01 to
+2026-10-08: `past_due`, `retryCount`, `failureReason`, the
+`subscription.charge_failed` webhook (misrouted to the test URL — see
+[webhooks.md](webhooks.md)), and `payment_failed` after the last retry. All
+were `"PaymentDetail not found"` (the open incident above), not a decline. It
+still cannot be produced in test.
 
 ## Native pause — CAPTURED 2026-10-01 (test)
 

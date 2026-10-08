@@ -134,13 +134,16 @@ class SubscriptionResource extends Resource
      * human — the polling half of dunning.
      *
      * A failed scheduler charge does emit subscription.charge_failed
-     * (captured 2026-10-01), but a lost delivery is never redelivered and a
-     * stalled cycle emits nothing, so run this on a schedule for each of
-     * your billed entities as well.
+     * (observed 2026-10-01 to 2026-10-08), but a lost delivery is never
+     * redelivered and a stalled cycle emits nothing, so run this on a
+     * schedule for each of your billed entities as well. In live, those
+     * webhooks currently go to the test URL (observed 2026-10-08, reported
+     * to Plorea 2026-10-09), so this poll is the live app's only signal.
      *
      * A subscription is returned when it reports past_due (a failed charge
      * Plorea is retrying, captured from production 2026-10-01) or
-     * payment_failed (documented, never observed), or when its nextChargeAt
+     * payment_failed (after the last retry, observed live 2026-10-08), or
+     * when its nextChargeAt
      * is more than $graceMinutes in the past. The checks are independent: a
      * past_due subscription has its nextChargeAt moved to the retry, so it is
      * not overdue, and the overdue check catches a cycle that stalled without
@@ -152,7 +155,9 @@ class SubscriptionResource extends Resource
      *
      * ```php
      * foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
-     *     $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+     *     $latest = Plorea::subscriptions()->charges($subscription->id)
+     *         ->sortByDesc('createdAt')
+     *         ->first();
      *
      *     if ($latest?->isAuthorised() !== true) {
      *         // Prompt for a new card. Do not branch on failureReason — it
@@ -201,7 +206,11 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * Recorded charges for a subscription, newest first.
+     * Recorded charges for a subscription, failed attempts included.
+     *
+     * The order is not reliable: the test capture came back newest first,
+     * but a live read on 2026-10-08 did not. Sort by createdAt before you
+     * take the latest charge.
      *
      * The response is {subscriptionId, items} — no count and no paging keys
      * of any kind, so a truncated history would be indistinguishable from a
