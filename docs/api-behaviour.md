@@ -327,6 +327,34 @@ Branch on `status` alone.
 A request missing two required fields answers with a list of **all five**.
 Never parse a Plorea validation message.
 
+### ✅ Delete — captured 2026-10-06 (test)
+
+`DELETE payment-methods/{id}` moves the method to `cancelled` (UK spelling;
+subscriptions say `canceled`). Fixtures `payment-method-deleted.json`,
+`payment-method-deleted-again.json`, `payment-method-delete-in-use.json`,
+`payment-method-cancelled.json`.
+
+- **200:** `{paymentMethodId, tenantId, customerId, shopperReference,
+  environment, status: "cancelled", previousStatus, cancelledAt, updatedAt}`.
+  A slim body: no card details and no recurring type.
+- **Repeat:** 200 `{paymentMethodId, tenantId, status, alreadyCancelled: true,
+  updatedAt}`. No `previousStatus`, no `cancelledAt`.
+- **In use:** 400 `{error, paymentMethodId, activeSubscriptionIds,
+  activeSubscriptions: [{subscriptionId, status, nextChargeAt, title}]}`. A
+  `trialing` subscription blocks it too, and the method stays `active`.
+- **Unknown id:** 404 `"Payment method not found"`.
+- **Read after delete:** the full method, `status: "cancelled"`,
+  `storedPaymentMethodId` and card details unchanged, no `cancelledAt` key.
+- **Subscription on a cancelled method:** 400 `"Payment method is not active"`.
+- **A sibling sharing the stored card** (same shopper, same
+  `storedPaymentMethodId`) still reads `active` and **can still be charged**:
+  a manual charge on a new subscription on the sibling was `Authorised`
+  (test, 2026-10-06, after the delete). Production is unobserved.
+
+Until 2026-10-05 the route was missing in API Gateway: every DELETE answered a
+bare 404 `{"message":"Not Found"}`, the same as a non-existent path. That body
+means "route missing", not "method missing".
+
 ---
 
 ## Subscriptions

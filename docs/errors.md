@@ -6,6 +6,7 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | Exception | Thrown when |
 | --- | --- |
 | `ValidationException` | 400 — invalid request data, or an operation the current state does not allow |
+| `PaymentMethodInUseException` | 400 on `paymentMethods()->delete()` — subscriptions still use the method; `activeSubscriptionIds()` lists them. Extends `ValidationException` |
 | `AuthenticationException` | 401 / 403 — invalid or missing API key, a tenant mismatch, or a request that reached the wrong environment |
 | `ChargeFailedException` | 402 — a subscription charge was declined by the acquirer |
 | `NotFoundException` | 404 — unknown reference or id |

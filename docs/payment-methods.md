@@ -130,6 +130,41 @@ $new = Plorea::paymentMethods()->setup($shopperReference, RecurringType::Subscri
 Plorea::subscriptions()->update($subscriptionId)->paymentMethod($new->id)->save();
 ```
 
+## Deleting a card
+
+`delete()` cancels a stored method so it can never be charged again
+(captured in test 2026-10-06):
+
+```php
+use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
+
+try {
+    $cancellation = Plorea::paymentMethods()->delete($methodId);
+
+    $cancellation->isCancelled();       // true — status "cancelled"
+    $cancellation->previousStatus;      // "active"
+    $cancellation->alreadyCancelled;    // true on a repeat call
+} catch (PaymentMethodInUseException $e) {
+    $e->activeSubscriptionIds();        // move these to another card, or cancel them, first
+}
+```
+
+- **Subscriptions block it.** A method still used by a subscription, a
+  `trialing` one included, answers 400 with the blocking subscriptions; the
+  SDK throws `PaymentMethodInUseException` (a `ValidationException`) and the
+  method stays `active`.
+- **It is idempotent.** Deleting a cancelled method is a 200 with
+  `alreadyCancelled: true` and no `previousStatus` or `cancelledAt`.
+- **The record stays.** `find()` still returns it, now `cancelled`, with
+  `storedPaymentMethodId` and the card details unchanged; the read has no
+  `cancelledAt`, so `updatedAt` is the cancellation time.
+- **A sibling stays active.** Another method for the same shopper may share
+  the stored card (`storedPaymentMethodId`). It still reads `active` after the
+  delete and can still be charged (seen in the test environment).
+- **It cannot be reused.** Creating a subscription on it is a 400, "Payment
+  method is not active".
+- **Spelling:** payment methods say `cancelled`; subscriptions say `canceled`.
+
 ## Testing
 
 Use the public [Adyen test cards](https://docs.adyen.com/development-resources/testing/test-card-numbers/).

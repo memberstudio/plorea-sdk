@@ -5,7 +5,8 @@ anonymised into `tests/Fixtures/` and asserted in `GoldenFixturesTest`.
 
 ## Statuses
 
-Payment methods: `pending_setup` → `active` | `failed`. **`failed` is
+Payment methods: `pending_setup` → `active` | `failed`, and `active` →
+`cancelled` by `delete()` (UK spelling, unlike subscriptions). **`failed` is
 terminal** — the 1 NOK setup verification auth was refused and no card was
 stored, so start a new setup rather than retrying the charge. `failureReason`
 is null even on a real refusal, so branch on `status` alone.
@@ -21,6 +22,13 @@ production 2026-10-01, fixture `subscription-past-due.json`).
 Billing starts **immediately** on create — `create()` already returns the first
 `nextChargeAt` and the scheduler charges within seconds unless a trial is set.
 Plorea owns the schedule; the app never triggers a recurring charge.
+
+**OPEN, seen 2026-10-06 (test):** new no-trial subscriptions, including one
+on a card the scheduler had charged before, were **not** charged. Each
+scheduler run pushed `nextChargeAt` ~15–20 min forward instead, with no
+charge, no `failureReason` and `retryCount` 0. A manual charge on the same
+subscription was authorised. Raised with Plorea. The overdue check does not
+catch this, because the date keeps moving forward.
 
 Charge POST returns `status: charge_created` + `resultCode`; history items
 return `status: authorised` + `reason: manual_charge|scheduled_charge`. The
@@ -69,6 +77,25 @@ maps the org number to the company's store, and the hosted page shows the
 company's name on 3DS and on the page). Org number and name only; no email
 was asked for. UNOBSERVED on the wire: whether the session response echoes it, and
 whether a non-nine-digit value is rejected. The fake does not model either.
+
+## Delete — CAPTURED 2026-10-06 (test)
+
+`paymentMethods()->delete()` → `DELETE payment-methods/{id}`, fixtures
+`payment-method-deleted*.json`, `payment-method-delete-in-use.json`,
+`payment-method-cancelled.json`.
+
+- A 400 carrying `activeSubscriptionIds` becomes `PaymentMethodInUseException`
+  (extends `ValidationException`). **Keyed on that field, never on the
+  message.** Trialing subscriptions block it as well.
+- A repeat delete is a 200 with `alreadyCancelled: true`, not an error.
+- A sibling method sharing the same `storedPaymentMethodId` stays `active`
+  and **can still be charged** — a manual charge on it was `Authorised` after
+  the delete (CAPTURED 2026-10-06, test). Production unobserved.
+- The cancelled method stays readable, card and stored id included. The read
+  has no `cancelledAt`; the delete response does.
+- A bare 404 `{"message":"Not Found"}` is API Gateway's "no such route" (seen
+  before the route was deployed 2026-10-05). The real not-found is
+  `{"error":"Payment method not found", ...}`.
 
 ## Trials — VERIFIED 2026-09-07
 
@@ -196,6 +223,14 @@ and `resume($id, $nextChargeAt)`, or builder `pause()` / `resumeAt()` /
   date, status `active`, date lapsed. Raised with Plorea. Do not document
   resume as "billing restarts" until a post-resume charge is observed; the
   overdue check is what catches it meanwhile.
+- **Narrowed 2026-10-04/05 (test):** not specific to resume. On an `active`
+  subscription that has already been charged, a moved `nextChargeAt` (plain
+  PATCH, or pause then resume; `.000Z` and `+00:00` alike) is stored but was
+  not charged in four scheduler runs after the date. Overnight with daily
+  subscriptions, the moved ones were not charged on the original date either,
+  while the unmoved baseline was. A `trialing` subscription with a moved date
+  is charged in the next run. Do not rely on moving the date of an active
+  subscription until a charge on a moved date is observed.
 
 Persist the original boundary before the provider clears it. In-flight charges,
 retry cancellation, pausing `past_due`, later billing anchors and combined

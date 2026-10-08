@@ -32,7 +32,8 @@ final class DefaultFixtures
             $method === 'POST' && $path === 'payments/cancel' => self::cancellation($request),
             $method === 'POST' && $path === 'payment-methods/setup' => self::paymentMethod($request, pending: true),
             $method === 'POST' && $path === 'payment-methods/setup/session' => self::paymentMethodSession($request),
-            $method === 'GET' && preg_match('#^payment-methods/[^/]+$#', $path) === 1 => self::paymentMethodFound($path),
+            $method === 'GET' && preg_match('#^payment-methods/[^/]+$#', $path) === 1 => self::paymentMethodFound($path, $history),
+            $method === 'DELETE' && preg_match('#^payment-methods/[^/]+$#', $path) === 1 => self::paymentMethodCancelled($path, $history),
             $method === 'POST' && $path === 'subscriptions' => self::subscription(array_diff_key($request->data, ['merchantName' => true, 'merchantEmail' => true])),
             $method === 'GET' && $path === 'subscriptions' => self::subscriptionList($request, $history),
             $method === 'GET' && preg_match('#^subscriptions/[^/]+$#', $path) === 1 => self::subscription([
@@ -191,9 +192,13 @@ final class DefaultFixtures
     }
 
     /**
+     * A method the fake already deleted reads back as cancelled, card details
+     * kept, as Plorea does.
+     *
+     * @param  list<RecordedRequest>  $history
      * @return array<string, mixed>
      */
-    private static function paymentMethodFound(string $path): array
+    private static function paymentMethodFound(string $path, array $history): array
     {
         return [
             'paymentMethodId' => basename($path),
@@ -201,12 +206,51 @@ final class DefaultFixtures
             'shopperReference' => 'fake-shopper',
             'recurringType' => 'Subscription',
             'environment' => 'test',
-            'status' => 'active',
+            'status' => self::wasDeleted($path, $history) ? 'cancelled' : 'active',
             'storedPaymentMethodId' => 'FAKESTORED123',
             'cardLast4' => '0004',
             'cardBrand' => 'mc',
             'expiryDate' => '03/2030',
         ];
+    }
+
+    /**
+     * The first delete cancels; a repeat answers like Plorea's idempotent
+     * reply, with `alreadyCancelled` and no `previousStatus`/`cancelledAt`.
+     *
+     * @param  list<RecordedRequest>  $history
+     * @return array<string, mixed>
+     */
+    private static function paymentMethodCancelled(string $path, array $history): array
+    {
+        if (self::wasDeleted($path, $history)) {
+            return [
+                'paymentMethodId' => basename($path),
+                'tenantId' => 'fake-tenant',
+                'status' => 'cancelled',
+                'alreadyCancelled' => true,
+                'updatedAt' => '2026-08-26T12:00:00.000Z',
+            ];
+        }
+
+        return [
+            'paymentMethodId' => basename($path),
+            'tenantId' => 'fake-tenant',
+            'shopperReference' => 'fake-shopper',
+            'environment' => 'test',
+            'status' => 'cancelled',
+            'previousStatus' => 'active',
+            'cancelledAt' => '2026-08-26T12:00:00.000Z',
+            'updatedAt' => '2026-08-26T12:00:00.000Z',
+        ];
+    }
+
+    /**
+     * @param  list<RecordedRequest>  $history
+     */
+    private static function wasDeleted(string $path, array $history): bool
+    {
+        return array_any($history, fn (RecordedRequest $request): bool => strtoupper($request->method) === 'DELETE' && $request->path === $path);
     }
 
     /**

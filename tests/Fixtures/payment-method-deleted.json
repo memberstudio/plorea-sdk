@@ -1,0 +1,11 @@
+{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "customerId": "golden-customer-001",
+    "shopperReference": "golden-shopper-001",
+    "environment": "test",
+    "status": "cancelled",
+    "previousStatus": "active",
+    "cancelledAt": "2026-10-06T09:49:58.709Z",
+    "updatedAt": "2026-10-06T09:49:58.709Z"
+}

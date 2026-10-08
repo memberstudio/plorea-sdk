@@ -13,6 +13,7 @@ use MemberFlow\Plorea\Enums\Channel;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\AuthenticationException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
+use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
 use MemberFlow\Plorea\Exceptions\ValidationException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -368,6 +369,95 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($method->storedPaymentMethodId);
         $this->assertNull($method->setupPspReference);
         $this->assertNull($method->consentAt);
+    }
+
+    /**
+     * Captured 2026-10-06 in test. DELETE answers with a slim body, not the
+     * full payment method: no card, no recurring type, and the UK spelling
+     * `cancelled` where subscriptions say `canceled`.
+     */
+    public function test_it_parses_a_real_payment_method_delete_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-deleted')),
+        ]);
+
+        $cancellation = Plorea::paymentMethods()->delete('pm_test_golden_method');
+
+        $this->assertSame('pm_test_golden_method', $cancellation->paymentMethodId);
+        $this->assertTrue($cancellation->isCancelled());
+        $this->assertSame('cancelled', $cancellation->status);
+        $this->assertSame('active', $cancellation->previousStatus);
+        $this->assertFalse($cancellation->alreadyCancelled);
+        $this->assertSame('2026-10-06 09:49:58', $cancellation->cancelledAt?->utc()->format('Y-m-d H:i:s'));
+        $this->assertArrayNotHasKey('cardLast4', $cancellation->raw);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    }
+
+    /**
+     * Captured 2026-10-06 in test: deleting an already cancelled method is a
+     * 200, not an error, with `alreadyCancelled` and no `cancelledAt`.
+     */
+    public function test_it_parses_a_real_repeated_payment_method_delete_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-deleted-again')),
+        ]);
+
+        $cancellation = Plorea::paymentMethods()->delete('pm_test_golden_method');
+
+        $this->assertTrue($cancellation->isCancelled());
+        $this->assertTrue($cancellation->alreadyCancelled);
+        $this->assertNull($cancellation->previousStatus);
+        $this->assertNull($cancellation->cancelledAt);
+        $this->assertSame('2026-10-06 09:49:58', $cancellation->updatedAt?->utc()->format('Y-m-d H:i:s'));
+    }
+
+    /**
+     * Captured 2026-10-06 in test: a trialing subscription blocks the delete
+     * just like an active one, and the method stays active.
+     */
+    public function test_it_maps_a_real_payment_method_in_use_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-delete-in-use'), 400),
+        ]);
+
+        try {
+            Plorea::paymentMethods()->delete('pm_test_golden_method');
+            $this->fail('Expected PaymentMethodInUseException.');
+        } catch (PaymentMethodInUseException $caught) {
+            $this->assertInstanceOf(ValidationException::class, $caught);
+            $this->assertSame(400, $caught->status);
+            $this->assertSame(['sub_test_golden_trialing'], $caught->activeSubscriptionIds());
+            $this->assertSame([[
+                'subscriptionId' => 'sub_test_golden_trialing',
+                'status' => 'trialing',
+                'nextChargeAt' => '2026-10-13T09:49:57+00:00',
+                'title' => 'Golden membership',
+            ]], $caught->activeSubscriptions());
+        }
+    }
+
+    /**
+     * Captured 2026-10-06 in test: a deleted method is still readable, with
+     * its stored card id and card details intact. There is no `cancelledAt`
+     * on the read; `updatedAt` is the cancellation time.
+     */
+    public function test_it_parses_a_real_cancelled_payment_method_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method?*' => Http::response($this->fixture('payment-method-cancelled')),
+        ]);
+
+        $method = Plorea::paymentMethods()->find('pm_test_golden_method');
+
+        $this->assertTrue($method->isCancelled());
+        $this->assertFalse($method->isActive());
+        $this->assertSame('TESTSTORED000001', $method->storedPaymentMethodId);
+        $this->assertSame('1111', $method->cardLast4);
+        $this->assertArrayNotHasKey('cancelledAt', $method->raw);
+        $this->assertSame('2026-10-06 09:49:58', $method->updatedAt?->utc()->format('Y-m-d H:i:s'));
     }
 
     public function test_it_parses_a_real_subscription_created_response(): void
