@@ -170,8 +170,8 @@ class SubscriptionResourceTest extends TestCase
     }
 
     /**
-     * The polling half of dunning. A failed scheduler charge emits no
-     * webhook, so the helper catches the past_due status Plorea reports
+     * The polling half of dunning. Webhooks are never redelivered, so the
+     * helper catches the past_due status Plorea reports
      * while retrying (captured 2026-10-01), the documented-but-never-observed
      * payment_failed status, and an overdue nextChargeAt left by a cycle that
      * stalled without any failure status.

@@ -64,6 +64,7 @@ payload still looks perfectly valid.
 | `payment.failed` | `PaymentStatusUpdated` | Yes (2026-09-09) |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
+| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes (2026-10-01, 2026-10-06) — **not** in Plorea's catalogue |
 
 Everything else reaches consumers through `WebhookReceived` **only**. The SDK
 does not invent typed events for shapes nobody has seen.
@@ -98,8 +99,31 @@ endpoint anyway (see [subscriptions.md](subscriptions.md)).
 Fixtures: `webhook-subscription-charge-succeeded.json`,
 `webhook-payment-authorised-subscription-charge.json`.
 
+Deliveries seen on staging in 2026-10 also carry `splitsEnabled` and
+`merchantOrgNr` in `data`; the fixture predates them and nothing reads them.
+
+## `subscription.charge_failed` — CAPTURED 2026-10-01 and 2026-10-06 (test)
+
+Three deliveries, identical shape, all `failureReason: "PaymentDetail not
+found"` and `retryCount: 1` (the card behind the method was gone). Plorea had
+said on 2026-09-09 that a failed charge emits nothing; the wire says otherwise.
+
+`data: {subscriptionId, chargeId, reference, customerId, shopperReference, externalId, amount: {value, currency}, failureReason, retryCount, environment}`
+— **no** `pspReference`, **no** `nextChargeAt`, no top-level `environment`.
+`customerId` was a string on all three. Fixture
+`webhook-subscription-charge-failed.json`.
+
+`WebhookController` dispatches `SubscriptionChargeFailed` (`failureReason`,
+`retryCount` typed; anything else → null) and, like the success event,
+**not** `PaymentStatusUpdated`.
+
+UNOBSERVED: whether every retry emits one, whether the last retry does, and
+whether a card decline (rather than a missing card) looks the same. A failed
+delivery is never redelivered, so **dunning keeps polling
+`needingAttention()`** — the event makes it faster, not optional.
+
 ## No webhook exists for setup / PM activation, cancel or reactivate
 
 A full lifecycle emitted only the two types above. **Do NOT add events for
 them** — those API calls return the new state synchronously. A **failed**
-scheduler charge also never announces itself, so dunning must poll.
+scheduler charge does announce itself (see above), but polling stays.

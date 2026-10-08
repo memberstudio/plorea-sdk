@@ -133,9 +133,10 @@ class SubscriptionResource extends Resource
      * Subscriptions for an external reference that look like they need a
      * human — the polling half of dunning.
      *
-     * A failed scheduler charge emits no webhook (confirmed by Plorea
-     * 2026-09-09), so the only way to notice one is to ask. Run this on a
-     * schedule for each of your billed entities.
+     * A failed scheduler charge does emit subscription.charge_failed
+     * (captured 2026-10-01), but a lost delivery is never redelivered and a
+     * stalled cycle emits nothing, so run this on a schedule for each of
+     * your billed entities as well.
      *
      * A subscription is returned when it reports past_due (a failed charge
      * Plorea is retrying, captured from production 2026-10-01) or

@@ -638,10 +638,22 @@ payment above.
 
 Fixture: `webhook-payment-failed.json`.
 
-### 📋 Nothing is emitted for setup, cancel, reactivate, or a failed charge
+### 📋 Nothing is emitted for setup, cancel or reactivate
 
-Confirmed by Plorea 2026-09-09. These transitions are poll-only. A failed
-recurring charge never announces itself.
+Confirmed by Plorea 2026-09-09. These transitions are poll-only. Plorea said
+the same of a failed scheduler charge, but see below.
+
+### ✅ `subscription.charge_failed` — captured 2026-10-01 and 2026-10-06 (test)
+
+Three deliveries, identical shape: `data: {subscriptionId, chargeId,
+reference, customerId, shopperReference, externalId, amount: {value,
+currency}, failureReason, retryCount, environment}`. No `pspReference`, no
+`nextChargeAt`. All three were `"PaymentDetail not found"` with `retryCount:
+1` — the stored card behind the method was gone. Not in Plorea's catalogue.
+
+Unobserved: one per retry or only the first, the last retry, and a real
+decline. Deliveries are never redelivered, so keep polling.
+Fixture: `webhook-subscription-charge-failed.json`.
 
 ### ✅ Signature verification proven end to end — 2026-09-09
 
@@ -680,8 +692,9 @@ break verification while the payload still looks valid.
 independently. The reasoning below is why, so you do not have to repeat it.
 
 The blocked shapes are: the 402 `ChargeFailedException` body, a
-`payment_failed` subscription, the state after the last retry, and any
-`subscription.charge_failed` webhook. A failed scheduled charge itself —
+`payment_failed` subscription and the state after the last retry. The
+`subscription.charge_failed` webhook was captured from a method whose card was
+gone (see above), not from a decline. A failed scheduled charge itself —
 `past_due`, a populated `failureReason`, a non-zero `retryCount` — was captured
 in production on 2026-10-01 (see above); it still cannot be produced in test.
 

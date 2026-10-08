@@ -193,9 +193,12 @@ setup verification itself, so the PM never activates
 (`storedPaymentMethodId: null`). An active-but-later-declining card is
 unreachable.
 
-Therefore the 402 body, a `payment_failed` subscription, the state after the
-last retry, and any `subscription.charge_failed` webhook are **all** blocked on
-Plorea provisioning a store-OK-decline-later test card (asked 2026-09-08).
+Therefore the 402 body, a `payment_failed` subscription and the state after
+the last retry are **all** blocked on Plorea provisioning a
+store-OK-decline-later test card (asked 2026-09-08, dropped 2026-10-07). The
+`subscription.charge_failed` webhook itself was captured 2026-10-01/06 in
+test, from a method whose stored card was gone ("PaymentDetail not found") —
+see [webhooks.md](webhooks.md).
 Those shapes are modelled from documentation, not observed — write dunning code
 that tolerates a slightly different shape. The first failure itself (`past_due`,
 `retryCount`, `failureReason`) was CAPTURED in production 2026-10-01; it still
