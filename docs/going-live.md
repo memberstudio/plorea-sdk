@@ -97,5 +97,9 @@ Before announcing, run one real transaction end to end in production:
 2. Pay it with a real card, on every surface you ship: hosted, web Drop-in,
    iOS and Android.
 3. Confirm that the webhook arrived, verified and was booked once.
-4. Refund it, and confirm that the refund settles. Allow hours.
+4. Refund it. The API shows `refund_requested`, not settlement, so confirm
+   with Plorea that the money went back. Allow hours.
 5. Store a card and let a subscription charge it, if you sell subscriptions.
+   Allow about 25 minutes for the first charge. Confirm that the
+   `subscription.*` webhook reached the **live** URL with `environment: "live"`:
+   until 2026-10-09 they went to the test URL (see [Webhooks](webhooks.md#live-subscription-webhooks-went-to-the-test-url)).

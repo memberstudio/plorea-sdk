@@ -132,7 +132,7 @@ Two caveats:
 ```php
 $status = Plorea::payments()->status('FIN-2026-00123');
 
-$status->isPaid();             // authorised or paid — money moved
+$status->isPaid();             // authorised by Adyen (capture is not observable)
 $status->isOpen();             // created, pending, active — still payable
 $status->isRefundRequested();  // refund accepted, provider settling
 $status->isCancelRequested();  // cancel accepted, provider settling
@@ -147,9 +147,12 @@ Use the helpers, not string comparison. Observed statuses:
 | Group | Statuses |
 | --- | --- |
 | Open | `created`, `pending`, `active` |
-| Paid | `authorised`, `paid` — test payments settle on `authorised` |
+| Paid | `authorised` — the only success state ever observed, in test and live. `paid` is handled defensively and has never been seen |
 | Modification pending | `refund_requested`, `cancel_requested` |
-| Terminal | `cancelled`, `refunded`, `failed` (refused by the acquirer) |
+| Terminal | `failed` (refused by the acquirer). `cancelled` and `refunded` are what Plorea says settlement produces; neither has been observed |
+
+`captured`, `paid`, the post-settlement statuses and any chargeback status are
+all unobserved, and Plorea has published no complete status enum.
 
 A refusal is the one that surprises people: **a declined payment reports
 `failed`, not `refused`** — captured 2026-09-09 from a real payment link taken
@@ -177,11 +180,17 @@ locally and flag mismatches for manual handling rather than auto-booking.
 
 ### Capture is automatic
 
-There is nothing to capture. Plorea settles through AmendoPOS a few minutes
-after authorization, and **no manual capture endpoint exists** — it is on
-Plorea's roadmap, not in the API today (stated 2026-09-15). Treat `authorised`
-as done: it is what `isPaid()` already returns true for. Do not build a
-pending-capture state to wait in.
+There is nothing to capture. Plorea states that it settles through AmendoPOS a
+few minutes after authorization, and **no manual capture endpoint exists** — it
+is on Plorea's roadmap, not in the API today (stated 2026-09-15). Treat
+`authorised` as done: it is what `isPaid()` already returns true for. Do not
+build a pending-capture state to wait in.
+
+Capture itself is **not observable** through the API. No CAPTURE event has
+been seen. Payments still read `authorised` with `webhookEventCode:
+AUTHORISATION` 1–5 minutes after payment (test, 2026-10-09) and more than two
+days after it (live, 2026-10). `isPaid()` therefore means "authorised by
+Adyen", not "captured".
 
 ## Refund and cancel
 
@@ -197,6 +206,11 @@ Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
 
 Cancel a payment that has not settled; refund one that has.
+
+A refund on a payment that still reads `authorised` stays a refund — it is not
+turned into a cancel. Verified 2026-10-09 (test) for both a partial refund
+(751 kr of 1 650 kr: `refundedTotal` and `lastRefundAmount` 75100,
+`lastCancelReference` null) and a full one.
 
 Both return **immediately** with `refund_requested` / `cancel_requested` and
 the provider settles asynchronously. Poll `status()` or wait for a
@@ -219,6 +233,11 @@ only signal is the payment's own top-level `status` being `refund_requested`,
 plus the `lastRefund*` group. The top-level status flips there immediately
 (from `paid` / `authorised`) while `webhookEventCode` stays `AUTHORISATION` —
 that field describes the original authorisation and does not track the refund.
+One run on 2026-10-09 (test) reported the top-level status still `authorised`
+1–5 minutes after an accepted refund, with the `lastRefund*` group and
+`refundedTotal` already set. That is not yet reconciled, so detect a refund
+from `lastRefund*` (and `$status->raw['refundedTotal']`) as well as from the
+status string.
 
 > [!IMPORTANT]
 > **Settlement took over 11 hours** in one observed test-environment refund
@@ -226,6 +245,13 @@ that field describes the original authorisation and does not track the refund.
 > up after an hour will report a perfectly healthy refund as failed. Never
 > reverse a refund in your own books, or tell a customer it failed, because a
 > timeout elapsed — `refund_requested` means Adyen accepted it.
+
+> [!WARNING]
+> **Accepted is not settled.** What a refund looks like after settlement — and
+> what a refund that Adyen later fails looks like — is unobserved. No REFUND
+> success or failure event has been seen. If you book a refund as final at
+> `refund_requested`, your books say "refunded" even when the money is still
+> captured. Book it as requested, and keep it reversible.
 
 `modificationReference` is your idempotency key for the modification itself.
 

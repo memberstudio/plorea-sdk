@@ -64,7 +64,7 @@ payload still looks perfectly valid.
 | `payment.failed` | `PaymentStatusUpdated` | Yes (2026-09-09) |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
-| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes (2026-10-01, 2026-10-06) — **not** in Plorea's catalogue |
+| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes (live events, delivered to the test URL, 2026-10-01 to 2026-10-08) — **not** in Plorea's catalogue |
 
 Everything else reaches consumers through `WebhookReceived` **only**. The SDK
 does not invent typed events for shapes nobody has seen.
@@ -102,11 +102,37 @@ Fixtures: `webhook-subscription-charge-succeeded.json`,
 Deliveries seen on staging in 2026-10 also carry `splitsEnabled` and
 `merchantOrgNr` in `data`; the fixture predates them and nothing reads them.
 
-## `subscription.charge_failed` — CAPTURED 2026-10-01 and 2026-10-06 (test)
+## TRAP (fixed per Plorea): live `subscription.*` webhooks went to the TEST URL — VERIFIED 2026-10-08
 
-Three deliveries, identical shape, all `failureReason: "PaymentDetail not
-found"` and `retryCount: 1` (the card behind the method was gone). Plorea had
-said on 2026-09-09 that a failed charge emits nothing; the wire says otherwise.
+With one URL per environment registered, live `payment.*` deliveries reach the
+live URL. Live `subscription.*` deliveries did **not**: all 12 live
+`subscription.charge_failed` events from 2026-10-01 to 2026-10-08 arrived at
+the **test** URL with `data.environment: "test"`, and the live URL received
+none. The ids exist only in live. Reported to Plorea 2026-10-09.
+
+**Stated by Plorea 2026-10-09:** fixed. The cause was the same as the charge
+incident (live subscriptions handled by the test-side scheduler). `subscription.*`
+now goes to the live URL with `data.environment: "live"`,
+`subscription.charge_succeeded` included. **Not yet verified on the wire.**
+
+- Until a live `subscription.*` delivery is seen at the live URL with
+  `environment: "live"`, keep treating `data.environment` on a
+  `subscription.*` delivery as unreliable. Do not "fix" the SDK to filter on
+  it — that would drop deliveries if the routing regresses.
+- **Keep polling** `needingAttention()` / `charges()`. Deliveries are never
+  redelivered, so polling stays the guarantee either way.
+- A test endpoint that books what it receives can book live subscriptions.
+
+## `subscription.charge_failed` — CAPTURED 2026-10-01 to 2026-10-08 (live events, at the test URL)
+
+The fixture's three deliveries (2026-10-01, 2026-10-06) were first taken for
+test events. They were **live** charges, misrouted to the test URL (trap
+above). Identical shape, all `failureReason: "PaymentDetail not found"` and
+`retryCount: 1`. Plorea had said on 2026-09-09 that a failed charge emits
+nothing; the wire says otherwise.
+
+VERIFIED 2026-10-06 to 2026-10-08 (live): **one delivery per attempt**, the
+last retry included, with `retryCount` 1, 2, 3.
 
 `data: {subscriptionId, chargeId, reference, customerId, shopperReference, externalId, amount: {value, currency}, failureReason, retryCount, environment}`
 — **no** `pspReference`, **no** `nextChargeAt`, no top-level `environment`.
@@ -117,8 +143,9 @@ said on 2026-09-09 that a failed charge emits nothing; the wire says otherwise.
 `retryCount` typed; anything else → null) and, like the success event,
 **not** `PaymentStatusUpdated`.
 
-UNOBSERVED: whether every retry emits one, whether the last retry does, and
-whether a card decline (rather than a missing card) looks the same. A failed
+UNOBSERVED: whether a card decline looks the same. Every failure seen so far
+is `"PaymentDetail not found"`, a fixed Plorea incident (see
+[subscriptions.md](subscriptions.md)). A failed
 delivery is never redelivered, so **dunning keeps polling
 `needingAttention()`** — the event makes it faster, not optional.
 

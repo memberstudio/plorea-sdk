@@ -2,6 +2,44 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Docs
+
+No behaviour changes. Docs, rules and docblocks record field findings from
+2026-10-06 to 2026-10-09:
+
+- `PaymentStatus::isPaid()` means "authorised by Adyen". `authorised` is the
+  only success status ever observed; `paid` never has been. Capture is not
+  observable through the API.
+- A partial or full refund on an `authorised` payment stays a refund, not a
+  cancel (test, 2026-10-09). `refund_requested` means accepted, not settled.
+- Live `subscription.*` webhooks arrived at the test URL, labelled
+  `environment: "test"`, until 2026-10-09. The `subscription.charge_failed`
+  deliveries from v0.3.11 were live events, not test events. Plorea states
+  the routing is fixed; not yet verified. Keep polling `needingAttention()`.
+- `payment_failed` is observed (live, 2026-10-08): after 3 attempts,
+  `retryCount` 3, `nextChargeAt` null. One `subscription.charge_failed`
+  arrives per attempt.
+- `charges()` is not reliably newest first. Sort by `createdAt`.
+- The first live charge of a no-trial subscription comes 15–25 minutes after
+  create.
+- Incident, fixed 2026-10-09: every live scheduled charge failed with
+  "PaymentDetail not found" from 2026-10-01 to 2026-10-09. Per Plorea, the
+  scheduler charged live subscriptions against Adyen's test environment.
+- A retry charges the subscription's amount at the time of the retry (per
+  Plorea). A retry reset by Plorea sets `retryCount` 0 and moves the billing
+  anchor to the new charge time (observed live).
+- Plorea may pause subscriptions while they debug (per Plorea).
+- `paymentMethods()->delete()` does not deactivate the stored card at Adyen
+  today (per Plorea). Once Plorea changes that, deleting one of two methods
+  sharing a `storedPaymentMethodId` may break the other.
+
+### Changed
+
+- The fixture `payment-status-paid.json` is now `payment-status-authorised.json`
+  (test-only; its content is unchanged).
+
 ## v0.3.11 - 2026-10-07
 
 ### Added

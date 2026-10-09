@@ -11,12 +11,20 @@ major-unit constructor, on purpose.
 ## Statuses
 
 - open = `created` | `pending` | `active`
-- paid = `authorised` | `paid` (test payments settle on `authorised`)
+- paid = `authorised` | `paid`. **`authorised` is the only success state ever
+  observed**, in test and live. Live payment-link payments still read
+  `authorised` + `AUTHORISATION` more than two days after payment (2026-10).
+  `paid` has never been seen; `isPaid()` keeps it defensively. `isPaid()`
+  means "authorised by Adyen", not "captured": the API gives no capture signal
+  (see "Capture is automatic" below).
 - **A refused payment reports `failed`, NOT `refused`** (captured 2026-09-09).
   `refused` is a string the API never returns; earlier docs in this repo wrongly
   used it, so any `is('refused')` written from them was dead code.
 - `refund_requested` / `cancel_requested` appear immediately after
   `payments/refund` / `payments/cancel` and persist until the provider settles.
+- **UNOBSERVED:** `captured`, `paid`, the post-settlement `refunded` /
+  `cancelled`, and any chargeback status. Plorea has published no complete
+  status enum. Do not model a state machine on strings nobody has seen.
 - `expired` has **never** been observed live. Judge expiry from the pay-page
   endpoint's computed `expired` flag or the stored `expiresAt`, never the
   status string.
@@ -52,7 +60,34 @@ identifier and no later poll can recover it.
 Status-body keys verified identical across three independent captures
 (2026-09-09): 29 keys, all read by `PaymentStatus`. **`lastRefundStatus` does
 not exist** — a report that it did turned out to be a `jq` null-read of a
-missing key.
+missing key. Bodies seen since 2026-10-06 (test) also carry `refusalReason`
+and `refundedTotal` (minor units). `PaymentStatus` does not type them yet;
+they are in `$raw`. Do not add them without a fixture.
+
+### Partial and full refunds on `authorised` — VERIFIED 2026-10-09 (test)
+
+Run through a consuming app's real refund flow, on payment-link payments that
+read `authorised`:
+
+- **A partial refund works.** 751 kr of a 1 650 kr payment: `refund_requested`,
+  `refundedTotal: 75100`, `lastRefundAmount: 75100`, `lastCancelReference:
+  null`. It was **not** turned into a cancel. Before this, partial refunds were
+  untested.
+- **A full refund on `authorised` is a refund, not a cancel.** 899 kr:
+  `refund_requested`, `refundedTotal` = the full amount, `lastCancelReference:
+  null`.
+- **Reported, not reconciled:** status reads 1–5 minutes later showed the
+  top-level `status` as `authorised` with `webhookEventCode: AUTHORISATION`,
+  and no CAPTURE or REFUND event. On 2026-09-09/19 the top-level status itself
+  flipped to `refund_requested`. One run; re-check before relying on either.
+  Detect a refund from the `lastRefund*` group / `refundedTotal` as well as
+  the status string.
+
+**Settlement is still UNOBSERVED** — the final status, `refundedTotal` after
+settlement, and any REFUND success or failure signal. `refund_requested` means
+accepted, nothing more. A consuming app that books the refund as final at
+that point will show "refunded" even if Adyen later fails the refund and the
+money stays captured. Keep the booking reversible, or mark it "requested".
 
 ## No idempotency on duplicate references
 
@@ -133,7 +168,9 @@ platform A/B.
 ## Capture is automatic — there is no capture API
 
 Stated by Plorea 2026-09-15. Capture runs through AmendoPOS, typically minutes
-after authorization. **A manual capture endpoint is on their roadmap and does
+after authorization. **Not observable:** no CAPTURE event has ever been seen.
+Payments read `authorised` + `AUTHORISATION` 1–5 minutes later (test,
+2026-10-09) and more than two days later (live, 2026-10). **A manual capture endpoint is on their roadmap and does
 not exist today**, so do not add a `capture()` method or model a pending-capture
 state. `authorised` is the terminal success state an integrator can observe —
 which is already how `isPaid()` treats it.

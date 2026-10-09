@@ -31,6 +31,25 @@ Exclude the path from CSRF verification if your app applies it globally:
 Add a throttle through `plorea.webhooks.middleware` (e.g. `'throttle:60,1'`) to
 rate-limit secret-guessing.
 
+### Live subscription webhooks went to the test URL
+
+> [!WARNING]
+> Observed 2026-10-08 and reported to Plorea 2026-10-09. With one URL per
+> environment, live `payment.*` webhooks reach the live URL. Live
+> `subscription.*` webhooks did **not**: they arrived at the **test** URL,
+> with `data.environment: "test"`.
+>
+> Plorea stated on 2026-10-09 that this is fixed: `subscription.*` now goes to
+> the live URL with `data.environment: "live"`, `subscription.charge_succeeded`
+> included. We have not yet verified this on the wire.
+
+- Until you see a live `subscription.*` delivery at the live URL, do not
+  trust `data.environment` on a `subscription.*` delivery.
+- Make sure a test or staging endpoint cannot book what it receives into live
+  data.
+- Poll `subscriptions()->needingAttention()` in live. A delivery is never
+  redelivered, so polling stays the guarantee for a failed charge.
+
 ## Authentication
 
 Real deliveries captured from Plorea's test environment are **signed**, not
@@ -87,7 +106,7 @@ open.
 | `payment.failed` | `PaymentStatusUpdated` | Yes |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
-| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes — sent, though not in Plorea's catalogue |
+| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes — sent (live events, at the test URL), though not in Plorea's catalogue |
 
 The type string is what you would expect from the status endpoint, not from
 the English: a refusal is `payment.failed`, never `payment.refused`.
@@ -109,8 +128,8 @@ These transitions are **poll-only**. Read them from `paymentMethods()->find()`,
 `subscriptions()->find()` and `payments()->status()`.
 
 Plorea also listed a **failed** scheduler charge here, but
-`subscription.charge_failed` has since been captured (2026-10-01 and
-2026-10-06). Listen for it, and keep polling
+`subscription.charge_failed` has since been observed (2026-10-01 to
+2026-10-08, one per attempt). Listen for it, and keep polling
 `subscriptions()->needingAttention()` anyway: a failed delivery is never
 redelivered, and a cycle that stalls without failing sends nothing.
 
@@ -221,7 +240,8 @@ payment status endpoint for scheduler charges anyway
 ([details](subscriptions.md#looking-a-charge-up-as-a-payment)). Read the charge
 from `charges()`.
 
-A failed scheduler charge (captured 2026-10-01 and 2026-10-06) raises
+A failed scheduler charge (observed 2026-10-01 to 2026-10-08 — live events,
+delivered to the test URL until 2026-10-09, see [above](#live-subscription-webhooks-went-to-the-test-url)) raises
 `SubscriptionChargeFailed`, with the same properties plus `failureReason` and
 `retryCount`:
 
@@ -239,7 +259,8 @@ Event::listen(SubscriptionChargeFailed::class, function (SubscriptionChargeFaile
 ```
 
 Its payload has no `pspReference` and no `nextChargeAt`; read the retry date
-from `find()`. Whether the last retry also emits one is unobserved.
+from `find()`. One arrives per attempt, the last retry included, with
+`retryCount` 1, 2, 3 (observed live 2026-10-08).
 
 ## Everything else
 
