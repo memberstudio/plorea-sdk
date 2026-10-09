@@ -381,6 +381,10 @@ subscriptions say `canceled`). Fixtures `payment-method-deleted.json`,
   `storedPaymentMethodId`) still reads `active` and **can still be charged**:
   a manual charge on a new subscription on the sibling was `Authorised`
   (test, 2026-10-06, after the delete). Production is unobserved.
+- **📋 Adyen side — Plorea, 2026-10-09:** the delete cancels only the Plorea
+  method. It does not deactivate the stored card or token at Adyen today.
+  Plorea plans to change that. Once they do, a delete may also break a
+  sibling that shares the `storedPaymentMethodId`.
 
 Until 2026-10-05 the route was missing in API Gateway: every DELETE answered a
 bare 404 `{"message":"Not Found"}`, the same as a non-existent path. That body
@@ -474,7 +478,7 @@ The `charges()` item reported `status: "failed"`, `reason: "scheduled_charge"`,
 `retryNumber: 0` and the same `failureReason`. A `subscription.charge_failed`
 webhook **was** sent, but to the registered *test* URL and labelled
 `environment: "test"` — see
-[the routing trap](#-live-subscription-webhooks-go-to-the-test-url--2026-10-08).
+[the routing trap](#-live-subscription-webhooks-went-to-the-test-url--2026-10-08).
 
 Because `nextChargeAt` moves forward, a `past_due` subscription is **not**
 overdue — `needingAttention()` checks the status as well.
@@ -501,13 +505,40 @@ Two live subscriptions failed their first scheduled charge and both retries:
 
 No fixture yet for the `payment_failed` read.
 
-### ❓ Every live scheduled charge failed — 2026-10-01 to 2026-10-09
+### 📋 A retry charges the current amount — Plorea, 2026-10-09
+
+A retry uses the amount the subscription has when the retry runs, not the
+amount of the failed attempt.
+
+### ✅ Retries reset by Plorea — 2026-10-09 (production)
+
+On request, Plorea reset the retries of five live `past_due` subscriptions and
+charged them again. There is no API for the reset. Each read back:
+
+- `status: "active"`, `retryCount: 0`;
+- the new charge in `charges()` with `status: "authorised"` and a
+  `pspReference`;
+- `nextChargeAt` one interval after the **new** charge time. A monthly cycle
+  that had been due on the 8th is now due on the 9th, so the billing anchor
+  moves.
+
+Plorea also stated that they had **paused** some of these subscriptions while
+debugging, without notice, and resumed them before the charge.
+
+### ✅ Every live scheduled charge failed — 2026-10-01 to 2026-10-09 (fixed)
 
 All live scheduler charges in that window (12 attempts) failed with
 `failureReason: "PaymentDetail not found"`. The cards had been stored without
 error, from both web and native, and the subscriptions were created without
-error. Reported to Plorea 2026-10-09; the cause is unknown. Treat it as an open
-incident, not as how the API behaves.
+error.
+
+**Cause, stated by Plorea 2026-10-09:** the scheduler charged live
+subscriptions against Adyen's **test** environment, where the live cards do
+not exist. The `pspReference`s on those failed items are test references.
+Nothing reached live: no bank declined and no money moved. Fixed 2026-10-09
+with a separate live scheduler and a guard that rejects a charge whose
+environment does not match. The retried charges were `authorised` the same
+day (verified). This was an incident, not how the API behaves.
 
 ### ✅ Pause and resume — captured 2026-10-01 (test)
 
@@ -668,26 +699,30 @@ missing, confirm which URL is registered before suspecting your listener.
 
 - Plorea can register one URL per environment (test and live) on request.
   Ask for it; it is not the default. `data.environment` remains a useful
-  second filter for `payment.*` — not for `subscription.*` (see below).
+  second filter for `payment.*` — not yet for `subscription.*` (see below).
 - The same signing secret may be used for both environments. Do not assume
   the test and live secrets differ — ask.
 - **A failed delivery is not retried.** There is no automatic redelivery, so a
   `500` from your endpoint loses the event. Polling is not a nicety.
 
-### ✅ Live subscription webhooks go to the test URL — 2026-10-08
+### ✅ Live subscription webhooks went to the test URL — 2026-10-08
 
 With one URL registered per environment, live `payment.*` events reach the live
-URL as expected. Live `subscription.*` events do **not**: every live
+URL as expected. Live `subscription.*` events did **not**: every live
 `subscription.charge_failed` (12 between 2026-10-01 and 2026-10-08) went to
 the **test** URL, with `data.environment: "test"`. The live URL received none.
 The ids in them exist only in live. Reported to Plorea 2026-10-09.
 
-Until Plorea fixes it:
+**📋 Plorea, 2026-10-09:** fixed, with the same cause as the charge incident
+above. `subscription.*` now goes to the live URL with
+`data.environment: "live"`, `subscription.charge_succeeded` included. Not yet
+verified on the wire.
 
-- Do **not** trust `environment` on a `subscription.*` delivery. A test
-  endpoint that books what it receives books live subscriptions.
-- The live app learns of failed charges only by polling `needingAttention()`
-  and `charges()`. Keep polling.
+- Until a live delivery is seen at the live URL, do **not** trust
+  `environment` on a `subscription.*` delivery. A test endpoint that books
+  what it receives can book live subscriptions.
+- Keep polling `needingAttention()` and `charges()`. A delivery is never
+  redelivered.
 
 ### 📋 The catalogue is four types — Plorea, 2026-09-09
 
@@ -776,7 +811,8 @@ failure from a real card decline. A failed scheduled charge — `past_due`, a
 populated `failureReason`, a non-zero `retryCount`, the
 `subscription.charge_failed` webhook, and `payment_failed` after the last
 retry — was observed in **production** between 2026-10-01 and 2026-10-08 (see
-above), all with `"PaymentDetail not found"` rather than a decline. It still
+above), all with `"PaymentDetail not found"` (charges sent to Adyen's test
+environment) rather than a decline. A real decline is unobserved, and it still
 cannot be produced in test.
 
 Why it cannot be done:

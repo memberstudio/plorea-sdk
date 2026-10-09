@@ -31,19 +31,24 @@ Exclude the path from CSRF verification if your app applies it globally:
 Add a throttle through `plorea.webhooks.middleware` (e.g. `'throttle:60,1'`) to
 rate-limit secret-guessing.
 
-### Live subscription webhooks go to the test URL
+### Live subscription webhooks went to the test URL
 
 > [!WARNING]
-> Observed 2026-10-08 and reported to Plorea 2026-10-09; not fixed at the
-> time of writing. With one URL per environment, live `payment.*` webhooks
-> reach the live URL. Live `subscription.*` webhooks do **not**: they arrive
-> at the **test** URL, with `data.environment: "test"`.
+> Observed 2026-10-08 and reported to Plorea 2026-10-09. With one URL per
+> environment, live `payment.*` webhooks reach the live URL. Live
+> `subscription.*` webhooks did **not**: they arrived at the **test** URL,
+> with `data.environment: "test"`.
+>
+> Plorea stated on 2026-10-09 that this is fixed: `subscription.*` now goes to
+> the live URL with `data.environment: "live"`, `subscription.charge_succeeded`
+> included. We have not yet verified this on the wire.
 
-- Do not trust `data.environment` on a `subscription.*` delivery.
+- Until you see a live `subscription.*` delivery at the live URL, do not
+  trust `data.environment` on a `subscription.*` delivery.
 - Make sure a test or staging endpoint cannot book what it receives into live
   data.
-- Poll `subscriptions()->needingAttention()` in live. Until Plorea fixes the
-  routing, polling is the live app's only signal for a failed charge.
+- Poll `subscriptions()->needingAttention()` in live. A delivery is never
+  redelivered, so polling stays the guarantee for a failed charge.
 
 ## Authentication
 
@@ -236,7 +241,7 @@ payment status endpoint for scheduler charges anyway
 from `charges()`.
 
 A failed scheduler charge (observed 2026-10-01 to 2026-10-08 — live events,
-delivered to the test URL, see [above](#live-subscription-webhooks-go-to-the-test-url)) raises
+delivered to the test URL until 2026-10-09, see [above](#live-subscription-webhooks-went-to-the-test-url)) raises
 `SubscriptionChargeFailed`, with the same properties plus `failureReason` and
 `retryCount`:
 

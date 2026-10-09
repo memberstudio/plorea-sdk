@@ -11,12 +11,16 @@ namespace MemberFlow\Plorea\Events;
  *
  * Observed 2026-10-01 to 2026-10-08: one delivery per attempt, the last
  * retry included, with retryCount 1, 2, 3. Every one so far carried
- * failureReason "PaymentDetail not found". Unlike the success event, the
- * payload carries no pspReference and no nextChargeAt.
+ * failureReason "PaymentDetail not found" — per Plorea (2026-10-09), their
+ * scheduler had charged live subscriptions against Adyen's test
+ * environment; fixed 2026-10-09. Unlike the success event, the payload
+ * carries no pspReference and no nextChargeAt.
  *
  * These were live charges, but Plorea delivered them to the test URL with
- * data.environment "test" (observed 2026-10-08, reported to Plorea
- * 2026-10-09). Do not trust data.environment on a subscription.* delivery.
+ * data.environment "test" (observed 2026-10-08). Plorea states the routing
+ * is fixed as of 2026-10-09 (live URL, environment "live"); not yet
+ * verified. Until it is, do not trust data.environment on a subscription.*
+ * delivery.
  *
  * Treat it as a ping: fetch the subscription with
  * Plorea::subscriptions()->find($subscriptionId) and read the history from

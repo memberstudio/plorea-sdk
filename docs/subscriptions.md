@@ -330,10 +330,10 @@ Read this before building retry logic.
   2026-10-08, though Plorea had said failures were poll-only). A delivery is
   never retried, so the event speeds dunning up; polling is still what
   guarantees it.
-- **Live `subscription.*` webhooks currently go to the test URL**, labelled
-  `environment: "test"` (observed 2026-10-08, reported to Plorea 2026-10-09).
-  See [Webhooks](webhooks.md#live-subscription-webhooks-go-to-the-test-url).
-  Until Plorea fixes it, polling is the live app's only signal.
+- **Live `subscription.*` webhooks went to the test URL** until 2026-10-09,
+  labelled `environment: "test"`. Plorea states the routing is fixed; this is
+  not yet verified on the wire. See
+  [Webhooks](webhooks.md#live-subscription-webhooks-went-to-the-test-url).
 - A failed scheduled charge turns the subscription **`past_due`** (captured
   from production 2026-10-01). `retryCount` counts the failed attempts,
   `failureReason` carries the provider's message, `lastChargeAt` stays at the
@@ -344,6 +344,15 @@ Read this before building retry logic.
   `canceled` (observed live 2026-10-08): `retryCount: 3`, `nextChargeAt:
   null`. Plorea stops charging. Retries came about 24 hours apart. See
   [Verified API behaviour](api-behaviour.md#-after-the-last-retry-payment_failed--2026-10-06-to-2026-10-08-production).
+- A retry charges the amount the subscription has **when the retry runs**, not
+  the amount of the failed attempt (stated by Plorea 2026-10-09).
+- Plorea can reset the retries of a `past_due` subscription and charge it again
+  on request. There is no API for it. After the charge the subscription reads
+  `active`, `retryCount: 0`, and `nextChargeAt` one interval after the new
+  charge, so the billing day can move (observed live 2026-10-09).
+- Plorea may pause a subscription while they debug, without notice (stated
+  2026-10-09). A `paused` subscription you did not pause is worth a question
+  to Plorea.
 
 So dunning must poll, and must not assume the shape of what it finds.
 `needingAttention()` is the polling half:

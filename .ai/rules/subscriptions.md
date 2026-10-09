@@ -25,10 +25,22 @@ seconds in test, **15–25 min after create in live** (7 of 7 no-trial
 subscriptions, 2026-10; the scheduler runs about every 5 min). Plorea owns the
 schedule; the app never triggers a recurring charge.
 
-**OPEN incident, live 2026-10-01 to 2026-10-09:** every scheduled live charge
-failed — 12 attempts, all `failureReason: "PaymentDetail not found"`, on cards
-that were stored and activated without error. Reported to Plorea 2026-10-09;
-cause unknown. This is an incident, **not** API behaviour: do not model it.
+**Incident, live 2026-10-01 to 2026-10-09 — FIXED:** every scheduled live
+charge failed — 12 attempts, all `failureReason: "PaymentDetail not found"`,
+on cards that were stored and activated without error. **Stated by Plorea
+2026-10-09:** the scheduler charged live subscriptions against Adyen's
+**test** environment, where the live cards do not exist. The `pspReference`s
+on those failed items are test references; nothing reached live, no bank
+declined and no money moved. Fixed 2026-10-09 with a separate live scheduler
+and a guard that rejects a charge whose environment does not match.
+VERIFIED 2026-10-09 (live): the retried charges came back `authorised`. This
+was an incident, **not** API behaviour: do not model it, and do not read
+`"PaymentDetail not found"` as a card problem.
+
+**Stated by Plorea 2026-10-09:** Plorea may **pause** subscriptions
+themselves while they debug, without telling the merchant. That explains the
+`past_due` subscriptions seen `paused` on 2026-10-09. Do not assume your app
+paused a subscription it finds paused.
 
 **OPEN, seen 2026-10-06 (test):** new no-trial subscriptions, including one
 on a card the scheduler had charged before, were **not** charged. Each
@@ -107,6 +119,12 @@ whether a non-nine-digit value is rejected. The fake does not model either.
 - A sibling method sharing the same `storedPaymentMethodId` stays `active`
   and **can still be charged** — a manual charge on it was `Authorised` after
   the delete (CAPTURED 2026-10-06, test). Production unobserved.
+- **Stated by Plorea 2026-10-09:** the delete cancels only the Plorea method.
+  It does **not** deactivate the stored card or token at Adyen today. Plorea
+  says they will change that. **Risk once they do:** two methods can share one
+  `storedPaymentMethodId`, so deleting one may also break the sibling. Before
+  deleting a method that shares its stored id with an active one, confirm with
+  Plorea how the change treats a shared token.
 - The cancelled method stays readable, card and stored id included. The read
   has no `cancelledAt`; the delete response does.
 - A bare 404 `{"message":"Not Found"}` is API Gateway's "no such route" (seen
@@ -161,6 +179,19 @@ attempts about 24 h apart (the slot drifts ~5 min each time), then
 `payment_failed` (not `canceled`), `retryCount: 3`, `nextChargeAt: null`.
 `lastChargeAt` does not move on a retry. Each charge item's `retryNumber` is
 0, 1, 2; the webhooks carry `retryCount` 1, 2, 3. No fixture.
+
+**A retry charges the current amount** — Stated by Plorea 2026-10-09: a retry
+uses the amount the subscription has when the retry runs, not the amount of
+the failed attempt. An amount change between attempts changes what the retry
+charges.
+
+**Manual retry reset** — on request, Plorea can reset the retries of a
+`past_due` subscription and charge it again (done 2026-10-09). VERIFIED live
+2026-10-09: after the successful charge the subscription read `active`,
+`retryCount: 0`, and `nextChargeAt` one interval after the **new** charge
+time. The billing anchor moved (a monthly cycle on the 8th moved to the 9th).
+There is no API for the reset; ask Plorea. Persist your own period boundary
+if the anchor matters.
 The overdue test stays **on purpose**, for a cycle that stalls without any
 failure status; `nextChargeAt` is captured. The scheduler charges within
 minutes of the due time (seconds in test, up to ~25 min in live) and moves the
@@ -221,10 +252,11 @@ write dunning code that tolerates a slightly different shape.
 
 The failure path itself was observed in **production** 2026-10-01 to
 2026-10-08: `past_due`, `retryCount`, `failureReason`, the
-`subscription.charge_failed` webhook (misrouted to the test URL — see
-[webhooks.md](webhooks.md)), and `payment_failed` after the last retry. All
-were `"PaymentDetail not found"` (the open incident above), not a decline. It
-still cannot be produced in test.
+`subscription.charge_failed` webhook (misrouted to the test URL until
+2026-10-09 — see [webhooks.md](webhooks.md)), and `payment_failed` after the
+last retry. All were `"PaymentDetail not found"` (the fixed incident above:
+charges sent to Adyen's test environment), not a decline. A real decline is
+still unobserved, and it still cannot be produced in test.
 
 ## Native pause — CAPTURED 2026-10-01 (test)
 

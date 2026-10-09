@@ -101,5 +101,5 @@ Before announcing, run one real transaction end to end in production:
    with Plorea that the money went back. Allow hours.
 5. Store a card and let a subscription charge it, if you sell subscriptions.
    Allow about 25 minutes for the first charge. Confirm that the
-   `subscription.*` webhook reached the **live** URL: in 2026-10 they went to
-   the test URL (see [Webhooks](webhooks.md#live-subscription-webhooks-go-to-the-test-url)).
+   `subscription.*` webhook reached the **live** URL with `environment: "live"`:
+   until 2026-10-09 they went to the test URL (see [Webhooks](webhooks.md#live-subscription-webhooks-went-to-the-test-url)).

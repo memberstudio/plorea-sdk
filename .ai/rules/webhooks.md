@@ -102,20 +102,26 @@ Fixtures: `webhook-subscription-charge-succeeded.json`,
 Deliveries seen on staging in 2026-10 also carry `splitsEnabled` and
 `merchantOrgNr` in `data`; the fixture predates them and nothing reads them.
 
-## TRAP: live `subscription.*` webhooks go to the TEST URL — VERIFIED 2026-10-08
+## TRAP (fixed per Plorea): live `subscription.*` webhooks went to the TEST URL — VERIFIED 2026-10-08
 
 With one URL per environment registered, live `payment.*` deliveries reach the
-live URL. Live `subscription.*` deliveries do **not**: all 12 live
+live URL. Live `subscription.*` deliveries did **not**: all 12 live
 `subscription.charge_failed` events from 2026-10-01 to 2026-10-08 arrived at
 the **test** URL with `data.environment: "test"`, and the live URL received
-none. The ids exist only in live. Reported to Plorea 2026-10-09; not fixed at
-the time of writing.
+none. The ids exist only in live. Reported to Plorea 2026-10-09.
 
-- Do **not** trust `data.environment` on a `subscription.*` delivery. Do not
-  "fix" the SDK to filter on it — that would drop the only live signal.
-- The live app sees failed charges only by polling `needingAttention()` /
-  `charges()`. **Keep polling.**
-- A test endpoint that books what it receives books live subscriptions.
+**Stated by Plorea 2026-10-09:** fixed. The cause was the same as the charge
+incident (live subscriptions handled by the test-side scheduler). `subscription.*`
+now goes to the live URL with `data.environment: "live"`,
+`subscription.charge_succeeded` included. **Not yet verified on the wire.**
+
+- Until a live `subscription.*` delivery is seen at the live URL with
+  `environment: "live"`, keep treating `data.environment` on a
+  `subscription.*` delivery as unreliable. Do not "fix" the SDK to filter on
+  it — that would drop deliveries if the routing regresses.
+- **Keep polling** `needingAttention()` / `charges()`. Deliveries are never
+  redelivered, so polling stays the guarantee either way.
+- A test endpoint that books what it receives can book live subscriptions.
 
 ## `subscription.charge_failed` — CAPTURED 2026-10-01 to 2026-10-08 (live events, at the test URL)
 
@@ -138,7 +144,7 @@ last retry included, with `retryCount` 1, 2, 3.
 **not** `PaymentStatusUpdated`.
 
 UNOBSERVED: whether a card decline looks the same. Every failure seen so far
-is `"PaymentDetail not found"`, an open Plorea incident (see
+is `"PaymentDetail not found"`, a fixed Plorea incident (see
 [subscriptions.md](subscriptions.md)). A failed
 delivery is never redelivered, so **dunning keeps polling
 `needingAttention()`** — the event makes it faster, not optional.

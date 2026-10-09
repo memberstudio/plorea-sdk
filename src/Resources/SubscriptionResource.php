@@ -137,8 +137,8 @@ class SubscriptionResource extends Resource
      * (observed 2026-10-01 to 2026-10-08), but a lost delivery is never
      * redelivered and a stalled cycle emits nothing, so run this on a
      * schedule for each of your billed entities as well. In live, those
-     * webhooks currently go to the test URL (observed 2026-10-08, reported
-     * to Plorea 2026-10-09), so this poll is the live app's only signal.
+     * webhooks went to the test URL until 2026-10-09 (Plorea states it is
+     * fixed; not yet verified), so do not drop this poll.
      *
      * A subscription is returned when it reports past_due (a failed charge
      * Plorea is retrying, captured from production 2026-10-01) or
