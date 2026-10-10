@@ -7,7 +7,7 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 ### Docs
 
 No behaviour changes. Docs, rules and docblocks record field findings from
-2026-10-06 to 2026-10-09:
+2026-10-06 to 2026-10-09, not covered by v0.4.0:
 
 - `PaymentStatus::isPaid()` means "authorised by Adyen". `authorised` is the
   only success status ever observed; `paid` never has been. Capture is not
@@ -18,18 +18,16 @@ No behaviour changes. Docs, rules and docblocks record field findings from
   `environment: "test"`, until 2026-10-09. The `subscription.charge_failed`
   deliveries from v0.3.11 were live events, not test events. Plorea states
   the routing is fixed; not yet verified. Keep polling `needingAttention()`.
-- `payment_failed` is observed (live, 2026-10-08): after 3 attempts,
-  `retryCount` 3, `nextChargeAt` null. One `subscription.charge_failed`
-  arrives per attempt.
+- One `subscription.charge_failed` arrives per failed attempt, the last one
+  included (`retryCount` 1, 2, 3; production, 2026-10-01 to 2026-10-08).
 - `charges()` is not reliably newest first. Sort by `createdAt`.
-- The first live charge of a no-trial subscription comes 15–25 minutes after
-  create.
+- In production, the first charge of a no-trial subscription came 15–25
+  minutes after create, on the scheduler's next run.
 - Incident, fixed 2026-10-09: every live scheduled charge failed with
   "PaymentDetail not found" from 2026-10-01 to 2026-10-09. Per Plorea, the
   scheduler charged live subscriptions against Adyen's test environment.
-- A retry charges the subscription's amount at the time of the retry (per
-  Plorea). A retry reset by Plorea sets `retryCount` 0 and moves the billing
-  anchor to the new charge time (observed live).
+- A retry reset by Plorea sets `retryCount` 0 and moves the billing anchor to
+  the new charge time (observed live). The API has no call for it.
 - Plorea may pause subscriptions while they debug (per Plorea).
 - `paymentMethods()->delete()` does not deactivate the stored card at Adyen
   today (per Plorea). Once Plorea changes that, deleting one of two methods
@@ -39,6 +37,43 @@ No behaviour changes. Docs, rules and docblocks record field findings from
 
 - The fixture `payment-status-paid.json` is now `payment-status-authorised.json`
   (test-only; its content is unchanged).
+
+## v0.4.0 - 2026-10-11
+
+### Breaking
+
+- **Breaking for tests and direct callers:** a session response with no
+  session id now throws `PloreaException`, both from the resources and from
+  `PaymentSession::fromArray()` / `PaymentMethodSession::fromArray()`. Before,
+  it gave an empty `sessionId`, which failed late, inside Drop-in. A custom
+  `Plorea::fake()` stub for `payments/session` or
+  `payment-methods/setup/session` must now include `sessionId`. The default
+  fakes already do.
+
+### Changed
+
+- Docs: unverified subscription behaviours are now marked. A moved `nextChargeAt`
+  on an `active`, already-charged subscription (plain PATCH, or pause then
+  resume) is stored but has never been charged (open question, test 4-5
+  October 2026). Leaving `payment_failed` is untested by PATCH, `resume()` and
+  `reactivate()`. Changing `amount` and `nextChargeAt` together is unverified.
+  The retry policy (three attempts about 24 hours apart, then `payment_failed`)
+  is observed in production, not confirmed by Plorea. A retry charges the amount
+  held when it runs (stated by Plorea). No-trial billing at once is seen in
+  production, not in test. Docblocks no longer say that `reactivate()` resumes
+  a `payment_failed` subscription.
+- Docs: a refund and a cancel on one scheduled subscription charge failed in
+  production with `Payment not found`, by reference and by `pspReference`
+  (2026-10-11). Refund such a charge in the Plorea portal and record it in
+  your own system. Whether every scheduled charge behaves this way is open.
+- `PaymentSession` also reads Adyen's own field names, `id` and `data`, when
+  `sessionId` or `sessionData` is missing or empty. Plorea's pay page reads
+  both (2026-09-14). `PaymentMethodSession` does not: a card-setup response
+  also carries a payment method id.
+- `PaymentLink` also reads `orgNr`, `invoiceUrl` and `status: "expired"`,
+  the other names Plorea's pay page accepts. An empty value counts as
+  missing, so it does not hide the other name. `expired` is true when either
+  `expired` is true or `status` is `expired`.
 
 ## v0.3.11 - 2026-10-07
 

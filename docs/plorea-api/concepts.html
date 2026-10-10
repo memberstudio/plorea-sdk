@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Core concepts</title>
+  <meta name="description" content="References, tenants, customers, environments, amounts, the platform field, idempotency and the evidence model of the Plorea Payments API.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="concepts">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Start here</p>
+        <h1>Core concepts</h1>
+        <p class="lead">The ideas that every Plorea endpoint shares. Learn them once and the rest of the API becomes predictable: who owns which identifier, how test and live are kept apart, how money is written, and which calls are safe to retry.</p>
+      </header>
+
+      <h2>The object map</h2>
+      <p>Plorea has five kinds of objects. The diagram shows how they connect. Identifiers in quotes are the ones Plorea creates. The rest are yours.</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  T["Tenant&lt;br/&gt;tenantId (yours)"]
+  C["Customer&lt;br/&gt;customerId, shopperReference (yours)"]
+  L["Payment link&lt;br/&gt;'pl_…' + reference (yours)"]
+  P["Payment&lt;br/&gt;reference, pspReference"]
+  M["Payment method (stored card)&lt;br/&gt;'pm_…'"]
+  S["Subscription&lt;br/&gt;'sub_…' + externalId (yours)"]
+  CH["Charge&lt;br/&gt;'chg_…', reference = {subId}-{chgId}"]
+  MER["Merchant (payee)&lt;br/&gt;merchantOrgNr"]
+  T --> C
+  T --> L
+  L -->|"customer pays"| P
+  C --> M
+  M --> S
+  S -->|"scheduler or manual"| CH
+  CH -.->|"manual charges only"| P
+  L -.-> MER
+  S -.-> MER
+        </pre>
+        <figcaption>A payment link produces a payment. A stored card feeds a subscription, which produces charges. Both name the company that gets paid.</figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>ID created by</th><th>Read it with</th><th>Guide</th></tr></thead>
+          <tbody>
+            <tr><td>Payment link</td><td>Plorea (<code>paymentLinkId</code>) and you (<code>reference</code>)</td><td><code>GET /pay/{paymentLinkId}</code></td><td><a href="payment-links.html">Payment links</a></td></tr>
+            <tr><td>Payment</td><td>You (<code>reference</code>)</td><td><code>GET /payments/status/{reference}</code></td><td><a href="payment-lifecycle.html">Lifecycle</a></td></tr>
+            <tr><td>Payment method</td><td>Plorea (<code>paymentMethodId</code>)</td><td><code>GET /payment-methods/{id}</code></td><td><a href="payment-methods.html">Storing cards</a></td></tr>
+            <tr><td>Subscription</td><td>Plorea (<code>subscriptionId</code>) and you (<code>externalId</code>)</td><td><code>GET /subscriptions/{id}</code>, <code>GET /subscriptions?externalId=</code></td><td><a href="subscriptions.html">Subscriptions</a></td></tr>
+            <tr><td>Charge</td><td>Plorea</td><td><code>GET /subscriptions/{id}/charges</code></td><td><a href="subscriptions.html">Subscriptions</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>References</h2>
+      <p>The <code>reference</code> is the key of a one-off payment. You choose it when you create the link. You use it to read the status, refund, cancel and match webhooks. Plorea passes it to Adyen as the merchant reference.</p>
+      <ul>
+        <li><strong>Make it unique per payment attempt.</strong> Use your order or invoice number. If you need a second attempt for the same order, add a suffix, for example <code>ORDER-1001-1</code>.</li>
+        <li><strong>Keep it stable.</strong> Store it on your order before you call Plorea. Then a crash after the call still leaves you a key to look up.</li>
+        <li><strong>A modification has its own reference.</strong> A refund or cancel takes a <code>modificationReference</code>. Make it unique per attempt, for example <code>ORDER-1001-refund-1</code>.</li>
+      </ul>
+      <p>Subscription charges get a reference from Plorea in the form <code>{subscriptionId}-{chargeId}</code>. <span class="badge verified">Verified</span> A manual charge resolves on <code>GET /payments/status/{reference}</code>. A scheduled charge does not: the call answers <code>404</code>. Read scheduled charges from <code>GET /subscriptions/{id}/charges</code>. <span class="badge open">Open question</span></p>
+
+      <h2>Tenants and customers</h2>
+      <p>Plorea is built for platforms that serve many businesses. Two levels of identifiers keep their data apart.</p>
+      <dl class="fields">
+        <dt>tenantId</dt>
+        <dd>One of your own clients, for example one club or one shop. Plorea issues tenant IDs. Every write takes it in the body. Stored cards, subscriptions and payments belong to one tenant. A request that reads an object of another tenant fails with <code>403</code> and <code>"Tenant mismatch"</code>. <span class="badge verified">Verified</span></dd>
+        <dt>customerId</dt>
+        <dd>Your identifier for the paying person inside the tenant. Optional, but send it. It lets you find stored cards and subscriptions per person.</dd>
+        <dt>shopperReference</dt>
+        <dd>The identifier Adyen stores the card under. A stored card is tied to the shopper reference, not to a company. One card can pay subscriptions for different organisation numbers in the same tenant. <span class="badge stated">Stated by Plorea</span></dd>
+        <dt>externalId</dt>
+        <dd>Your identifier for a subscription, for example your own membership ID. List subscriptions by it with <code>GET /subscriptions?externalId=…</code>.</dd>
+      </dl>
+
+      <h2>The merchant: who gets the money</h2>
+      <p>The tenant groups your data. The <strong>merchant</strong> is the company that receives the payout. You name it with <code>merchantOrgNr</code>, the Norwegian organisation number of the invoice issuer. Never send your own platform's number unless you are the seller.</p>
+      <ul>
+        <li>Plorea requires it by contract on payment links. <span class="badge stated">Stated by Plorea</span> The payment-link endpoint does not enforce it. <span class="badge verified">Verified</span></li>
+        <li>On a subscription the field is optional. Every charge inherits the company. A subscription without it behaves as before. <span class="badge stated">Stated by Plorea</span></li>
+        <li>On subscriptions the value must be nine digits. Otherwise the API answers <code>400</code>. <span class="badge verified">Verified</span></li>
+        <li>The first payment for a new organisation number starts KYC automatically. The payout waits until KYC is approved, usually 1–5 business days. The link stays payable. <span class="badge stated">Stated by Plorea</span></li>
+        <li>Reads do not return the merchant on subscriptions, and the link-create response does not echo it. Keep your own record. <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <h2>Environments</h2>
+      <p>Test and live share one host, <code>https://payments.plorea.no</code>. The <code>X-Environment</code> header selects the Adyen account behind the call.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Test</th><th>Live</th></tr></thead>
+          <tbody>
+            <tr><td>Header</td><td><code>X-Environment: test</code></td><td><code>X-Environment: live</code></td></tr>
+            <tr><td>API key</td><td>Starts with <code>plr_test_</code></td><td>A separate live key from Plorea</td></tr>
+            <tr><td>Money</td><td>None. Adyen test cards only.</td><td>Real cards, real payouts</td></tr>
+            <tr><td><code>environment</code> in responses</td><td><code>test</code> <span class="badge verified">Verified</span></td><td><code>live</code> <span class="badge unobserved">Not observed</span></td></tr>
+            <tr><td>Webhook URL</td><td colspan="2">One URL per environment, on request. Not the default. <span class="badge stated">Stated by Plorea</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout danger">
+        <p class="callout-title">A missing header can reach live</p>
+        <p>Most endpoints default to test when the header is missing. <code>POST /payments/refund</code> does not: it routes to the live credentials and answers <code>401</code> with <code>"errorType": "security"</code>. The error looks like a bad key. Send <code>X-Environment</code> on every request, from one place in your code. <span class="badge verified">Verified</span></p>
+      </div>
+      <p>Payment, payment-method and session responses and webhooks carry <code>environment</code>. Subscription responses and error bodies do not. Keep the environment of each request in your own context. Check it in your webhook handler. Drop events whose environment does not match the server that receives them.</p>
+
+      <h2>Amounts and currency</h2>
+      <p>All amounts are integers in minor units. For NOK, that is øre. There is no decimal form anywhere in the API. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>You mean</th><th>Send</th></tr></thead>
+          <tbody>
+            <tr><td>100,00 kr</td><td><code>10000</code></td></tr>
+            <tr><td>249,00 kr</td><td><code>24900</code></td></tr>
+            <tr><td>1 kr (the card-setup check)</td><td><code>100</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The shape differs by endpoint. Payment links and refunds use a flat integer plus a separate <code>currency</code>. Subscriptions and charges use an object.</p>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-json">// POST /payments/link — flat
+{ "amount": 24900, "currency": "NOK" }
+
+// POST /subscriptions — object
+{ "amount": { "value": 24900, "currency": "NOK" }, "vatRate": 0.25, "vatAmount": 4980 }</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+
+$price = Amount::nok(24900);
+$price-&gt;value;          // 24900
+$price-&gt;inMajorUnits(); // 249.0
+$price-&gt;toArray();      // ['value' =&gt; 24900, 'currency' =&gt; 'NOK']</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Keep money as integers. Convert only for display.
+const toOre = (kroner) =&gt; Math.round(kroner * 100);
+const format = (ore) =&gt;
+  new Intl.NumberFormat('nb-NO', { style: 'currency', currency: 'NOK' }).format(ore / 100);</code></pre></div>
+      </div>
+      <p>VAT on subscriptions is a decimal rate (<code>0.25</code> for 25 %) plus the VAT amount in øre. You calculate the VAT amount yourself. Plorea does not check that the two agree.</p>
+
+      <h2>The platform field</h2>
+      <p>Plorea asks each integrator to name itself with <code>platform</code>. Plorea uses the value for logging and reporting. It has no effect on any endpoint. <span class="badge stated">Stated by Plorea</span></p>
+      <ul>
+        <li>On <code>POST</code> and <code>PATCH</code>: send it in the JSON body.</li>
+        <li>On <code>GET</code>: send it in the query string, for example <code>?platform=acme</code>.</li>
+      </ul>
+      <p>A payment that a manual subscription charge created reports <code>"platform": "subscription"</code> on the status endpoint. <span class="badge verified">Verified</span></p>
+
+      <h2 id="idempotency">Idempotency and retries</h2>
+      <p>Plorea has no idempotency keys. The API does not detect a duplicate request. This is the most important fact for your retry logic. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Call</th><th>Safe to retry?</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Any <code>GET</code></td><td>Yes</td><td>Reads change nothing.</td></tr>
+            <tr><td><code>POST /payments/refund</code>, <code>/payments/cancel</code></td><td>With the same <code>modificationReference</code></td><td>The modification reference identifies the attempt. <span class="badge open">Open question</span>: Plorea has not confirmed that it rejects a repeat.</td></tr>
+            <tr><td><code>POST /payments/link</code></td><td>No</td><td>A repeat creates a second payable link with the same reference. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>POST /subscriptions</code></td><td>No</td><td>A repeat creates a second subscription that bills the card again.</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>No</td><td>A repeat charges the card again.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Use a "look up, then create" pattern for unsafe calls:</p>
+      <ol class="steps">
+        <li><strong>Look up first</strong>For a link, call <code>GET /payments/status/{reference}</code>. For a subscription, call <code>GET /subscriptions?externalId=…</code>.</li>
+        <li><strong>Reuse an open match</strong>If a link is open with the same amount and not expired, send the customer to it.</li>
+        <li><strong>Stop on a paid match</strong>If the reference is already paid, never create another link for the same order.</li>
+        <li><strong>Supersede a dead match</strong>If the link is expired, cancelled or has a different amount, create a new link on a suffixed reference (<code>-1</code>, <code>-2</code>, …).</li>
+        <li><strong>Lock per reference</strong>Two requests can race between the lookup and the create. Hold a lock on the reference across both steps.</li>
+      </ol>
+      <p>The PHP SDK implements this pattern as <code>firstOrCreate()</code>. See <a href="payment-links.html">Payment links</a>.</p>
+      <div class="callout gap">
+        <p class="callout-title">What would fix this</p>
+        <p>An <code>Idempotency-Key</code> header on every <code>POST</code>, or a <code>409</code> on a duplicate reference. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+      </div>
+
+      <h2>Timestamps</h2>
+      <p>Timestamps are ISO 8601 strings. Plorea returns UTC with milliseconds, for example <code>2026-09-04T09:55:00.000Z</code>. Some fields on stored cards carry a local offset, for example <code>2026-09-05T11:51:00+02:00</code>. Parse both forms. Send dates with an explicit offset.</p>
+
+      <h2>Webhooks are signals, not facts</h2>
+      <p>A webhook tells you that something changed. It does not replace a read. Delivery can fail, and Plorea does not redeliver. <span class="badge stated">Stated by Plorea</span> Some changes send no webhook at all: card setup, cancel and reactivate. <span class="badge stated">Stated by Plorea</span> A failed scheduled charge now sends <code>subscription.charge_failed</code>, but that event is not in the catalogue and is not redelivered. <span class="badge verified">Verified in test</span></p>
+      <p>So every integration needs two paths to the same code: a webhook handler and a scheduled poll. Both re-read the object and apply the result idempotently. See <a href="webhooks.html">Webhooks</a>.</p>
+
+      <h2 id="evidence">The evidence model</h2>
+      <p>Plorea has not published an API contract. These docs therefore say where each claim comes from.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Badge</th><th>Meaning</th><th>How much to trust it</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge verified">Verified</span></td><td>We called the test API and saw it. Anonymised captures back most of these.</td><td>High for test. Production can differ.</td></tr>
+            <tr><td><span class="badge stated">Stated by Plorea</span></td><td>Plorea told us in writing. We could not observe it.</td><td>Build on it, but add a guard.</td></tr>
+            <tr><td><span class="badge unobserved">Not observable in test</span></td><td>The test environment cannot produce it, for example a failed scheduled charge.</td><td>Handle it defensively.</td></tr>
+            <tr><td><span class="badge open">Open question</span></td><td>Unknown. We have asked Plorea.</td><td>Do not depend on any answer.</td></tr>
+            <tr><td><span class="badge proposal">Proposal</span></td><td>A change we ask Plorea to make.</td><td>Not available today.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Two rules follow from this model:</p>
+      <ul>
+        <li><strong>Branch on status strings and HTTP codes only.</strong> Error messages are fixed templates and can change. Never parse them. <span class="badge verified">Verified</span></li>
+        <li><strong>Tolerate unknown fields and values.</strong> Plorea adds fields without notice. Keep the raw response, and treat an unknown status as "needs review", not as success.</li>
+      </ul>
+      <p>The full list of dated observations is on <a href="field-notes.html">Verified behaviour</a>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

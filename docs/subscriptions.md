@@ -30,11 +30,19 @@ $subscription->nextChargeAt;
 Intervals: `BillingInterval::daily()`, `weekly()`, `monthly()`, `yearly()`,
 each taking an optional count — `BillingInterval::monthly(3)` is quarterly.
 
-**Billing starts immediately.** The create response already carries the first
-`nextChargeAt`, and the scheduler charges the card unless you set a trial:
-within seconds in test, 15–25 minutes after create in live (7 of 7, 2026-10;
-the scheduler runs about every 5 minutes). There is no "start on the 1st" option; if you need one, use a
-trial that ends then.
+**Billing should start at once.** The create response already carries the first
+`nextChargeAt`. Without a trial, the scheduler should charge the card on its next run.
+In production that came 15–25 minutes after create (7 of 7, 2026-10; the
+scheduler runs about every 5 minutes), and again on 2026-10-10 (**Verified** in
+production). In test on 2026-10-06, new subscriptions without a
+trial were not charged: the scheduler kept moving `nextChargeAt` 15 to 20
+minutes forward (**Open question**). Always confirm the first charge in
+`charges()`.
+
+There is no "start on the 1st" option. Use a trial that ends then. A trial is
+charged on its end date (**Verified**). Do not move `nextChargeAt` on an
+`active` subscription to reach a billing day: that has never produced a charge
+(**Open question**, see [Pause and resume](#pause-and-resume)).
 
 Always set `externalId` — it is how you find the subscription again, and it is
 included in the `subscription.charge_succeeded` webhook payload.
@@ -100,7 +108,7 @@ isActive()`, never on `isActive()` alone.
 | `paused` | `isPaused()` | Billing paused; `nextChargeAt` cleared — see [below](#pause-and-resume) |
 | `canceled` | `isCanceled()` | Cancelled (US spelling) — access runs to `accessEndsAt` |
 | `past_due` | `isPastDue()` | A scheduled charge failed and Plorea is retrying it — see [below](#the-dunning-gap) |
-| `payment_failed` | `hasPaymentFailure()` | The last retry failed; Plorea stops — observed live 2026-10-08 |
+| `payment_failed` | `hasPaymentFailure()` | Retries ran out (`retryCount` 3, `nextChargeAt` null). Seen in production 6–8 October 2026 (**Verified**). The way out is **unobserved** — see [below](#the-dunning-gap) |
 
 Use the helpers or `is('...')`, never a bare string comparison.
 
@@ -131,7 +139,9 @@ create a new subscription for that.
 
 ## Pause and resume
 
-Recommended by Plorea and captured in the test environment on 2026-10-01.
+Recommended by Plorea (**Stated by Plorea**) and captured in the test environment on 2026-10-01.
+The status changes are **Verified**. A charge after a resume has never been seen
+(**Open question**, see below).
 Scheduler races, in-flight charges, retries and the later billing anchor still
 require verification in the consuming integration.
 
@@ -156,14 +166,20 @@ What Plorea refuses (each a 400, `ValidationException`):
   the subscription stays paused, so to bill now pass a moment a little ahead.
 
 To move the next charge without changing the status, use
-`update($id)->nextChargeAt($date)->save()`. It works on a paused subscription
-(it stays paused) and on a trial — but on a trial only `nextChargeAt` moves,
-`trialEndsAt` keeps its old value.
+`update($id)->nextChargeAt($date)->save()`. It stores the date on a paused
+subscription (it stays paused) and on a trial — but on a trial only
+`nextChargeAt` moves, `trialEndsAt` keeps its old value. A trial with a moved
+date was charged on it (**Verified**).
 
-**Open — no charge was seen after resume.** On three resumed test
-subscriptions the scheduler had not charged 3, 16 and 41 minutes after the
-resume date, and each stayed `active` with the lapsed `nextChargeAt`. Raised
-with Plorea 2026-10-01. Until it is settled, check after a resume date that the
+**Open question — no charge was seen after resume, or after a moved date on an
+`active` subscription.** On three resumed test subscriptions the scheduler had
+not charged 3, 16 and 41 minutes after the resume date, and each stayed
+`active` with the lapsed `nextChargeAt`. A plain PATCH of the date on an
+`active`, already-charged subscription gave the same result with both date
+formats over four scheduler runs (test, 4 and 5 October 2026). Only `trialing`
+subscriptions with a moved date were charged. Reported to Plorea 2026-10-01 and
+2026-10-05. Still open. Do not rely on a resume, or on a moved date, to restart
+or shift billing on an `active` subscription. Check after a resume date that the
 charge landed — `needingAttention()` reports the subscription as overdue once
 the grace period passes.
 
@@ -181,7 +197,8 @@ pausing; this does not resolve debt or establish that in-flight charges stop.
 
 Only resume a subscription confirmed as `isPaused()`. Transitions from canceled,
 trialing or paused are refused; pausing while past_due and combined updates
-with amount/card changes are unverified. Use `reactivate()` for cancellation recovery.
+with amount/card changes are unverified. This includes changing `amount` and
+`nextChargeAt` in one update (**Unobserved**). Use `reactivate()` for cancellation recovery.
 Do not blindly retry writes: a delayed resume replay could restore an old charge
 date after the scheduler has advanced it. Persist intent and reconcile readback
 and charges before deciding whether another write is needed.
@@ -340,16 +357,21 @@ Read this before building retry logic.
   last *successful* charge, and `nextChargeAt` moves to the retry —
   `retryPolicy.retryIntervalDays` later, up to `retryPolicy.maxRetries`
   attempts. The charge appears in `charges()` with `status: failed`.
-- After the last retry the subscription turns **`payment_failed`**, not
-  `canceled` (observed live 2026-10-08): `retryCount: 3`, `nextChargeAt:
-  null`. Plorea stops charging. Retries came about 24 hours apart. See
-  [Verified API behaviour](api-behaviour.md#-after-the-last-retry-payment_failed--2026-10-06-to-2026-10-08-production).
-- A retry charges the amount the subscription has **when the retry runs**, not
-  the amount of the failed attempt (stated by Plorea 2026-10-09).
-- Plorea can reset the retries of a `past_due` subscription and charge it again
-  on request. There is no API for it. After the charge the subscription reads
-  `active`, `retryCount: 0`, and `nextChargeAt` one interval after the new
-  charge, so the billing day can move (observed live 2026-10-09).
+- In production on 6–8 October 2026, one subscription was tried three times,
+  about 24 hours apart. Then it became **`payment_failed`** (`retryCount` 3,
+  `nextChargeAt` null), not `canceled` (**Verified** in production). Plorea has
+  not confirmed this as a fixed policy (**Open question**).
+- A retry charges the amount the subscription holds when the retry runs
+  (**Stated by Plorea**, 9 October).
+- Leaving `payment_failed` is **untested** by every route. `PATCH` with
+  `amount` and `nextChargeAt` was not tried. `resume()` is verified only from
+  `paused` (an `active` one gives 400, `allowedTransitions: ["paused"]`).
+  `reactivate()` is verified only from `canceled` (400 "Only canceled
+  subscriptions can be reactivated"). Plorea reset one subscription by hand:
+  `active`, `retryCount` 0, charged at once, billing anchor moved. The API has
+  no call for that reset. After it, `nextChargeAt` is one interval after the
+  new charge, so the billing day can move (observed live 2026-10-09). See
+  [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
 - Plorea may pause a subscription while they debug, without notice (stated
   2026-10-09). A `paused` subscription you did not pause is worth a question
   to Plorea.
@@ -376,17 +398,19 @@ It returns a subscription when any test fires:
 | Test | Basis |
 | --- | --- |
 | `isPastDue()` — status is `past_due` | Captured from production 2026-10-01 |
-| `hasPaymentFailure()` — status is `payment_failed` | Observed live 2026-10-08, after the last retry |
+| `hasPaymentFailure()` — status is `payment_failed` | Seen in production 6–8 October 2026 (**Verified**) |
 | `isOverdue()` — `nextChargeAt` is more than an hour in the past | Derived from fields captured on the wire |
 
 The tests are independent. A `past_due` subscription is **not** overdue: its
 `nextChargeAt` has already moved to the retry, so only the status gives it
 away. The overdue test covers a cycle that stalled without any failure status —
-Plorea's scheduler charges within minutes of `nextChargeAt` (seconds in test,
-up to about 25 minutes in live) and moves the date forward as it does, so a
-date well past the grace period means the cycle did not complete. Keep the
-grace period above 25 minutes in live, or a new subscription can show as
-overdue before its first charge.
+Plorea's scheduler charges within minutes of a natural `nextChargeAt`
+(seconds in test, up to about 25 minutes in production) and moves the date
+forward as it does, so a date still in the past means the cycle did not
+complete. Keep the grace period above 25 minutes in production, or a new
+subscription can show as overdue before its first charge. A date you moved
+yourself on an `active` subscription has not been charged so far (**Open
+question**), so it also shows as overdue.
 
 Tune the grace period for your billing cadence, and pass a fixed clock in tests:
 

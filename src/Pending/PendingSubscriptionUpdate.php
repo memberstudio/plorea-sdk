@@ -76,8 +76,9 @@ class PendingSubscriptionUpdate
     }
 
     /**
-     * Replace the payment method on the subscription. After replacing it on a
-     * payment_failed subscription, call reactivate() to resume billing.
+     * Replace the payment method on the subscription. Leaving payment_failed
+     * is untested: reactivate() is verified only from canceled, and resume
+     * only from paused.
      */
     public function paymentMethod(string $paymentMethodId): static
     {
@@ -110,7 +111,12 @@ class PendingSubscriptionUpdate
      * Captured 2026-10-01 (test): accepted on an active, paused or trialing
      * subscription. A paused subscription stays paused with the date set,
      * and a later resume without a new date keeps it. On a trialing
-     * subscription only nextChargeAt moves; trialEndsAt keeps its value.
+     * subscription only nextChargeAt moves; trialEndsAt keeps its value, and
+     * the moved date was charged.
+     *
+     * Open question: on an active, already-charged subscription the new date
+     * is stored but has never been charged (test, 4-5 October 2026; reported
+     * to Plorea). Changing amount and nextChargeAt in one update is untested.
      */
     public function nextChargeAt(DateTimeInterface $nextChargeAt): static
     {

@@ -143,10 +143,12 @@ final readonly class Subscription
     /**
      * Whether the subscription reports payment_failed.
      *
-     * Observed live 2026-10-08: after the last retry failed, the
-     * subscription turned payment_failed (not canceled) with retryCount 3
-     * and a null nextChargeAt. Plorea stops charging. Earlier failures show
-     * as past_due (see isPastDue()). Not reproducible in test.
+     * Seen in production 6-8 October 2026, after three failed attempts about
+     * 24 hours apart (retryCount 3, nextChargeAt null). Plorea stops charging
+     * but has not confirmed that as a fixed policy. Earlier failures show as
+     * past_due (see isPastDue()). Not reproduced in test. How a subscription
+     * leaves this status is untested: resume is verified only from paused,
+     * reactivate only from canceled.
      */
     public function hasPaymentFailure(): bool
     {
@@ -156,12 +158,14 @@ final readonly class Subscription
     /**
      * Whether a scheduled charge is late.
      *
-     * Plorea's scheduler charges within minutes of nextChargeAt (seconds in
-     * test, up to about 25 minutes in live) and moves the date forward as it
-     * does, so a nextChargeAt still in the past after the
+     * Plorea's scheduler charges within minutes of a natural nextChargeAt
+     * (seconds in test, up to about 25 minutes in production) and moves the
+     * date forward as it does, so a nextChargeAt still in the past after the
      * grace period means the cycle did not complete — a decline, a retry in
-     * progress, or a subscription stuck for some other reason. This is
-     * derived entirely from observed fields.
+     * progress, or a subscription stuck for some other reason. A date moved by
+     * hand on an active subscription has not been charged so far (open
+     * question), so it also reads as overdue. This is derived entirely from
+     * observed fields.
      *
      * A failed charge that Plorea is retrying is not overdue: the
      * subscription turns past_due and nextChargeAt moves to the retry. Use

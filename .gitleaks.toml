@@ -19,9 +19,21 @@ useDefault = true
 # This drops findings whose secret is itself a `NAME=` assignment. A real
 # credential never takes that shape, so a value genuinely pasted into the
 # template — or anywhere else — is still reported.
-[allowlist]
+[[allowlists]]
 description = "An empty env value makes the match span the next assignment"
 regexTarget = "match"
 regexes = [
     '''(?m)=[\r\n]+[A-Z][A-Z0-9_]*=''',
 ]
+
+# Commit a24d66a (the first Plorea API docs commit) shows an *invented*
+# example header, `Idempotency-Key: 4f1c2a0e-…-acme-order-1001`, in a
+# proposal on docs/plorea-api/wishlist.html. `generic-api-key` reads the
+# UUID-like value as a secret. The page now uses a low-entropy example; this
+# entry only covers that one file in that one commit, so the rule still runs
+# everywhere else, including on any later change to the same file.
+[[allowlists]]
+description = "Invented Idempotency-Key example in the first docs commit"
+condition = "AND"
+commits = ["a24d66a665303b388221bbc1db61843220045dcf"]
+paths = ['''^docs/plorea-api/wishlist\.html$''']

@@ -16,7 +16,7 @@ Before editing a file, read every rule file whose globs cover it, and
 | [subscriptions.md](subscriptions.md) | `src/Resources/SubscriptionResource.php`, `src/Resources/PaymentMethodResource.php`, `src/Pending/PendingSubscription*.php`, `src/Pending/PendingPaymentMethodSetup.php`, `src/Data/Subscription*.php`, `src/Data/PaymentMethod*.php`, `src/Data/BillingInterval.php`, `src/Data/RetryPolicy.php`, `src/Enums/RecurringType.php` |
 | [webhooks.md](webhooks.md) | `src/Http/Controllers/**`, `src/Http/Middleware/**`, `src/Events/**`, `routes/**`, `tests/Feature/WebhookTest.php` |
 | [testing.md](testing.md) | `tests/**`, `src/Testing/**` |
-| [conventions.md](conventions.md) | `src/**`, `composer.json`, `.gitattributes` |
+| [conventions.md](conventions.md) | `src/**`, `composer.json`, `.gitattributes`, `docs/**`, `resources/boost/**`, `bin/check-docs` |
 
 ## Evidence legend
 

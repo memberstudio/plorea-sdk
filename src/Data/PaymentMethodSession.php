@@ -51,6 +51,8 @@ final readonly class PaymentMethodSession implements JsonSerializable
      */
     public static function fromArray(array $data, ?string $clientKey = null, ?string $environment = null): self
     {
+        [$sessionId, $sessionData] = self::sessionFields($data);
+
         return new self(
             paymentMethodId: self::string($data['paymentMethodId'] ?? null) ?? '',
             tenantId: self::string($data['tenantId'] ?? null),
@@ -60,8 +62,8 @@ final readonly class PaymentMethodSession implements JsonSerializable
             recurringType: RecurringType::tryFrom(self::string($data['recurringType'] ?? null) ?? ''),
             status: self::string($data['status'] ?? null),
             environment: self::string($data['environment'] ?? null) ?? $environment,
-            sessionId: self::string($data['sessionId'] ?? null) ?? '',
-            sessionData: self::string($data['sessionData'] ?? null),
+            sessionId: $sessionId,
+            sessionData: $sessionData,
             expiresAt: self::date($data['expiresAt'] ?? null),
             clientKey: self::string($data['clientKey'] ?? null) ?? $clientKey,
             channel: Channel::tryFrom(self::string($data['channel'] ?? null) ?? ''),

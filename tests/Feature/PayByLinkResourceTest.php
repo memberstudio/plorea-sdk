@@ -6,6 +6,7 @@ namespace MemberFlow\Plorea\Tests\Feature;
 
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use MemberFlow\Plorea\Exceptions\PloreaException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Tests\TestCase;
 
@@ -35,6 +36,43 @@ class PayByLinkResourceTest extends TestCase
         $this->assertFalse($link->expired);
     }
 
+    public function test_it_reads_the_alternative_link_field_names(): void
+    {
+        // Plorea's pay page accepts these names too (2026-10-10).
+        Http::fake([
+            'payments.plorea.no/pay/pl_123?*' => Http::response([
+                'id' => 'pl_123',
+                'orgNr' => '123456789',
+                'invoiceUrl' => 'https://app.example/invoices/123.pdf',
+                'status' => 'expired',
+            ]),
+        ]);
+
+        $link = Plorea::payByLink()->find('pl_123');
+
+        $this->assertSame('123456789', $link->merchantOrgNr);
+        $this->assertSame('https://app.example/invoices/123.pdf', $link->invoiceUrl);
+        $this->assertTrue($link->expired);
+    }
+
+    public function test_an_empty_link_field_does_not_hide_its_alternative(): void
+    {
+        Http::fake([
+            'payments.plorea.no/pay/pl_123?*' => Http::response([
+                'id' => 'pl_123',
+                'merchantOrgNr' => '',
+                'orgNr' => '123456789',
+                'invoice_url' => '',
+                'invoiceUrl' => 'https://app.example/invoices/123.pdf',
+            ]),
+        ]);
+
+        $link = Plorea::payByLink()->find('pl_123');
+
+        $this->assertSame('123456789', $link->merchantOrgNr);
+        $this->assertSame('https://app.example/invoices/123.pdf', $link->invoiceUrl);
+    }
+
     public function test_it_creates_a_payment_session(): void
     {
         Http::fake([
@@ -57,5 +95,46 @@ class PayByLinkResourceTest extends TestCase
             'returnUrl' => 'https://pay.plorea.no/pl_123/return',
             'platform' => 'memberflow',
         ]);
+    }
+
+    public function test_it_reads_adyens_own_session_field_names(): void
+    {
+        // Plorea's pay page falls back to Adyen's id/data (2026-09-14).
+        Http::fake([
+            'payments.plorea.no/payments/session' => Http::response([
+                'id' => 'CS123',
+                'data' => 'AbData',
+                'environment' => 'test',
+                'clientKey' => 'test_CLIENT_KEY',
+            ]),
+        ]);
+
+        $session = Plorea::payByLink()->session('pl_123');
+
+        $this->assertSame('CS123', $session->sessionId);
+        $this->assertSame('AbData', $session->sessionData);
+    }
+
+    public function test_a_session_without_an_id_throws(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/session' => Http::response([
+                'sessionData' => 'AbData',
+                'environment' => 'test',
+                'payer@example.com' => 'x',
+            ]),
+        ]);
+
+        try {
+            Plorea::payByLink()->session('pl_123');
+        } catch (PloreaException $e) {
+            $this->assertStringContainsString('without a session id', $e->getMessage());
+            // Response keys can hold customer data; the message must not list them.
+            $this->assertStringNotContainsString('payer@example.com', $e->getMessage());
+
+            return;
+        }
+
+        $this->fail('Expected a PloreaException.');
     }
 }

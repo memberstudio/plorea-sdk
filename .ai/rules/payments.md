@@ -89,6 +89,15 @@ accepted, nothing more. A consuming app that books the refund as final at
 that point will show "refunded" even if Adyen later fails the refund and the
 money stays captured. Keep the booking reversible, or mark it "requested".
 
+**A scheduled subscription charge could not be refunded through the API**
+(production, 2026-10-11, one charge tested): `POST payments/refund` with a `{subscriptionId}-{chargeId}`
+reference answers `{"error":"Payment not found"}`, and so does the charge's
+`pspReference`. `POST payments/cancel` on the `authorised` charge also fails. The signup charge is `reason: scheduled_charge` too. Refund it in the Plorea
+portal, then record that refund locally against the original charge (amount,
+portal reference, outcome) so no later refund path refunds it again. Whether
+every scheduled charge behaves this way is open; a manual-charge refund is
+untested. Do not add an SDK path for it until Plorea offers one.
+
 ## No idempotency on duplicate references
 
 Creating twice gives two live, payable links. `firstOrCreate()` implements the
@@ -232,6 +241,14 @@ being built at the same time, and the SDK had to be able to ask. What exists:
   tenant, shopper reference and customer id; a consuming app's
   `response()->json($session)` must never ship those to a browser or an app.
   Do not widen `toCheckout()` without that in mind.
+- `PaymentSession` reads `sessionId`/`sessionData` first, then Adyen's
+  `id`/`data`. Plorea's own pay page does the same (2026-09-14, after it
+  logged the response keys to debug). `PaymentMethodSession` reads only
+  `sessionId`/`sessionData`: its response also carries a payment method id,
+  which must never become a session id. No session id throws a
+  `PloreaException`. An empty id must never reach Drop-in. The message names
+  only the fields looked for, never the response keys: keys can hold
+  customer data, and the message ends up in logs.
 
 **Update 2026-09-17, morning — probed against Plorea test. (Card setup is
 superseded below; the rest still holds.)** Both session endpoints
