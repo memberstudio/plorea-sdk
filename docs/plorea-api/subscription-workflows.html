@@ -547,8 +547,8 @@ await upgrade.save({ state: 'done' });</code></pre></div>
 
       <div class="callout warning">
         <p class="callout-title">An immediate downgrade with a partial refund is not supported yet</p>
-        <p>To refund part of the current period you need to refund a scheduler charge. A scheduler charge reference does not resolve on <code>GET /payments/status/{reference}</code> (403, later 404). It is not known whether <code>POST /payments/refund</code> accepts it. <span class="badge open">Open question</span></p>
-        <p>Until Plorea confirms, give the difference as credit in your own system, or downgrade at period end.</p>
+        <p>To refund part of the current period you need to refund a scheduler charge. A scheduler charge reference does not resolve on <code>GET /payments/status/{reference}</code> (403, later 404). <code>POST /payments/refund</code> does not accept it either, nor the charge's <code>pspReference</code>: both answer <code>Payment not found</code>. <span class="badge verified">Verified 2026-10-11</span></p>
+        <p>Until Plorea adds a way, give the difference as credit in your own system, or downgrade at period end.</p>
       </div>
 
       <!-- ================================================================ -->

@@ -27,6 +27,11 @@
 
       <h2 id="2026-10">October 2026</h2>
 
+      <h3 id="2026-10-11">2026-10-11</h3>
+      <ul>
+        <li><strong>Refund on a subscription charge is not possible through the API.</strong> <code>POST /payments/refund</code> answers <code>Payment not found</code> for a scheduled charge in production, with the charge reference and with its <code>pspReference</code>. A cancel also fails. The first charge at signup is a scheduled charge too. Refund in the Plorea portal. <span class="badge verified">Verified</span> See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</li>
+      </ul>
+
       <h3 id="2026-10-10">2026-10-10</h3>
       <ul>
         <li><strong>Docs:</strong> <code>409</code> on <code>POST /payments/session</code> and <code>410</code> on <code>GET /pay/{id}</code> are listed. Their meaning is not confirmed. <span class="badge open">Open question</span> See <a href="errors.html">Errors and retries</a>.</li>
