@@ -48,7 +48,7 @@ stateDiagram-v2
   active --> canceled: POST /cancel
   canceled --> active: POST /reactivate
         </pre>
-        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. The way out of <code>past_due</code>, and the state after the last retry, are not observed. The pause paths were captured in test.</figcaption>
+        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. After three failed retries, production showed <code>payment_failed</code>. The way out of <code>past_due</code> and of <code>payment_failed</code> is untested. The pause paths were captured in test. No charge has followed a resume yet.</figcaption>
       </figure>
       <div class="table-wrap">
         <table>
@@ -59,7 +59,7 @@ stateDiagram-v2
             <tr><td><code>past_due</code></td><td>A scheduled charge failed and Plorea retries it. <code>retryCount</code> counts the failed attempts. <code>failureReason</code> holds the provider's message. <code>nextChargeAt</code> moves to the next retry. See <a href="dunning.html">Failed charges and dunning</a>.</td><td>Your decision</td><td><span class="badge verified">Verified</span> in production</td></tr>
             <tr><td><code>paused</code></td><td>Billing stopped by <code>PATCH</code>. <code>nextChargeAt</code> is null until a resume. See <a href="subscription-workflows.html#pause-or-freeze">Pause or freeze</a>.</td><td>Your decision</td><td><span class="badge verified">Verified</span> in test</td></tr>
             <tr><td><code>canceled</code></td><td>No more charges. Spelled the US way, with one L.</td><td>Until <code>accessEndsAt</code></td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>payment_failed</code></td><td>Named in Plorea's documentation. The failure status seen on the wire is <code>past_due</code>.</td><td>Your decision</td><td><span class="badge unobserved">Never observed</span></td></tr>
+            <tr><td><code>payment_failed</code></td><td>The retries ran out: <code>retryCount</code> <code>3</code> and <code>nextChargeAt</code> <code>null</code>. Seen in production on 6 to 8 October 2026, not <code>canceled</code>. How to leave this status is untested through <code>PATCH</code>, resume and reactivate. See <a href="dunning.html#after-the-last-retry">After the last retry</a>.</td><td>Your decision</td><td><span class="badge verified">Verified</span> in production. Exit <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -69,8 +69,8 @@ stateDiagram-v2
       </div>
 
       <h2>Billing timeline</h2>
-      <p><strong>Billing starts immediately.</strong> The create response already holds the first <code>nextChargeAt</code>. Without a trial, the scheduler charges the card within seconds. <span class="badge verified">Verified</span></p>
-      <p>After each successful charge, Plorea sets <code>lastChargeAt</code> and moves <code>nextChargeAt</code> forward by one interval. There is no option to start billing on a fixed day, such as the 1st of the month. To get that effect, set a trial that ends on that day.</p>
+      <p><strong>Billing starts immediately.</strong> The create response already holds the first <code>nextChargeAt</code>. Without a trial, the scheduler should charge the card at once. A no-trial signup was charged at once in production on 2026-10-10. <span class="badge verified">Verified</span> in production. In test on 2026-10-06, new subscriptions without a trial were not charged: the scheduler kept moving <code>nextChargeAt</code> 15 to 20 minutes forward. <span class="badge open">Open question</span> An earlier test run did charge within seconds. Always confirm the first charge in <code>GET /subscriptions/{id}/charges</code>.</p>
+      <p>After each successful charge, Plorea sets <code>lastChargeAt</code> and moves <code>nextChargeAt</code> forward by one interval. There is no option to start billing on a fixed day, such as the 1st of the month. To get that effect, set a trial that ends on that day. A trial is charged on its end date. <span class="badge verified">Verified</span> Do not move <code>nextChargeAt</code> on an <code>active</code> subscription to reach a billing day. The new date is stored, but no such subscription has been charged on a moved date. <span class="badge open">Open question</span></p>
       <figure class="diagram">
         <pre class="mermaid">
 sequenceDiagram
@@ -106,7 +106,7 @@ sequenceDiagram
             <tr><td><code>interval</code><span class="req">required</span></td><td class="type">object</td><td><code>{"unit": "month", "count": 1}</code>. Units: <code>day</code>, <code>week</code>, <code>month</code>, <code>year</code>. <code>count: 3</code> with <code>month</code> bills quarterly. You cannot change the interval later.</td></tr>
             <tr><td><code>externalId</code><span class="opt">recommended</span></td><td class="type">string</td><td>Your own ID for the thing being billed. You can list subscriptions by it, and the charge webhook includes it. Always set it.</td></tr>
             <tr><td><code>trialEndsAt</code><span class="opt">optional</span></td><td class="type">datetime</td><td>ISO 8601, for example <code>2026-11-01T00:00:00+00:00</code>. Sets status <code>trialing</code> and <code>nextChargeAt</code> to this time.</td></tr>
-            <tr><td><code>retryPolicy</code><span class="opt">optional</span></td><td class="type">object</td><td><code>{"maxRetries": 3, "retryIntervalDays": 1}</code>. How often Plorea retries a failed charge. The responses show <code>maxRetries: 3</code> when you send none. After a failure, <code>nextChargeAt</code> moves forward by <code>retryIntervalDays</code>. <span class="badge verified">Verified</span> in production. What happens after the last retry is <span class="badge unobserved">Not observed</span>.</td></tr>
+            <tr><td><code>retryPolicy</code><span class="opt">optional</span></td><td class="type">object</td><td><code>{"maxRetries": 3, "retryIntervalDays": 1}</code>. How often Plorea retries a failed charge. The responses show <code>maxRetries: 3</code> when you send none. After a failure, <code>nextChargeAt</code> moves forward by <code>retryIntervalDays</code>. <span class="badge verified">Verified</span> in production. In production on 6 to 8 October 2026, three attempts about 24 hours apart ended in <code>payment_failed</code>. Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> A retry charges the amount the subscription holds when the retry runs. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>title</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan name, for example <code>Acme Gym Monthly</code>.</td></tr>
             <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Free text.</td></tr>
             <tr><td><code>quantity</code><span class="opt">optional</span></td><td class="type">integer</td><td>Number of units, such as seats. Informational. Plorea charges <code>amount</code> as sent and does not multiply it. <span class="badge open">Open question</span></td></tr>
@@ -395,7 +395,7 @@ $subscription-&gt;amount-&gt;value;  // 29900</code></pre></div>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>subscriptionId</code></td><td class="type">string</td><td>Plorea's ID, prefixed <code>sub_</code>.</td></tr>
-            <tr><td><code>status</code></td><td class="type">enum</td><td><code>trialing</code>, <code>active</code>, <code>past_due</code>, <code>paused</code> or <code>canceled</code>. Plorea's documentation also names <code>payment_failed</code> (never observed).</td></tr>
+            <tr><td><code>status</code></td><td class="type">enum</td><td><code>trialing</code>, <code>active</code>, <code>past_due</code>, <code>paused</code> or <code>canceled</code>. Also <code>payment_failed</code> after the last retry. <span class="badge verified">Verified</span> in production. See <a href="dunning.html#after-the-last-retry">After the last retry</a>.</td></tr>
             <tr><td><code>nextChargeAt</code></td><td class="type">datetime | null</td><td>When the scheduler charges next. Null after cancel and during a pause. After a failed charge, the time of the next retry.</td></tr>
             <tr><td><code>lastChargeAt</code></td><td class="type">datetime | null</td><td>The last successful charge. Null during a trial.</td></tr>
             <tr><td><code>lastPaymentReference</code></td><td class="type">string | null</td><td>Payment reference of the last charge, <code>{subscriptionId}-{chargeId}</code>.</td></tr>
@@ -463,7 +463,7 @@ const { count, items } = await plorea('GET', `subscriptions?${qs}`);</code></pre
         <li><code>amount</code>, <code>quantity</code>, <code>vatRate</code>, <code>vatAmount</code> — the price.</li>
         <li><code>paymentMethodId</code> — a new <code>active</code> card. Any other status returns <code>400</code>.</li>
         <li><code>externalId</code>, <code>title</code>, <code>description</code> — your labels.</li>
-        <li><code>nextChargeAt</code> — moves the next charge. A past date returns <code>400</code>. On a <code>trialing</code> subscription, <code>trialEndsAt</code> keeps its old value. <span class="badge verified">Verified</span> in test</li>
+        <li><code>nextChargeAt</code> — stores a new date for the next charge. A past date returns <code>400</code>. On a <code>trialing</code> subscription, <code>trialEndsAt</code> keeps its old value, and the moved date was charged. <span class="badge verified">Verified</span> in test. On an <code>active</code> subscription that was charged before, the date is stored but no charge has followed it (4 and 5 October 2026, test). <span class="badge open">Open question</span> Sending <code>amount</code> and <code>nextChargeAt</code> in one update is not tested. <span class="badge unobserved">Unobserved</span></li>
         <li><code>status</code> — <code>"paused"</code> or <code>"active"</code> only. See <a href="subscription-workflows.html#pause-or-freeze">Pause or freeze</a>. <span class="badge verified">Verified</span> in test</li>
       </ul>
       <p>You <strong>cannot</strong> change <code>interval</code>, <code>trialEndsAt</code> or <code>merchantOrgNr</code>. To change the interval, cancel and create a new subscription. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>

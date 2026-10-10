@@ -143,8 +143,11 @@ final readonly class Subscription
     /**
      * Whether the subscription reports payment_failed.
      *
-     * Modelled from Plorea's documentation and never observed; the failure
-     * status seen on the wire is past_due (see isPastDue()).
+     * Seen in production 6-8 October 2026, after three failed retries about
+     * 24 hours apart (retryCount 3, nextChargeAt null). Plorea has not
+     * confirmed that as a fixed policy. How a subscription leaves this status
+     * is untested: resume is verified only from paused, reactivate only from
+     * canceled.
      */
     public function hasPaymentFailure(): bool
     {
@@ -154,11 +157,13 @@ final readonly class Subscription
     /**
      * Whether a scheduled charge is late.
      *
-     * Plorea's scheduler charges within seconds of nextChargeAt and moves the
-     * date forward as it does, so a nextChargeAt still in the past after the
-     * grace period means the cycle did not complete — a decline, a retry in
-     * progress, or a subscription stuck for some other reason. This is
-     * derived entirely from observed fields.
+     * Plorea's scheduler charges within seconds to a few minutes of a natural
+     * nextChargeAt and moves the date forward as it does, so a nextChargeAt
+     * still in the past after the grace period means the cycle did not
+     * complete — a decline, a retry in progress, or a subscription stuck for
+     * some other reason. A date moved by hand on an active subscription has
+     * not been charged so far (open question), so it also reads as overdue.
+     * This is derived entirely from observed fields.
      *
      * A failed charge that Plorea is retrying is not overdue: the
      * subscription turns past_due and nextChargeAt moves to the retry. Use

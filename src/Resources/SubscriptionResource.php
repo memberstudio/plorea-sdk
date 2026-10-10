@@ -93,6 +93,13 @@ class SubscriptionResource extends Resource
      * be in the past") and the subscription stays paused, so to bill now
      * pass a moment a little ahead. Only a paused subscription can be
      * resumed; anything else is refused with 400.
+     *
+     * Open question: no charge has been seen on the resumed date. A moved
+     * nextChargeAt on an active, already-charged subscription is stored but
+     * has never been charged (test, 4-5 October 2026; reported to Plorea).
+     * Do not rely on resume() to restart billing; confirm the charge in
+     * charges(). resume() is verified only from paused, not from
+     * payment_failed.
      */
     public function resume(string $subscriptionId, DateTimeInterface $nextChargeAt): Subscription
     {
@@ -140,7 +147,7 @@ class SubscriptionResource extends Resource
      *
      * A subscription is returned when it reports past_due (a failed charge
      * Plorea is retrying, captured from production 2026-10-01) or
-     * payment_failed (documented, never observed), or when its nextChargeAt
+     * payment_failed (retries ran out; seen in production 6-8 October 2026), or when its nextChargeAt
      * is more than $graceMinutes in the past. The checks are independent: a
      * past_due subscription has its nextChargeAt moved to the retry, so it is
      * not overdue, and the overdue check catches a cycle that stalled without
@@ -235,7 +242,10 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * Reactivate a canceled subscription. A new charge is scheduled immediately.
+     * Reactivate a canceled subscription. Plorea recomputes nextChargeAt and
+     * does not charge a period that is already paid. Verified only from
+     * canceled; any other status is refused with 400. Whether it works on a
+     * payment_failed subscription is untested.
      */
     public function reactivate(string $subscriptionId): Subscription
     {
