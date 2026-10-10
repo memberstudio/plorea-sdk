@@ -16,6 +16,10 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   held when it runs (stated by Plorea). No-trial billing at once is seen in
   production, not in test. Docblocks no longer say that `reactivate()` resumes
   a `payment_failed` subscription.
+- Docs: a refund and a cancel on one scheduled subscription charge failed in
+  production with `Payment not found`, by reference and by `pspReference`
+  (2026-10-11). Refund such a charge in the Plorea portal and record it in
+  your own system. Whether every scheduled charge behaves this way is open.
 - `PaymentSession` also reads Adyen's own field names, `id` and `data`, when
   `sessionId` or `sessionData` is missing or empty. Plorea's pay page reads
   both (2026-09-14). `PaymentMethodSession` does not: a card-setup response

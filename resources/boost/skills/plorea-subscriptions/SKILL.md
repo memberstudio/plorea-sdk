@@ -133,7 +133,7 @@ foreach (Plorea::subscriptions()->needingAttention($externalId) as $subscription
 ```
 
 `needingAttention()` returns a subscription that reports `past_due` or
-`payment_failed` (seen in production after three failed retries about 24 hours
+`payment_failed` (seen in production after three failed attempts about 24 hours
 apart; not confirmed by Plorea as a fixed policy) **or** whose `nextChargeAt` is more
 than an hour past (`graceMinutes:` to tune). A failed scheduled charge turns
 the subscription `past_due` (`isPastDue()`): `retryCount` counts the failures,

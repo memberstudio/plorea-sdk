@@ -54,11 +54,14 @@ Status-body keys verified identical across three independent captures
 not exist** — a report that it did turned out to be a `jq` null-read of a
 missing key.
 
-**A subscription charge cannot be refunded through the API** (production,
-2026-10-11): `POST payments/refund` with a `{subscriptionId}-{chargeId}`
+**A scheduled subscription charge could not be refunded through the API**
+(production, 2026-10-11, one charge tested): `POST payments/refund` with a `{subscriptionId}-{chargeId}`
 reference answers `{"error":"Payment not found"}`, and so does the charge's
 `pspReference`. `POST payments/cancel` on the `authorised` charge also fails. The signup charge is `reason: scheduled_charge` too. Refund it in the Plorea
-portal. Do not add an SDK path for it until Plorea offers one.
+portal, then record that refund locally against the original charge (amount,
+portal reference, outcome) so no later refund path refunds it again. Whether
+every scheduled charge behaves this way is open; a manual-charge refund is
+untested. Do not add an SDK path for it until Plorea offers one.
 
 ## No idempotency on duplicate references
 

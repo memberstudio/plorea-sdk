@@ -91,8 +91,9 @@ class SubscriptionResource extends Resource
      * Captured 2026-10-01 (test): the response echoes nextChargeAt exactly
      * as sent. A date in the past is refused with 400 ("nextChargeAt cannot
      * be in the past") and the subscription stays paused, so to bill now
-     * pass a moment a little ahead. Only a paused subscription can be
-     * resumed; anything else is refused with 400.
+     * pass a moment a little ahead. Verified only from paused. An active
+     * subscription is refused with 400; other statuses, payment_failed
+     * included, are untested.
      *
      * Open question: no charge has been seen on the resumed date. A moved
      * nextChargeAt on an active, already-charged subscription is stored but
@@ -242,10 +243,11 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * Reactivate a canceled subscription. Plorea recomputes nextChargeAt and
-     * does not charge a period that is already paid. Verified only from
-     * canceled; any other status is refused with 400. Whether it works on a
-     * payment_failed subscription is untested.
+     * Reactivate a canceled subscription. In one test (2026-09-09), Plorea
+     * recomputed nextChargeAt and did not charge the period already paid
+     * during a 10-minute poll. Production is unobserved. Verified only from
+     * canceled. An active subscription is refused with 400; other statuses,
+     * payment_failed included, are untested.
      */
     public function reactivate(string $subscriptionId): Subscription
     {

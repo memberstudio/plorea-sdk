@@ -290,7 +290,7 @@ Helper: `isCancelled()`.
 | `$quantity`, `$vatRate`, `$vatAmount` | |
 | `$externalId`, `$title`, `$description` | |
 | `$interval` | `?BillingInterval` |
-| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| `payment_failed` (seen in production after three failed retries; the way out is unobserved) |
+| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| `payment_failed` (seen in production after three failed attempts; the way out is unobserved) |
 | `$trialEndsAt`, `$nextChargeAt`, `$lastChargeAt` | `?CarbonImmutable` |
 | `$lastPaymentReference` | `{subId}-{chgId}` — resolvable as a payment for **manual** charges only |
 | `$retryPolicy`, `$retryCount`, `$failureReason` | Dunning — populated on a `past_due` subscription; see [dunning](subscriptions.md#the-dunning-gap) |

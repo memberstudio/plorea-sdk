@@ -96,6 +96,19 @@ refund and a cancellation requested on 2026-09-19 were both still
 modifications asynchronously, and that the final statuses are `refunded` and
 `cancelled`. Book on the request; do not wait for the final status.
 
+### ✅ One scheduled subscription charge could not be refunded through the API — 2026-10-11
+
+In production, `POST payments/refund` answered `{"error":"Payment not found"}`
+for a scheduled charge, both with its `{subscriptionId}-{chargeId}` reference
+and with its `pspReference` from `GET subscriptions/{id}/charges`.
+`POST payments/cancel` on the same `authorised` charge also failed. The signup
+charge is `reason: "scheduled_charge"` too. Refund such a charge in the Plorea
+portal, then record that refund in your own system against the original
+charge, so no other path refunds it again.
+
+**❓ Open:** whether every scheduled charge behaves this way, and whether Plorea
+plans an API path. A refund of a manual charge is untested.
+
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
 The create response omits `merchantOrgNr` and `merchantName` entirely. They
@@ -364,7 +377,7 @@ means "route missing", not "method missing".
 US spelling. `trialing` is a distinct state, not a flavour of active. `past_due`
 is what a failed scheduled charge produces — see below.
 
-### ✅ Billing starts immediately — qualified 2026-10-11
+### ❓ First charge without a trial — production charged at once, test did not (2026-10-11)
 
 The create response already carries the first `nextChargeAt`. In an earlier test
 run the scheduler charged within seconds unless a trial was set. A no-trial
@@ -466,8 +479,8 @@ holds when the retry runs.
   update is unverified on any status.
 - `resume()`: verified only `paused` → `active`. An `active` subscription gives
   400 with `allowedTransitions: ["paused"]`.
-- `reactivate()`: verified only from `canceled`. Other statuses give 400 "Only
-  canceled subscriptions can be reactivated".
+- `reactivate()`: verified only from `canceled`. An `active` subscription gives 400
+  "Only canceled subscriptions can be reactivated". Other statuses are untested.
 - Plorea's manual retry reset (9 October) gave `status: active` and
   `retryCount: 0`, but it charged the card **at once** and moved the billing
   anchor. The API has no call for that reset.

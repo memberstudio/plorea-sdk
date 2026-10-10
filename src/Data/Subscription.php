@@ -143,7 +143,7 @@ final readonly class Subscription
     /**
      * Whether the subscription reports payment_failed.
      *
-     * Seen in production 6-8 October 2026, after three failed retries about
+     * Seen in production 6-8 October 2026, after three failed attempts about
      * 24 hours apart (retryCount 3, nextChargeAt null). Plorea has not
      * confirmed that as a fixed policy. How a subscription leaves this status
      * is untested: resume is verified only from paused, reactivate only from
