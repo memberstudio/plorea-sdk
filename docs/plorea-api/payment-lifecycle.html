@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment lifecycle</title>
+  <meta name="description" content="Every Plorea payment status, authorisation versus capture, cancel versus refund, expiry, declines and how to decide that a payment is paid.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="payment-lifecycle">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Payments</p>
+        <h1>Payment lifecycle and states</h1>
+        <p class="lead">A payment moves through a small set of statuses. This page lists each one, shows how they connect, and explains the two decisions that cause most bugs: when a payment counts as paid, and whether to cancel or refund.</p>
+      </header>
+
+      <div class="callout tip">
+        <p class="callout-title">Short version</p>
+        <ul>
+          <li><code>authorised</code> (or <code>paid</code>) is your success state. Book the order. It means Adyen authorised the payment. The API does not show capture or settlement.</li>
+          <li><code>failed</code> means the card was declined. There is no <code>refused</code> status.</li>
+          <li>Capture happens automatically. There is no capture call.</li>
+          <li>A link never reports <code>expired</code>. Check <code>expiresAt</code> yourself.</li>
+          <li><code>refund_requested</code> means accepted. It can stay that way for many hours.</li>
+        </ul>
+      </div>
+
+      <h2>All statuses</h2>
+      <p>Read the status with <code>GET /payments/status/{reference}</code>. The <code>status</code> field holds one of these strings.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Group</th><th>Status</th><th>Meaning</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td rowspan="3"><strong>Open</strong><br><span class="muted">still payable</span></td><td><code>created</code></td><td>The link exists. Nobody has paid yet. A new link and an abandoned session both sit here.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>pending</code></td><td>A payment is in progress at Adyen.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr><td><code>active</code></td><td>The link is open and payable.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr><td rowspan="2"><strong>Paid</strong><br><span class="muted">success state</span></td><td><code>authorised</code></td><td>Adyen authorised the payment. Plorea says capture follows automatically, but the API does not show it. In test, this is where a successful payment stays.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paid</code></td><td>Not seen in test. When Plorea reports it is not documented. Treat it the same as <code>authorised</code>, as the SDK does.</td><td><span class="badge open">Open question</span></td></tr>
+            <tr><td><strong>Declined</strong></td><td><code>failed</code></td><td>Adyen refused the payment. No money moved. No reason is given.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td rowspan="2"><strong>Modification pending</strong></td><td><code>refund_requested</code></td><td>Plorea accepted a refund. Adyen has not settled it yet.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>cancel_requested</code></td><td>Plorea accepted a cancel. Adyen has not processed it yet.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td rowspan="2"><strong>Final</strong></td><td><code>refunded</code></td><td>The refund settled.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr><td><code>cancelled</code></td><td>The authorisation was cancelled. British spelling, unlike subscriptions.</td><td><span class="badge stated">Stated</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Two strings that you might expect never appear:</p>
+      <ul>
+        <li><code>refused</code>: a decline reports <code>failed</code>. <span class="badge verified">Verified</span></li>
+        <li><code>expired</code>: an expired link keeps an open status. <span class="badge verified">Verified</span></li>
+      </ul>
+      <p>Compare statuses case-insensitively. Treat any string not in this table as "needs review". Never treat an unknown string as paid.</p>
+
+      <h2>State diagram</h2>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --> created: POST /payments/link
+  created --> pending: customer submits card
+  created --> authorised: card accepted
+  pending --> authorised: card accepted
+  created --> failed: card declined
+  pending --> failed: card declined
+  authorised --> cancel_requested: POST /payments/cancel
+  authorised --> refund_requested: POST /payments/refund
+  authorised --> paid: unconfirmed (never seen)
+  paid --> refund_requested: POST /payments/refund
+  cancel_requested --> cancelled: Adyen processes
+  refund_requested --> refunded: Adyen settles
+  failed --> [*]
+  cancelled --> [*]
+  refunded --> [*]
+        </pre>
+        <figcaption>Plorea states that <code>cancelled</code> and <code>refunded</code> are the final modification statuses. We have not observed them in test. Nobody has described when <code>paid</code> appears. We have never seen it.</figcaption>
+      </figure>
+
+      <h2>Authorisation and capture</h2>
+      <p>A card payment has two steps. <strong>Authorisation</strong> reserves the amount on the card. <strong>Capture</strong> tells the card network to move the reserved money. Many gateways let you capture later, for example when you ship.</p>
+      <p>Plorea captures for you. Capture runs through AmendoPOS, usually within minutes of the authorisation. There is no capture endpoint and no "authorised, waiting for capture" state that you control. <span class="badge stated">Stated by Plorea</span> A manual capture endpoint is on Plorea's roadmap. <span class="badge stated">Stated by Plorea</span></p>
+      <p>This has three effects on your code:</p>
+      <ol>
+        <li><strong><code>authorised</code> is your success state.</strong> Book the order on it. Do not wait for <code>paid</code>. In test, a payment never leaves <code>authorised</code>.</li>
+        <li><strong>You cannot hold an authorisation.</strong> Do not authorise now and charge "on shipment". Create the link when you are ready to take the money.</li>
+        <li><strong>The cancel window is short.</strong> Cancel works only until capture. After a few minutes, a refund is the safe choice.</li>
+      </ol>
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant C as Customer
+  participant A as Adyen
+  participant P as Plorea
+  participant POS as AmendoPOS
+  C->>A: Pays
+  A-->>P: AUTHORISATION success
+  Note over P: status = authorised
+  P-->>POS: Payment recorded
+  POS->>A: Capture (automatic, minutes)
+  Note over P: You see no capture event
+        </pre>
+        <figcaption>Capture happens behind Plorea. No webhook and no status change tells you when it ran.</figcaption>
+      </figure>
+      <div class="callout gap">
+        <p class="callout-title">What we need from Plorea</p>
+        <p>A <code>captured</code> status or a <code>payment.captured</code> webhook, so that integrators know when cancel stops working. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+      </div>
+
+      <h2>Cancel or refund?</h2>
+      <p>Both undo a payment. They differ in what the customer sees and in when they work.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Cancel</th><th>Refund</th></tr></thead>
+          <tbody>
+            <tr><td>Endpoint</td><td><code>POST /payments/cancel</code></td><td><code>POST /payments/refund</code></td></tr>
+            <tr><td>Works on</td><td>An authorisation that is not yet captured</td><td>A captured payment</td></tr>
+            <tr><td>Partial amount</td><td>No</td><td>Yes, send <code>amount</code></td></tr>
+            <tr><td>Customer sees</td><td>The reservation disappears. No refund line.</td><td>A refund on the statement</td></tr>
+            <tr><td>Immediate status</td><td><code>cancel_requested</code></td><td><code>refund_requested</code></td></tr>
+            <tr><td>Webhook on completion</td><td>None</td><td><code>payment.refunded</code> <span class="badge stated">Stated</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Use this rule. Capture is automatic and you cannot see when it runs, so:</p>
+      <ul>
+        <li><strong>Within a few minutes of authorisation</strong> and for the full amount: cancel.</li>
+        <li><strong>Later, or for part of the amount</strong>: refund.</li>
+        <li><strong>When in doubt</strong>: refund.</li>
+      </ul>
+      <p class="muted">What Plorea does with a cancel that arrives after capture is an open question. <span class="badge open">Open question</span></p>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Refund 50,00 kr of ORDER-1001
+curl https://payments.plorea.no/payments/refund \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reference": "ORDER-1001",
+    "modificationReference": "ORDER-1001-refund-1",
+    "amount": 5000,
+    "reason": "Customer requested refund"
+  }'
+
+# Cancel ORDER-1002 in full
+curl https://payments.plorea.no/payments/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "reference": "ORDER-1002", "modificationReference": "ORDER-1002-cancel-1" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+
+$refund = Plorea::payments()-&gt;refund(
+    reference: 'ORDER-1001',
+    modificationReference: 'ORDER-1001-refund-1',
+    amount: Amount::nok(5000),          // omit for a full refund
+    reason: 'Customer requested refund',
+);
+$refund-&gt;refundPspReference;            // store it: only this response has it
+
+Plorea::payments()-&gt;cancel('ORDER-1002', 'ORDER-1002-cancel-1');</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const headers = {
+  Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+  'X-Environment': 'test', // never omit on refund: it would route to live
+  'Content-Type': 'application/json',
+};
+
+const refund = await fetch('https://payments.plorea.no/payments/refund', {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    platform: 'acme',
+    reference: 'ORDER-1001',
+    modificationReference: 'ORDER-1001-refund-1',
+    amount: 5000,
+    reason: 'Customer requested refund',
+  }),
+}).then((r) =&gt; r.json());
+
+await db.refunds.insert({ orderRef: 'ORDER-1001', psp: refund.refundPspReference });</code></pre></div>
+      </div>
+      <pre data-title="200 OK — refund accepted"><code class="lang-json">{
+  "status": "refund_requested",
+  "reference": "ORDER-1001",
+  "modificationReference": "ORDER-1001-refund-1",
+  "refundPspReference": "TESTREFUNDPSP001",
+  "paymentPspReference": "TESTPSPREF000001",
+  "amount": 5000,
+  "currency": "NOK",
+  "environment": "test"
+}</code></pre>
+
+      <h3>Waiting for a refund to settle</h3>
+      <p>The status changes to <code>refund_requested</code> at once. Settlement is asynchronous. One test refund took more than 11 hours. Another refund and a cancel still showed the requested status after 24 hours. <span class="badge verified">Verified</span> Plorea says this is expected and that the final statuses are <code>refunded</code> and <code>cancelled</code>. <span class="badge stated">Stated by Plorea</span></p>
+      <ul>
+        <li><strong>Book the refund when Plorea accepts it.</strong> Do not wait for <code>refunded</code>.</li>
+        <li><strong>Never time out a refund.</strong> A job that gives up after one hour reports healthy refunds as failed.</li>
+        <li><strong>Keep the refund response.</strong> <code>refundPspReference</code> appears only there. The status body has <code>lastRefundRequestPspReference</code>, which identifies the request. <span class="badge verified">Verified</span></li>
+        <li><strong>One refund at a time is visible.</strong> The status body has only <code>lastRefund*</code> fields. There is no per-refund status. Keep your own list of refunds. <span class="badge verified">Verified</span></li>
+      </ul>
+      <p>The full refund workflow is in <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+
+      <h2>Expiry</h2>
+      <p>Every link has an <code>expiresAt</code> in the create response. After that time the hosted page refuses payment. The status endpoint does not show this: an expired link keeps reporting <code>created</code>, and the response has no expiry field. <span class="badge verified">Verified</span></p>
+      <p>Use one of two sources for expiry:</p>
+      <ol>
+        <li>The <code>expiresAt</code> you stored when you created the link. Compare it with the current time.</li>
+        <li>The <code>expired</code> flag on <code>GET /pay/{paymentLinkId}</code>. Plorea computes it. This is the authoritative answer.</li>
+      </ol>
+      <pre data-title="GET /pay/pl_test_example — abridged"><code class="lang-json">{
+  "id": "pl_test_example",
+  "reference": "ORDER-1001",
+  "amount": 10000,
+  "currency": "NOK",
+  "expiresAt": "2099-12-31T12:00:00.000Z",
+  "expired": false
+}</code></pre>
+      <p>An embedded checkout session has no terminal state either. An abandoned session reads <code>created</code> for hours. Time it out in your own code and open a new session for the next try. <span class="badge verified">Verified</span></p>
+
+      <h2>Declines</h2>
+      <p>A declined card sets <code>status</code> to <code>failed</code>. Two more fields confirm it: <code>webhookEventCode</code> is <code>AUTHORISATION</code> and <code>webhookSuccess</code> is <code>false</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="GET /payments/status/ORDER-1003 — abridged"><code class="lang-json">{
+  "reference": "ORDER-1003",
+  "status": "failed",
+  "pspReference": "TESTPSPREF000009",
+  "amount": 10000,
+  "currency": "NOK",
+  "webhookEventCode": "AUTHORISATION",
+  "webhookSuccess": false,
+  "lastWebhookAt": "2026-09-09T08:56:40.892Z"
+}</code></pre>
+      <div class="callout note">
+        <p class="callout-title">The webhook* fields are about Adyen, not about you</p>
+        <p><code>webhookEventCode</code>, <code>webhookSuccess</code> and <code>lastWebhookAt</code> describe the notification that Adyen sent to Plorea. They say nothing about the webhook that Plorea sends to you. After a refund, <code>webhookEventCode</code> still reads <code>AUTHORISATION</code>. <span class="badge verified">Verified</span></p>
+      </div>
+      <p>The API gives no reason for a decline. You cannot tell "insufficient funds" from "card blocked". Show the customer a general message and offer a new attempt. Plorea says a <code>refusalReason</code> field is coming. <span class="badge stated">Stated by Plorea</span> Do not depend on it until you see it.</p>
+      <p>Is <code>failed</code> final for a link? Whether the customer can pay the same link again after a decline is not known. <span class="badge open">Open question</span> The SDK does not reuse a failed link. The safe pattern: on <code>failed</code>, create a new link on a suffixed reference for the next attempt.</p>
+
+      <h2 id="deciding-paid">How to decide "paid" in code</h2>
+      <p>Three events can tell you about a payment: the customer returns, a webhook arrives, or your poll runs. They can arrive in any order, more than once, or not at all. Route all three into one function that re-reads the status and applies it idempotently.</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  R["Customer returns"] --> F
+  W["Webhook arrives"] --> F
+  J["Scheduled poll"] --> F
+  F["GET /payments/status/{reference}"] --> D{status}
+  D -->|"authorised / paid"| A{"amount and currency match?"}
+  A -->|yes| B["Mark paid (once)"]
+  A -->|no| M["Flag for manual review"]
+  D -->|"created / pending / active"| E{"past expiresAt?"}
+  E -->|no| K["Keep waiting"]
+  E -->|yes| X["Mark expired, offer new link"]
+  D -->|failed| G["Show decline, offer new attempt"]
+  D -->|"refund_requested / refunded"| H["Reconcile refund ledger (partial or full)"]
+  D -->|"cancel_requested / cancelled"| I["Mark cancelled"]
+  D -->|unknown| M
+        </pre>
+      </figure>
+
+      <div class="tabs">
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Exceptions\NotFoundException;
+use MemberFlow\Plorea\Facades\Plorea;
+
+function syncPayment(Order $order): void
+{
+    try {
+        $status = Plorea::payments()-&gt;status($order-&gt;reference);
+    } catch (NotFoundException) {
+        return; // no link was created for this reference
+    }
+
+    match (true) {
+        $status-&gt;isPaid() =&gt; $status-&gt;amount?-&gt;value === $order-&gt;amount_ore
+            ? $order-&gt;markPaidOnce($status-&gt;pspReference)
+            : $order-&gt;flagForReview('amount mismatch'),
+        $status-&gt;isOpen() =&gt; $order-&gt;expires_at?-&gt;isPast() ? $order-&gt;markExpired() : null,
+        $status-&gt;is('failed') =&gt; $order-&gt;markDeclined(),
+        // The status body shows only the last refund. Your own ledger (one row per
+        // modificationReference) decides whether the order is partly or fully refunded.
+        $status-&gt;isRefundRequested(), $status-&gt;is('refunded') =&gt; $order-&gt;reconcileRefunds($status),
+        $status-&gt;isCancelRequested(), $status-&gt;is('cancelled') =&gt; $order-&gt;markCancelled(),
+        default =&gt; $order-&gt;flagForReview("unknown status {$status-&gt;status}"),
+    };
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const OPEN = ['created', 'pending', 'active'];
+const PAID = ['authorised', 'paid'];
+
+export async function syncPayment(order) {
+  const res = await fetch(
+    `https://payments.plorea.no/payments/status/${encodeURIComponent(order.reference)}?platform=acme`,
+    { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+  );
+  if (res.status === 404) return; // no link for this reference
+  if (!res.ok) throw new Error(`Plorea ${res.status}`);
+
+  const p = await res.json();
+  const status = (p.status ?? '').toLowerCase();
+
+  if (PAID.includes(status)) {
+    if (p.amount === order.amountOre &amp;&amp; p.currency === 'NOK') return order.markPaidOnce(p.pspReference);
+    return order.flagForReview('amount mismatch');
+  }
+  if (OPEN.includes(status)) return new Date(order.expiresAt) &lt; new Date() ? order.markExpired() : undefined;
+  if (status === 'failed') return order.markDeclined();
+  // The status body shows only the last refund. Your own refund ledger decides
+  // whether the order is partly or fully refunded.
+  if (['refund_requested', 'refunded'].includes(status)) return order.reconcileRefunds(p);
+  if (['cancel_requested', 'cancelled'].includes(status)) return order.markCancelled();
+  return order.flagForReview(`unknown status ${p.status}`);
+}</code></pre></div>
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -s "https://payments.plorea.no/payments/status/ORDER-1001?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" | jq '{status, amount, currency, pspReference}'</code></pre></div>
+      </div>
+
+      <h3>Rules that keep the books right</h3>
+      <ul>
+        <li><strong>Mark paid once.</strong> Use a database constraint or a conditional update. The webhook and the poll can run at the same moment.</li>
+        <li><strong>Check the amount.</strong> Compare <code>amount</code> and <code>currency</code> with your order before you book.</li>
+        <li><strong>Poll open payments on a schedule.</strong> Plorea does not redeliver a failed webhook. <span class="badge stated">Stated by Plorea</span> Poll every few minutes for the first hour, then less often until <code>expiresAt</code>.</li>
+        <li><strong>Stop polling at a final state.</strong> Stop at <code>failed</code>, <code>refunded</code> and <code>cancelled</code>, and at expiry. For the requested states, poll on a scale of hours.</li>
+        <li><strong>Never create a second link for a paid order.</strong> Read the status before every create. A duplicate link is payable. <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <h2>Where the status endpoint falls short</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Gap</th><th>Workaround</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>No expiry information</td><td>Store <code>expiresAt</code>, or read <code>GET /pay/{id}</code></td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>No decline reason</td><td>Show a general message</td><td><span class="badge stated">Coming</span></td></tr>
+            <tr><td>No capture signal</td><td>Prefer refund over cancel after a few minutes</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>No per-refund status</td><td>Keep your own refund records</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>Scheduled subscription charges do not resolve</td><td>Read <code>GET /subscriptions/{id}/charges</code></td><td><span class="badge open">Open question</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The full list is on <a href="wishlist.html">Gaps and proposals</a>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

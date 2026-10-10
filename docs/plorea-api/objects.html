@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Objects and statuses</title>
+  <meta name="description" content="Field-by-field reference for every object the Plorea Payments API returns, with all status values.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="objects">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Reference</p>
+        <h1>Objects and statuses</h1>
+        <p class="lead">Every object the API returns, field by field. Each table comes from real, anonymised responses captured in the test environment. Each status table lists every value we have seen, and the values Plorea has stated but we could not observe.</p>
+      </header>
+
+      <div class="callout note">
+        <p class="callout-title">How to read these tables</p>
+        <p>"Nullable" means the field is present but can be <code>null</code>. A field that is missing in some responses says so in the description. Unknown keys can appear at any time. Ignore keys you do not use, and never fail on an extra key.</p>
+      </div>
+
+      <h2>Payment</h2>
+      <p>The payment object is the body of <code>GET /payments/status/{reference}</code>. It has 29 keys. It is the same for a payment link, an embedded checkout payment and a manual subscription charge. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>reference</code></td><td class="type">string</td><td>no</td><td>Your reference for the payment. For a manual subscription charge: <code>{subscriptionId}-{chargeId}</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant that owns the payment.</td></tr>
+            <tr><td><code>platform</code></td><td class="type">string</td><td>no</td><td>The <code>platform</code> value sent at creation. <code>"unknown"</code> when none was sent. <code>"subscription"</code> for a subscription charge. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>orderId</code></td><td class="type">string</td><td>yes</td><td>The <code>orderId</code> sent at creation. For a subscription charge, the subscription's <code>externalId</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td>See <a href="#payment-statuses">Payment statuses</a>.</td></tr>
+            <tr><td><code>provider</code></td><td class="type">string</td><td>no</td><td><code>"adyen"</code>.</td></tr>
+            <tr><td><code>pspReference</code></td><td class="type">string</td><td>yes</td><td>Adyen's reference for the authorisation. Null until the customer pays.</td></tr>
+            <tr><td><code>paymentLinkId</code></td><td class="type">string</td><td>yes</td><td>The hosted link ID, for example <code>pl_…</code>. Null for a subscription charge. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paymentLinkUrl</code></td><td class="type">string</td><td>yes</td><td>The hosted pay page URL. Null for a subscription charge.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">integer</td><td>no</td><td>Amount in minor units (øre).</td></tr>
+            <tr><td><code>currency</code></td><td class="type">string</td><td>no</td><td><code>"NOK"</code>.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>.</td></tr>
+            <tr><td><code>merchantAccount</code></td><td class="type">string</td><td>no</td><td>Plorea's Adyen merchant account.</td></tr>
+            <tr><td><code>balanceAccountId</code></td><td class="type">string</td><td>yes</td><td>The Adyen balance account that receives the funds.</td></tr>
+            <tr><td><code>store</code></td><td class="type">string</td><td>yes</td><td>Legacy store name. Deprecated in favour of <code>merchantOrgNr</code>.</td></tr>
+            <tr><td><code>splitsEnabled</code></td><td class="type">boolean</td><td>no</td><td>True when the payment uses split settlement.</td></tr>
+            <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>When the payment was created.</td></tr>
+            <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>When the payment last changed.</td></tr>
+            <tr><td><code>webhookEventCode</code></td><td class="type">string</td><td>yes</td><td>The last Adyen event code Plorea received, for example <code>"AUTHORISATION"</code>. Describes Plorea's inbound webhook, not one sent to you. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>webhookSuccess</code></td><td class="type">boolean</td><td>yes</td><td>The success flag of that event. <code>false</code> with <code>AUTHORISATION</code> means a decline. This is the only decline signal. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>lastWebhookAt</code></td><td class="type">datetime</td><td>yes</td><td>When Plorea received that event.</td></tr>
+            <tr><td><code>lastRefundReference</code></td><td class="type">string</td><td>yes</td><td>The <code>modificationReference</code> of the last refund request.</td></tr>
+            <tr><td><code>lastRefundRequestPspReference</code></td><td class="type">string</td><td>yes</td><td>Adyen's reference for the last refund request. In one sample it equalled the <code>refundPspReference</code> from the refund response. <span class="badge verified">Verified (one sample)</span></td></tr>
+            <tr><td><code>lastRefundAmount</code></td><td class="type">integer</td><td>yes</td><td>Amount of the last refund request, in øre.</td></tr>
+            <tr><td><code>lastRefundReason</code></td><td class="type">string</td><td>yes</td><td>The reason sent with the last refund request.</td></tr>
+            <tr><td><code>lastRefundRequestedAt</code></td><td class="type">datetime</td><td>yes</td><td>When the last refund was requested.</td></tr>
+            <tr><td><code>lastCancelReference</code></td><td class="type">string</td><td>yes</td><td>The <code>modificationReference</code> of the last cancel request.</td></tr>
+            <tr><td><code>lastCancelRequestPspReference</code></td><td class="type">string</td><td>yes</td><td>Adyen's reference for the last cancel request.</td></tr>
+            <tr><td><code>lastCancelRequestedAt</code></td><td class="type">datetime</td><td>yes</td><td>When the last cancel was requested.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warning">
+        <p class="callout-title">No reason, no per-refund state</p>
+        <p>The payment has no decline reason and no status per refund. Only the <em>last</em> refund and the <em>last</em> cancel are visible. Plorea has stated that <code>refusalReason</code> is coming. Do not model it until you see it. <span class="badge stated">Stated by Plorea</span></p>
+      </div>
+      <pre data-title="Payment — refund requested"><code class="lang-json">{
+  "reference": "order-1001",
+  "tenantId": "acme",
+  "platform": "acme",
+  "orderId": null,
+  "status": "refund_requested",
+  "provider": "adyen",
+  "pspReference": "TESTPSPREF000001",
+  "paymentLinkId": "pl_test_example",
+  "paymentLinkUrl": "https://pay.plorea.no/pl_test_example",
+  "amount": 1000,
+  "currency": "NOK",
+  "environment": "test",
+  "merchantAccount": "TestMerchantAccount",
+  "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+  "store": null,
+  "splitsEnabled": false,
+  "createdAt": "2026-08-26T12:00:00.000Z",
+  "updatedAt": "2026-08-26T12:10:00.000Z",
+  "webhookEventCode": "AUTHORISATION",
+  "webhookSuccess": true,
+  "lastWebhookAt": "2026-08-26T12:05:00.000Z",
+  "lastRefundReference": "order-1001-REFUND-1",
+  "lastRefundRequestPspReference": "TESTREFUNDPSP001",
+  "lastRefundAmount": 1000,
+  "lastRefundReason": "Customer requested refund",
+  "lastRefundRequestedAt": "2026-08-26T12:10:00.000Z",
+  "lastCancelReference": null,
+  "lastCancelRequestPspReference": null,
+  "lastCancelRequestedAt": null
+}</code></pre>
+
+      <h3 id="payment-statuses">Payment statuses</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Group</th><th>Meaning</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>created</code></td><td>Open</td><td>The link or session exists. The customer has not paid. An abandoned session stays here forever.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>pending</code></td><td>Open</td><td>Payment is in progress.</td><td><span class="badge stated">Modelled from Plorea docs</span></td></tr>
+            <tr><td><code>active</code></td><td>Open</td><td>The link is live and payable.</td><td><span class="badge stated">Modelled from Plorea docs</span></td></tr>
+            <tr><td><code>authorised</code></td><td>Paid</td><td>Adyen authorised the payment. Capture follows automatically. This is the final success state you can see. Test payments stay here.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paid</code></td><td>Paid</td><td>Treat as paid. Not seen in test.</td><td><span class="badge unobserved">Not observable in test</span></td></tr>
+            <tr><td><code>failed</code></td><td>Declined</td><td>Adyen declined the payment. The string is never <code>refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>refund_requested</code></td><td>Modification pending</td><td>Plorea accepted a refund. Settlement can take more than 11 hours.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>cancel_requested</code></td><td>Modification pending</td><td>Plorea accepted a cancel of the authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>refunded</code></td><td>Final</td><td>The refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>cancelled</code></td><td>Final</td><td>The cancel settled. Note the UK spelling here and the US spelling on subscriptions.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>No <code>expired</code> and no <code>captured</code> status exist. A link past <code>expiresAt</code> keeps its open status. <span class="badge verified">Verified</span></p>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> created
+  created --> authorised: customer pays
+  created --> failed: declined
+  authorised --> cancel_requested: POST /payments/cancel
+  authorised --> refund_requested: POST /payments/refund
+  cancel_requested --> cancelled: settles (stated)
+  refund_requested --> refunded: settles (stated)
+  failed --> [*]
+        </pre>
+        <figcaption>Observed payment states. Final states <code>refunded</code> and <code>cancelled</code> are stated by Plorea, not yet observed.</figcaption>
+      </figure>
+
+      <h2>Payment link</h2>
+      <h3>Create response</h3>
+      <p>The body of <code>POST /payments/link</code>. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"created"</code>.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>.</td></tr>
+            <tr><td><code>paymentLinkUrl</code></td><td class="type">string</td><td>no</td><td>Send the customer here.</td></tr>
+            <tr><td><code>paymentLinkId</code></td><td class="type">string</td><td>no</td><td>Use with <code>GET /pay/{paymentLinkId}</code>.</td></tr>
+            <tr><td><code>reference</code></td><td class="type">string</td><td>no</td><td>Your reference.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant.</td></tr>
+            <tr><td><code>merchantAccount</code></td><td class="type">string</td><td>no</td><td>Plorea's Adyen merchant account.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">integer</td><td>no</td><td>Øre.</td></tr>
+            <tr><td><code>currency</code></td><td class="type">string</td><td>no</td><td><code>"NOK"</code>.</td></tr>
+            <tr><td><code>store</code></td><td class="type">string</td><td>yes</td><td>Legacy store name.</td></tr>
+            <tr><td><code>themeId</code></td><td class="type">string</td><td>yes</td><td>Pay page theme.</td></tr>
+            <tr><td><code>balanceAccountId</code></td><td class="type">string</td><td>yes</td><td>Receiving balance account.</td></tr>
+            <tr><td><code>splitsEnabled</code></td><td class="type">boolean</td><td>no</td><td>Split settlement on or off.</td></tr>
+            <tr><td><code>clientType</code></td><td class="type">string</td><td>no</td><td>For example <code>"payments_only"</code>.</td></tr>
+            <tr><td><code>skipKyc</code></td><td class="type">boolean</td><td>no</td><td>Internal KYC flag.</td></tr>
+            <tr><td><code>partnerSplitsApplied</code></td><td class="type">boolean</td><td>no</td><td>True when a merchant split was applied.</td></tr>
+            <tr><td><code>provider</code></td><td class="type">string</td><td>no</td><td><code>"plorea"</code> on this response, <code>"adyen"</code> on the status body.</td></tr>
+            <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>no</td><td>When the link stops being payable. Store it. The status never says <code>expired</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The create response does <strong>not</strong> echo <code>merchantOrgNr</code> or <code>merchantName</code>. <span class="badge verified">Verified</span></p>
+
+      <h3>Pay page</h3>
+      <p>The public body of <code>GET /pay/{paymentLinkId}</code>. Use it to check the merchant and the expiry. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>id</code></td><td class="type">string</td><td>no</td><td>The payment link ID.</td></tr>
+            <tr><td><code>reference</code></td><td class="type">string</td><td>no</td><td>Your reference.</td></tr>
+            <tr><td><code>product</code></td><td class="type">string</td><td>yes</td><td>The product text shown to the customer.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">integer</td><td>no</td><td>Øre.</td></tr>
+            <tr><td><code>currency</code></td><td class="type">string</td><td>no</td><td><code>"NOK"</code>.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant.</td></tr>
+            <tr><td><code>merchantAccount</code></td><td class="type">string</td><td>no</td><td>Plorea's Adyen merchant account.</td></tr>
+            <tr><td><code>merchantOrgNr</code></td><td class="type">string</td><td>yes</td><td>The invoice issuer's organisation number. The only place it is echoed for links. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>merchantName</code></td><td class="type">string</td><td>yes</td><td>The issuer's name.</td></tr>
+            <tr><td><code>partnerSplits</code></td><td class="type">object</td><td>yes</td><td><code>{totalAmount, splits: [{type, account, amount: {value, currency}}]}</code>. Populated once a merchant is attached.</td></tr>
+            <tr><td><code>splits</code></td><td class="type">array</td><td>yes</td><td>Explicit splits, if any.</td></tr>
+            <tr><td><code>email</code></td><td class="type">string</td><td>yes</td><td>Customer email, if sent.</td></tr>
+            <tr><td><code>themeId</code></td><td class="type">string</td><td>yes</td><td>Pay page theme.</td></tr>
+            <tr><td><code>store</code></td><td class="type">string</td><td>yes</td><td>Legacy store name.</td></tr>
+            <tr><td><code>returnUrl</code></td><td class="type">string</td><td>yes</td><td>Where the customer returns after paying.</td></tr>
+            <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
+            <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>no</td><td>Expiry time.</td></tr>
+            <tr><td><code>expired</code></td><td class="type">boolean</td><td>no</td><td>Computed. The only API signal that a link has expired. <span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre data-title="Pay page with merchant"><code class="lang-json">{
+  "id": "pl_test_example",
+  "reference": "order-1002",
+  "product": "Monthly membership",
+  "amount": 19900,
+  "currency": "NOK",
+  "environment": "test",
+  "tenantId": "acme",
+  "merchantAccount": "TestMerchantAccount",
+  "merchantOrgNr": "999999999",
+  "merchantName": "Acme Gym AS",
+  "partnerSplits": {
+    "totalAmount": 19900,
+    "splits": [
+      { "type": "Default", "account": "BA_TEST_SPLIT_ACCOUNT", "amount": { "value": 19900, "currency": "NOK" } }
+    ]
+  },
+  "splits": null,
+  "email": null,
+  "themeId": null,
+  "store": null,
+  "returnUrl": "https://example.com/return",
+  "createdAt": "2026-09-07T19:58:00.000Z",
+  "expiresAt": "2026-11-16T19:58:00.000Z",
+  "expired": false
+}</code></pre>
+
+      <h2>Refund and cancel</h2>
+      <p>The bodies of <code>POST /payments/refund</code> and <code>POST /payments/cancel</code>. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"refund_requested"</code> or <code>"cancel_requested"</code>.</td></tr>
+            <tr><td><code>reference</code></td><td class="type">string</td><td>no</td><td>The payment reference.</td></tr>
+            <tr><td><code>modificationReference</code></td><td class="type">string</td><td>no</td><td>Your reference for this refund or cancel. Reuse it to retry safely.</td></tr>
+            <tr><td><code>refundPspReference</code></td><td class="type">string</td><td>no</td><td>Refund only. Adyen's reference for the refund. <strong>Only returned here.</strong> Persist it.</td></tr>
+            <tr><td><code>cancelPspReference</code></td><td class="type">string</td><td>no</td><td>Cancel only. Adyen's reference for the cancel.</td></tr>
+            <tr><td><code>paymentPspReference</code></td><td class="type">string</td><td>no</td><td>Adyen's reference for the original payment.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">integer</td><td>no</td><td>Refund only. Øre.</td></tr>
+            <tr><td><code>currency</code></td><td class="type">string</td><td>no</td><td>Refund only.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Checkout session</h2>
+      <p>The body of <code>POST /payments/session</code>. Pass it to Adyen Drop-in. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>sessionId</code></td><td class="type">string</td><td>no</td><td>Adyen session ID.</td></tr>
+            <tr><td><code>sessionData</code></td><td class="type">string</td><td>no</td><td>Opaque session data for Drop-in.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td>Adyen environment for the client SDK.</td></tr>
+            <tr><td><code>channel</code></td><td class="type">string</td><td>no</td><td>Echo of the channel. <code>"Web"</code> when none was sent.</td></tr>
+            <tr><td><code>clientKey</code></td><td class="type">string</td><td>no</td><td>Adyen client key for Drop-in. Returned for every channel since 2026-09-19. <span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Channels</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Value</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>Web</code></td><td>Browser Drop-in or a WebView. Default.</td></tr>
+            <tr><td><code>iOS</code></td><td>Native iOS Drop-in.</td></tr>
+            <tr><td><code>Android</code></td><td>Native Android Drop-in.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The values are case-sensitive. Any other value returns <code>400</code> with <code>"channel must be one of Web, iOS, Android"</code>. <span class="badge verified">Verified</span></p>
+
+      <h2>Payment method</h2>
+      <p>A stored card. Returned by <code>GET /payment-methods/{id}</code>. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>paymentMethodId</code></td><td class="type">string</td><td>no</td><td>Plorea's ID, for example <code>pm_…</code>. Use it on subscriptions.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant.</td></tr>
+            <tr><td><code>customerId</code></td><td class="type">string</td><td>yes</td><td>Your customer ID, if sent.</td></tr>
+            <tr><td><code>shopperReference</code></td><td class="type">string</td><td>no</td><td>The Adyen shopper. The card belongs to this shopper, not to a company.</td></tr>
+            <tr><td><code>recurringType</code></td><td class="type">string</td><td>no</td><td>See <a href="#recurring-types">Recurring types</a>.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>.</td></tr>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td>See <a href="#payment-method-statuses">statuses</a>.</td></tr>
+            <tr><td><code>adyenReference</code></td><td class="type">string</td><td>no</td><td>Reference of the setup payment.</td></tr>
+            <tr><td><code>adyenPaymentLinkId</code></td><td class="type">string</td><td>yes</td><td>Hosted setup link ID. Null for a session setup.</td></tr>
+            <tr><td><code>adyenPaymentLinkUrl</code></td><td class="type">string</td><td>yes</td><td>Hosted setup link URL.</td></tr>
+            <tr><td><code>storedPaymentMethodId</code></td><td class="type">string</td><td>yes</td><td>Adyen's token. Null until <code>active</code>, and always null on <code>failed</code>.</td></tr>
+            <tr><td><code>setupPspReference</code></td><td class="type">string</td><td>yes</td><td>Adyen reference of the 1 NOK verification.</td></tr>
+            <tr><td><code>consentAt</code></td><td class="type">datetime</td><td>yes</td><td>When the shopper gave consent.</td></tr>
+            <tr><td><code>cardLast4</code></td><td class="type">string</td><td>yes</td><td>Last four digits.</td></tr>
+            <tr><td><code>cardBrand</code></td><td class="type">string</td><td>yes</td><td>For example <code>"visa"</code>.</td></tr>
+            <tr><td><code>expiryDate</code></td><td class="type">string</td><td>yes</td><td><code>MM/YYYY</code>.</td></tr>
+            <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>no</td><td>When the setup link or session expires. Not the card expiry.</td></tr>
+            <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. An empty value comes back as <code>[]</code>, not <code>{}</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string</td><td>missing</td><td>Missing from the captured responses, also on a real refusal. Expect the key to be absent or <code>null</code>. Branch on <code>status</code> alone. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
+            <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>Last change.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A delete returns a short body: <code>{paymentMethodId, tenantId, customerId, shopperReference, environment, status, previousStatus, cancelledAt, updatedAt}</code>. A repeat delete returns <code>{paymentMethodId, tenantId, status, alreadyCancelled, updatedAt}</code>. See <a href="api-reference.html#delete-a-payment-method">Delete a payment method</a>. <span class="badge verified">Verified</span></p>
+      <p>The setup responses carry a subset. The hosted setup adds <code>adyenPaymentLinkId</code> and <code>adyenPaymentLinkUrl</code>. The session setup adds <code>sessionId</code>, <code>sessionData</code>, <code>channel</code>, <code>clientKey</code>, <code>amount</code> (<code>100</code>, the 1 NOK verification) and <code>currency</code>.</p>
+
+      <h3 id="payment-method-statuses">Payment method statuses</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>pending_setup</code></td><td>The customer has not completed the setup.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>active</code></td><td>The card is stored and chargeable.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>failed</code></td><td>The 1 NOK verification was refused. Final. Start a new setup.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>cancelled</code></td><td>Deleted. Final. UK spelling, unlike a subscription's <code>canceled</code>. The card fields stay. A new subscription on it returns <code>400</code>. A sibling method that shares the stored card stays <code>active</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="recurring-types">Recurring types</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Value</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>Subscription</code></td><td>Fixed-interval billing. Use with subscriptions.</td></tr>
+            <tr><td><code>CardOnFile</code></td><td>The customer is present and pays with a saved card.</td></tr>
+            <tr><td><code>UnscheduledCardOnFile</code></td><td>Charges on an irregular schedule without the customer present, for example top-ups.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Subscription</h2>
+      <p>The full body of <code>GET /subscriptions/{id}</code>. Other subscription endpoints return subsets; see the table below. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>subscriptionId</code></td><td class="type">string</td><td>no</td><td>Plorea's ID, for example <code>sub_…</code>.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant.</td></tr>
+            <tr><td><code>customerId</code></td><td class="type">string</td><td>yes</td><td>Your customer ID.</td></tr>
+            <tr><td><code>paymentMethodId</code></td><td class="type">string</td><td>no</td><td>The card that is charged.</td></tr>
+            <tr><td><code>shopperReference</code></td><td class="type">string</td><td>no</td><td>The Adyen shopper of the card.</td></tr>
+            <tr><td><code>storedPaymentMethodId</code></td><td class="type">string</td><td>no</td><td>Adyen's token for the card.</td></tr>
+            <tr><td><code>recurringType</code></td><td class="type">string</td><td>no</td><td>Usually <code>"Subscription"</code>.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">object</td><td>no</td><td><code>{value, currency}</code>. Value in øre.</td></tr>
+            <tr><td><code>quantity</code></td><td class="type">integer</td><td>yes</td><td>A label. We have no evidence that it multiplies the amount.</td></tr>
+            <tr><td><code>interval</code></td><td class="type">object</td><td>no</td><td><code>{unit, count}</code>. Unit is <code>day</code>, <code>week</code>, <code>month</code> or <code>year</code>. Cannot be changed.</td></tr>
+            <tr><td><code>trialEndsAt</code></td><td class="type">datetime</td><td>yes</td><td>End of the trial.</td></tr>
+            <tr><td><code>nextChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>When the scheduler charges next. Equals <code>trialEndsAt</code> during a trial. Moves to the retry when <code>past_due</code>. Null when <code>paused</code> or <code>canceled</code>.</td></tr>
+            <tr><td><code>retryPolicy</code></td><td class="type">object</td><td>no</td><td><code>{maxRetries, retryIntervalDays}</code>.</td></tr>
+            <tr><td><code>retryCount</code></td><td class="type">integer</td><td>no</td><td>Failed attempts on the current charge. <code>1</code> after the first failed scheduled charge, seen in production. Always 0 in test. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>lastChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>Time of the last successful charge.</td></tr>
+            <tr><td><code>lastPaymentReference</code></td><td class="type">string</td><td>yes</td><td><code>{subscriptionId}-{chargeId}</code> of the last charge, also a failed one.</td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>The provider's free-text reason for a failed charge, for example <code>"PaymentDetail not found"</code>. Seen in production. Show it, never branch on it. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>canceledAt</code></td><td class="type">datetime</td><td>yes</td><td>When it was cancelled.</td></tr>
+            <tr><td><code>cancelReason</code></td><td class="type">string</td><td>yes</td><td>The reason sent with the cancel.</td></tr>
+            <tr><td><code>accessEndsAt</code></td><td class="type">datetime</td><td>yes</td><td>Last charge plus one interval. Null when cancelled during a trial: treat null as "access ends now". <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td>See <a href="#subscription-statuses">statuses</a>.</td></tr>
+            <tr><td><code>externalId</code></td><td class="type">string</td><td>yes</td><td>Your ID. Filter the list endpoint by it.</td></tr>
+            <tr><td><code>title</code></td><td class="type">string</td><td>yes</td><td>Display name.</td></tr>
+            <tr><td><code>description</code></td><td class="type">string</td><td>yes</td><td>Display text.</td></tr>
+            <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>Decimal, for example <code>0.25</code>.</td></tr>
+            <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre. Plorea does not calculate it.</td></tr>
+            <tr><td><code>merchantOrgNr</code></td><td class="type">string</td><td>yes</td><td>The company that receives the money. Returned on reads since 2026-09-22. Null when none was set. The name and email are never returned. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. Empty comes back as <code>[]</code>.</td></tr>
+            <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
+            <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>Last change.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Which endpoint returns what</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Endpoint</th><th>Shape</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /subscriptions</code></td><td>Core fields plus <code>retryPolicy</code>. Echoes <code>merchantOrgNr</code> as the last key when sent. No <code>accessEndsAt</code>, no <code>lastChargeAt</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET /subscriptions/{id}</code></td><td>Full object, with <code>merchantOrgNr</code> since 2026-09-22. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET /subscriptions</code></td><td><code>{externalId | tenantId, count, items}</code>. Items have no <code>retryPolicy</code>, <code>accessEndsAt</code> or VAT. Items have <code>merchantOrgNr</code> since 2026-09-22. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Core fields, VAT and card IDs, <code>updatedAt</code>. The same shape for a pause or a resume. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET …/charges</code></td><td><code>{subscriptionId, items}</code>. Adds <code>merchantOrgNr</code> to the envelope, not to the items, when a merchant is set. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>POST …/cancel</code></td><td><code>{subscriptionId, status, canceledAt, accessEndsAt, reason}</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>POST …/reactivate</code></td><td><code>{subscriptionId, tenantId, status, nextChargeAt, reactivatedAt, paymentMethodId, amount, interval, externalId, title}</code>. <span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="subscription-statuses">Subscription statuses</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>active</code></td><td>Billing on schedule.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>trialing</code></td><td>In a trial. The first charge happens at <code>trialEndsAt</code>. A separate state, not a kind of active.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>past_due</code></td><td>A scheduled charge failed. Plorea retries it. <code>retryCount</code> and <code>failureReason</code> are set, and <code>nextChargeAt</code> is the retry. Not overdue. Seen in production on 2026-10-01.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paused</code></td><td>Billing paused with <code>PATCH status</code>. <code>nextChargeAt</code> is null. Resume with <code>active</code> and a future <code>nextChargeAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>canceled</code></td><td>Cancelled. US spelling. Access continues until <code>accessEndsAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment_failed</code></td><td>Documented by Plorea. Never observed. The failure status seen on the wire is <code>past_due</code>.</td><td><span class="badge unobserved">Not observed</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> active: create
+  [*] --> trialing: create with trialEndsAt
+  trialing --> active: trial ends, first charge
+  trialing --> canceled: cancel (accessEndsAt null)
+  active --> canceled: cancel
+  canceled --> active: reactivate
+  active --> paused: PATCH status paused
+  paused --> active: PATCH status active + nextChargeAt
+  active --> past_due: scheduled charge fails
+  past_due --> past_due: retry fails (unobserved)
+        </pre>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. What follows the last retry is an open question. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. <code>payment_failed</code> is documented but never seen, so it is not drawn.</figcaption>
+      </figure>
+
+      <h3>Interval units</h3>
+      <p><code>day</code>, <code>week</code>, <code>month</code>, <code>year</code>. Combine with <code>count</code>, for example <code>{"unit": "week", "count": 2}</code> for every two weeks.</p>
+
+      <h2>Charge</h2>
+      <h3>Charge response</h3>
+      <p>The body of <code>POST /subscriptions/{id}/charge</code>. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"charge_created"</code>. This does not mean paid. Read <code>resultCode</code>.</td></tr>
+            <tr><td><code>subscriptionId</code></td><td class="type">string</td><td>no</td><td>The subscription.</td></tr>
+            <tr><td><code>chargeId</code></td><td class="type">string</td><td>no</td><td>Plorea's ID, for example <code>chg_…</code>.</td></tr>
+            <tr><td><code>reference</code></td><td class="type">string</td><td>no</td><td><code>{subscriptionId}-{chargeId}</code>. Resolves on <code>GET /payments/status</code> for manual charges.</td></tr>
+            <tr><td><code>pspReference</code></td><td class="type">string</td><td>no</td><td>Adyen's reference.</td></tr>
+            <tr><td><code>resultCode</code></td><td class="type">string</td><td>no</td><td>Adyen's result, for example <code>"Authorised"</code>.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">object</td><td>no</td><td><code>{value, currency}</code>.</td></tr>
+            <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>Falls back to the subscription's value.</td></tr>
+            <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>Falls back to the subscription's value.</td></tr>
+            <tr><td><code>nextChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>The next scheduled charge after this one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Charge history item</h3>
+      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code> newest first. With a merchant, the envelope also has <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>subscriptionId</code></td><td class="type">string</td><td>no</td><td>The subscription.</td></tr>
+            <tr><td><code>chargeId</code></td><td class="type">string</td><td>no</td><td>The charge.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant.</td></tr>
+            <tr><td><code>reference</code></td><td class="type">string</td><td>no</td><td><code>{subscriptionId}-{chargeId}</code>. A scheduled charge's reference does not resolve on <code>GET /payments/status</code>. <span class="badge open">Open question</span></td></tr>
+            <tr><td><code>pspReference</code></td><td class="type">string</td><td>yes</td><td>Adyen's reference.</td></tr>
+            <tr><td><code>amount</code></td><td class="type">object</td><td>no</td><td><code>{currency, value}</code>.</td></tr>
+            <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>VAT rate.</td></tr>
+            <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre.</td></tr>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"authorised"</code> or <code>"failed"</code>. <code>"failed"</code> was seen in production on a scheduled charge. Test cannot produce it.</td></tr>
+            <tr><td><code>retryNumber</code></td><td class="type">integer</td><td>no</td><td>0 for the first attempt.</td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>Null on a successful charge. The provider's free text on a failed one.</td></tr>
+            <tr><td><code>reason</code></td><td class="type">string</td><td>no</td><td><code>"manual_charge"</code> or <code>"scheduled_charge"</code>.</td></tr>
+            <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
+            <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>Last change.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Webhook event</h2>
+      <h3>Envelope</h3>
+      <p>Every delivery is a JSON body with this envelope. Headers: <code>x-plorea-signature</code>, <code>x-plorea-event-id</code>, <code>x-plorea-event</code>. Only the body is signed. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>eventId</code></td><td class="type">string</td><td>no</td><td><code>evt_</code> plus 32 hex characters. Deduplicate on this copy, not on the header.</td></tr>
+            <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>When the event was created. Not the payment's creation time.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>no</td><td>The tenant.</td></tr>
+            <tr><td><code>type</code></td><td class="type">string</td><td>no</td><td>See <a href="#event-types">Event types</a>.</td></tr>
+            <tr><td><code>data</code></td><td class="type">object</td><td>no</td><td>Payment data or charge data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Payment event data</h3>
+      <p>Sent with <code>payment.*</code> types, also for a manual subscription charge. A strict subset of the payment object. <span class="badge verified">Verified</span></p>
+      <dl class="fields">
+        <dt>reference, orderId, status, provider, pspReference, paymentLinkId, paymentLinkUrl, amount, currency, environment</dt>
+        <dd>Same meaning as on the <a href="#payment">payment</a>.</dd>
+        <dt>eventCode</dt>
+        <dd>The Adyen event code, for example <code>"AUTHORISATION"</code>.</dd>
+        <dt>success</dt>
+        <dd><code>false</code> on a decline. No reason field.</dd>
+      </dl>
+      <pre data-title="payment.authorised"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000001",
+  "createdAt": "2026-08-26T12:05:00.000Z",
+  "tenantId": "acme",
+  "type": "payment.authorised",
+  "data": {
+    "reference": "order-1001",
+    "orderId": null,
+    "status": "authorised",
+    "provider": "adyen",
+    "pspReference": "TESTPSPREF000001",
+    "paymentLinkId": "pl_test_example",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_example",
+    "amount": 1000,
+    "currency": "NOK",
+    "environment": "test",
+    "eventCode": "AUTHORISATION",
+    "success": true
+  }
+}</code></pre>
+
+      <h3>Charge event data</h3>
+      <p>Sent with <code>subscription.charge_succeeded</code> for a successful scheduled charge. <span class="badge verified">Verified</span></p>
+      <pre data-title="subscription.charge_succeeded"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000002",
+  "createdAt": "2026-09-04T10:04:58.000Z",
+  "tenantId": "acme",
+  "type": "subscription.charge_succeeded",
+  "data": {
+    "subscriptionId": "sub_test_example",
+    "chargeId": "chg_test_example_2",
+    "reference": "sub_test_example-chg_test_example_2",
+    "customerId": null,
+    "shopperReference": "acme-member-001",
+    "externalId": "membership-001",
+    "amount": { "value": 29900, "currency": "NOK" },
+    "pspReference": "TESTCHARGEPSP002",
+    "nextChargeAt": "2026-09-05T10:04:51.000Z",
+    "environment": "test"
+  }
+}</code></pre>
+      <p>Sent with <code>subscription.charge_failed</code> for a failed scheduled charge. The same fields, plus <code>failureReason</code> and <code>retryCount</code>. No <code>pspReference</code> and no <code>nextChargeAt</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="subscription.charge_failed"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000003",
+  "createdAt": "2026-10-06T20:34:59.157Z",
+  "tenantId": "acme",
+  "type": "subscription.charge_failed",
+  "data": {
+    "subscriptionId": "sub_test_example",
+    "chargeId": "chg_test_example_3",
+    "reference": "sub_test_example-chg_test_example_3",
+    "customerId": "golden-customer-001",
+    "shopperReference": "acme-member-001",
+    "externalId": "membership-001",
+    "amount": { "value": 29900, "currency": "NOK" },
+    "failureReason": "PaymentDetail not found",
+    "retryCount": 1,
+    "environment": "test"
+  }
+}</code></pre>
+
+      <h3 id="event-types">Event types</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>When</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>payment.authorised</code></td><td>A payment or a manual subscription charge is authorised.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.failed</code></td><td>A payment is declined. Never <code>payment.refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.refunded</code></td><td>A refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>subscription.charge_succeeded</code></td><td>A scheduled charge succeeded.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td>A scheduled charge failed. Not in Plorea's catalogue, but captured in test on 2026-10-01 and 2026-10-06. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</td><td><span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>No event is sent for card setup, subscription cancel or reactivate. No <code>payment.captured</code> event exists. <span class="badge stated">Stated by Plorea</span> Plorea also said a failed charge sends nothing. The capture above shows otherwise.</p>
+
+      <h2>Error</h2>
+      <p>Every error has the same body: one <code>error</code> string. Branch on the HTTP status. The message is a fixed template. See <a href="errors.html">Errors and retries</a>.</p>
+      <pre data-title="403 Forbidden"><code class="lang-json">{ "error": "Tenant mismatch" }</code></pre>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

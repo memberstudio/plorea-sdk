@@ -31,6 +31,14 @@ environment, and what has not.
 | [API reference](api-reference.md) | Every resource method, builder method, DTO property, enum and event |
 | [Verified API behaviour](api-behaviour.md) | Field notes: statuses, timing, quirks, and the open questions with Plorea |
 
+## Plorea API docs (HTML, SDK-independent)
+
+[`plorea-api/`](plorea-api/index.html) is a static HTML site that documents the
+Plorea REST API itself, not this SDK: workflows, every endpoint with cURL, PHP
+and Node examples, payment and subscription states, and a list of gaps we ask
+Plorea to close. Open `plorea-api/index.html` in a browser; there is no build
+step. It is a community draft that Plorea may adopt.
+
 ## Conventions used throughout
 
 - **Amounts are minor units.** `Amount::nok(450000)` is 4 500,00 kr. There is

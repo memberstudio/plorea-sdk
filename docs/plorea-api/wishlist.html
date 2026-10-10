@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gaps and proposals</title>
+  <meta name="description" content="What integrators need from the Plorea Payments API: each gap, its impact and a proposed API shape.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="wishlist">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Reference</p>
+        <h1>Gaps and proposals</h1>
+        <p class="lead">What integrators need from Plorea next. Each item states the problem, what it costs an integrator today, and a proposed API shape. The shapes are suggestions to start a conversation. Plorea knows its system best and should change them freely.</p>
+      </header>
+
+      <div class="callout note">
+        <p class="callout-title">Why this page exists</p>
+        <p>The Plorea API already covers the core flows well. Plorea has been quick to answer questions and to fix issues, often within a day. The items below are the gaps we met while building a production integration. Most of them cost integrators extra code, extra polling or support cases. Closing them makes Plorea easier to adopt.</p>
+      </div>
+
+      <h2>Summary</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Item</th><th>Area</th><th>Priority</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><a href="#idempotency-keys">Idempotency keys</a></td><td>Payments, subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>2</td><td><a href="#failed-charge-webhook-and-payment-failed">Failed charge webhook</a></td><td>Subscriptions</td><td>High</td><td><span class="badge verified">Partly delivered 2026-10-01</span></td></tr>
+            <tr><td>3</td><td><a href="#webhook-redelivery-and-replay">Webhook redelivery and replay</a></td><td>Webhooks</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>4</td><td><a href="#sandbox-failure-triggers">Sandbox failure triggers</a></td><td>Testing</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>5</td><td><a href="#refusal-reason">Refusal reason</a></td><td>Payments</td><td>High</td><td><span class="badge stated">Promised</span></td></tr>
+            <tr><td>6</td><td><a href="#openapi-specification">OpenAPI specification</a></td><td>Platform</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>7</td><td><a href="#capture-api-and-captured-state">Capture API and captured state</a></td><td>Payments</td><td>Medium</td><td><span class="badge stated">On roadmap</span></td></tr>
+            <tr><td>8</td><td><a href="#per-refund-status">Per-refund status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>9</td><td><a href="#expired-status">Expired status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>10</td><td><a href="#pause-and-resume">Pause and resume</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge verified">Delivered 2026-10-01</span></td></tr>
+            <tr><td>11</td><td><a href="#interval-change">Interval change</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>12</td><td><a href="#proration">Proration</a></td><td>Subscriptions</td><td>Low</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>13</td><td><a href="#card-setup-webhooks-and-failure-reason">Card setup webhooks and failure reason</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>14</td><td><a href="#scheduled-charges-on-the-status-endpoint">Scheduled charges on the status endpoint</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge open">Reported</span></td></tr>
+            <tr><td>15</td><td><a href="#pagination">Pagination</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">Partly delivered 2026-09-22</span></td></tr>
+            <tr><td>17</td><td><a href="#machine-readable-error-codes">Machine-readable error codes</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>18</td><td><a href="#changelog-and-versioning">Changelog and versioning</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge open">Reported</span></td></tr>
+            <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Payments</h2>
+
+      <h3 id="idempotency-keys">1. Idempotency keys</h3>
+      <p><strong>Problem.</strong> Two identical <code>POST /payments/link</code> calls create two payable links. The same is true for <code>POST /subscriptions</code> and <code>POST /subscriptions/{id}/charge</code>. A network timeout leaves the integrator unsure whether the call succeeded. <span class="badge verified">Verified</span></p>
+      <p><strong>Impact.</strong> Integrators cannot retry safely. A retry after a timeout can bill a customer twice. Today each integrator must look up the payment first and invent a suffix scheme for new references.</p>
+      <p><strong>Proposal.</strong> Accept an <code>Idempotency-Key</code> header on every <code>POST</code>. Store the first response for 24 hours. Return it again for the same key and the same body. Return <code>409</code> for the same key with a different body.</p>
+      <pre data-title="Request"><code class="lang-http">POST /payments/link
+Idempotency-Key: acme-order-1001-attempt-1
+X-Environment: test</code></pre>
+      <pre data-title="Replayed response"><code class="lang-http">HTTP/1.1 200 OK
+Idempotent-Replayed: true</code></pre>
+
+      <h3 id="refusal-reason">5. Refusal reason</h3>
+      <p><span class="badge stated">Promised by Plorea</span> Plorea has stated that <code>refusalReason</code> is coming on <code>GET /payments/status/{reference}</code>.</p>
+      <p><strong>Problem.</strong> A declined payment shows only <code>status: "failed"</code> and <code>webhookSuccess: false</code>. No reason exists on the payment, the webhook, the payment method or the charge.</p>
+      <p><strong>Impact.</strong> Integrators cannot tell the customer what to do. "Insufficient funds" needs a different message than "card expired" or "3-D Secure failed". Support cannot answer "why was I declined?".</p>
+      <p><strong>Proposal.</strong> Add Adyen's refusal data to the payment, the <code>payment.failed</code> webhook, the payment method and each charge. Keep the raw code and add a stable category.</p>
+      <pre><code class="lang-json">{
+  "status": "failed",
+  "refusalReason": "Not enough balance",
+  "refusalReasonCode": "51",
+  "refusalCategory": "insufficient_funds"
+}</code></pre>
+
+      <h3 id="capture-api-and-captured-state">7. Capture API and captured state</h3>
+      <p><span class="badge stated">On Plorea's roadmap</span> Plorea has stated that a manual capture API is planned.</p>
+      <p><strong>Problem.</strong> Capture is automatic. No status, field or webhook shows that capture happened. <code>authorised</code> is the last success state an integrator can see.</p>
+      <p><strong>Impact.</strong> Integrators cannot tell whether to cancel or to refund. A cancel after capture fails, and a refund before capture is wrong. Businesses that ship goods later cannot hold an authorisation and capture on shipment.</p>
+      <p><strong>Proposal.</strong> Add a <code>captured</code> status and a <code>payment.captured</code> event. Add an optional manual mode with a capture endpoint.</p>
+      <pre data-title="POST /payments/link (manual capture)"><code class="lang-json">{ "reference": "order-1001", "amount": 10000, "currency": "NOK", "captureMode": "manual" }</code></pre>
+      <pre data-title="POST /payments/capture"><code class="lang-json">{ "reference": "order-1001", "amount": 10000, "modificationReference": "order-1001-CAPTURE-1" }</code></pre>
+      <pre data-title="GET /payments/status/order-1001"><code class="lang-json">{ "status": "captured", "capturedAt": "2026-10-01T12:03:00Z", "capturedAmount": 10000 }</code></pre>
+
+      <h3 id="per-refund-status">8. Per-refund status</h3>
+      <p><strong>Problem.</strong> The payment shows only the <em>last</em> refund. <code>refundPspReference</code> exists only on the refund response. The payment carries only last-refund fields. <span class="badge verified">Verified</span> So a second partial refund would hide the first one. We infer this from the shape; we did not run two partial refunds.</p>
+      <p><strong>Impact.</strong> Integrators cannot reconcile several partial refunds. A lost refund response loses the refund's own reference forever.</p>
+      <p><strong>Proposal.</strong> Return a list of refunds on the payment, each with its own status.</p>
+      <pre><code class="lang-json">{
+  "reference": "order-1001",
+  "status": "authorised",
+  "refundedAmount": 3000,
+  "refunds": [
+    {
+      "modificationReference": "order-1001-REFUND-1",
+      "pspReference": "TESTREFUNDPSP001",
+      "amount": 3000,
+      "status": "refunded",
+      "requestedAt": "2026-10-01T12:00:00Z",
+      "settledAt": "2026-10-01T23:10:00Z"
+    }
+  ]
+}</code></pre>
+
+      <h3 id="expired-status">9. Expired status</h3>
+      <p><strong>Problem.</strong> A payment link past <code>expiresAt</code> keeps its open status. An abandoned session stays <code>created</code> forever. <span class="badge verified">Verified</span></p>
+      <p><strong>Impact.</strong> Integrators must store <code>expiresAt</code> and compute expiry themselves. Reports show stale open payments.</p>
+      <p><strong>Proposal.</strong> Report <code>expired</code> on the status endpoint once <code>expiresAt</code> passes. Optionally send <code>payment.expired</code>.</p>
+      <pre><code class="lang-json">{ "reference": "order-1001", "status": "expired", "expiresAt": "2026-10-08T12:00:00Z" }</code></pre>
+
+      <h2>Subscriptions</h2>
+
+      <h3 id="failed-charge-webhook-and-payment-failed">2. Failed charge webhook and <code>payment_failed</code></h3>
+      <p><span class="badge verified">Partly delivered 2026-10-01</span> Plorea now sends <code>subscription.charge_failed</code>. It was captured three times in test (2026-10-01 and 2026-10-06), each time for a stored card that was gone. A failed scheduled charge also moves the subscription to <code>past_due</code>, with <code>failureReason</code> and <code>retryCount</code> filled. <span class="badge verified">Verified in production 2026-10-01</span></p>
+      <p><strong>What is still open.</strong></p>
+      <ul>
+        <li>The event is not in Plorea's webhook catalogue.</li>
+        <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
+        <li>The state after the last retry is unknown: a terminal status, <code>canceled</code> or <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></li>
+        <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
+        <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
+      </ul>
+      <p><strong>Impact.</strong> This is the most important event in recurring billing. Without a documented contract, integrators cannot tell a first failure from a final one. Customers keep access they did not pay for, or lose access without a warning.</p>
+      <p><strong>Proposal.</strong> Document <code>subscription.charge_failed</code> in the catalogue. Send it on each failed attempt, with the fields below. Send <code>subscription.payment_failed</code> when retries run out. Document the status after the last retry.</p>
+      <pre><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000003",
+  "type": "subscription.charge_failed",
+  "tenantId": "acme",
+  "data": {
+    "subscriptionId": "sub_test_example",
+    "chargeId": "chg_test_example_3",
+    "reference": "sub_test_example-chg_test_example_3",
+    "externalId": "membership-001",
+    "amount": { "value": 29900, "currency": "NOK" },
+    "retryNumber": 1,
+    "maxRetries": 3,
+    "nextRetryAt": "2026-10-02T10:00:00Z",
+    "refusalReason": "Not enough balance",
+    "refusalCategory": "insufficient_funds",
+    "environment": "test"
+  }
+}</code></pre>
+
+      <h3 id="pause-and-resume">10. Pause and resume</h3>
+      <p><span class="badge verified">Delivered 2026-10-01</span> Plorea added a native pause. <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> pauses an <code>active</code> subscription and clears <code>nextChargeAt</code>. <code>{"status": "active", "nextChargeAt": "…"}</code> resumes it. The subscription ID and the charge history stay the same. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+      <p><strong>What is still open.</strong></p>
+      <ul>
+        <li>No charge was seen after a resume. See <a href="#charge-after-resume">item 19</a>. <span class="badge open">Open</span></li>
+        <li>A <code>trialing</code> subscription cannot be paused. Plorea answers <code>400</code>. <span class="badge verified">Verified</span></li>
+        <li>No <code>pausedAt</code> is returned, and no planned resume date is stored.</li>
+        <li>It is unknown if a webhook fires on pause or resume. <span class="badge unobserved">Unobserved</span></li>
+      </ul>
+      <p><strong>Proposal.</strong> Return <code>pausedAt</code>. Accept an optional resume date that Plorea acts on. Send <code>subscription.paused</code> and <code>subscription.resumed</code>.</p>
+
+      <h3 id="interval-change">11. Interval change</h3>
+      <p><strong>Problem.</strong> <code>PATCH /subscriptions/{id}</code> cannot change <code>interval</code>.</p>
+      <p><strong>Impact.</strong> A move from monthly to yearly needs a cancel and a new subscription, timed to <code>accessEndsAt</code>.</p>
+      <p><strong>Proposal.</strong> Accept <code>interval</code> on <code>PATCH</code>, effective from the next charge.</p>
+      <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "interval": { "unit": "year", "count": 1 }, "amount": { "value": 299000, "currency": "NOK" }, "effective": "next_charge" }</code></pre>
+
+      <h3 id="proration">12. Proration</h3>
+      <p><strong>Problem.</strong> A mid-cycle upgrade has no proration. Integrators compute the difference and send a manual charge. A downgrade needs a refund of a scheduled charge, and it is unclear whether that works.</p>
+      <p><strong>Impact.</strong> Every integrator writes the same date and VAT maths.</p>
+      <p><strong>Proposal.</strong> An optional <code>proration</code> flag on <code>PATCH</code>, and a preview endpoint.</p>
+      <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "amount": { "value": 49900, "currency": "NOK" }, "proration": "charge_now" }</code></pre>
+      <pre data-title="Response (excerpt)"><code class="lang-json">{ "prorationCharge": { "chargeId": "chg_test_example_4", "amount": { "value": 13300, "currency": "NOK" } } }</code></pre>
+
+      <h3 id="scheduled-charges-on-the-status-endpoint">14. Scheduled charges on the status endpoint</h3>
+      <p><span class="badge open">Reported to Plorea</span></p>
+      <p><strong>Problem.</strong> The reference of a scheduled charge returns <code>403</code> or <code>404</code> on <code>GET /payments/status</code>. A manual charge reference works.</p>
+      <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge may not be possible.</p>
+      <p><strong>Proposal.</strong> Resolve every charge reference on the status endpoint, with <code>platform: "subscription"</code>, as manual charges already do.</p>
+
+      <h3 id="charge-after-resume">19. Charge after resume</h3>
+      <p><span class="badge open">Reported to Plorea 2026-10-01</span></p>
+      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span></p>
+      <p><strong>Impact.</strong> A resumed membership may never bill again. Integrators must watch every resumed subscription for an overdue <code>nextChargeAt</code>.</p>
+      <p><strong>Proposal.</strong> Charge a resumed subscription on its <code>nextChargeAt</code>, as for any active subscription. Document the expected scheduler delay.</p>
+
+      <h3 id="pagination">15. Pagination</h3>
+      <p><strong>Problem.</strong> <code>GET /subscriptions</code> and <code>GET /subscriptions/{id}/charges</code> have no paging fields. The charge list has no count. <span class="badge open">Open question</span></p>
+      <p><strong>Impact.</strong> A truncated list looks the same as a full list. A monthly subscription grows its history forever.</p>
+      <p><strong>Proposal.</strong> Cursor pagination with a documented default and maximum.</p>
+      <pre data-title="GET /subscriptions/{id}/charges?limit=50&amp;startingAfter=chg_…"><code class="lang-json">{ "subscriptionId": "sub_test_example", "items": [], "hasMore": true, "nextCursor": "chg_test_example_51" }</code></pre>
+
+      <h3 id="merchantorgnr-on-reads">16. <code>merchantOrgNr</code> on reads</h3>
+      <p><span class="badge verified">Partly delivered 2026-09-22</span> <code>GET /subscriptions/{id}</code> and each item of <code>GET /subscriptions</code> now return <code>merchantOrgNr</code>. <code>GET /subscriptions/{id}/charges</code> returns it once, on the envelope. A subscription without a merchant returns <code>null</code>.</p>
+      <p><strong>What is still open.</strong> The payment link create response does not echo <code>merchantOrgNr</code>. No subscription read returns <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span></p>
+      <p><strong>Impact.</strong> Integrators cannot fully check which company a payment pays out to. They must keep their own copy of the merchant name.</p>
+      <p><strong>Proposal.</strong> Return <code>merchantOrgNr</code>, <code>merchantName</code> and a KYC state on every read of a payment, link, subscription and charge.</p>
+      <pre><code class="lang-json">{ "merchantOrgNr": "999999999", "merchantName": "Acme Gym AS", "merchantKycStatus": "pending" }</code></pre>
+
+      <h2>Payment methods</h2>
+
+      <h3 id="card-setup-webhooks-and-failure-reason">13. Card setup webhooks and failure reason</h3>
+      <p><strong>Problem.</strong> Card setup sends no webhook. <code>failureReason</code> is null even for a real refusal. <span class="badge verified">Verified</span></p>
+      <p><strong>Impact.</strong> Integrators poll after the customer returns, and cannot say why a card was rejected.</p>
+      <p><strong>Proposal.</strong> Send <code>payment_method.activated</code> and <code>payment_method.failed</code>. Fill <code>failureReason</code> with the Adyen refusal. Consider <code>payment_method.expiring</code> one month before the card expires.</p>
+      <pre><code class="lang-json">{
+  "type": "payment_method.failed",
+  "data": { "paymentMethodId": "pm_test_example", "shopperReference": "acme-member-001", "status": "failed", "failureReason": "Refused", "refusalCategory": "do_not_honor" }
+}</code></pre>
+
+      <h3 id="delete-covers-the-stored-card">20. Delete covers the stored card</h3>
+      <p><span class="badge verified">Delete delivered 2026-10-05</span> <code>DELETE /payment-methods/{id}</code> now works. It moves the method to <code>cancelled</code>. It returns <code>400</code> while an <code>active</code> or <code>trialing</code> subscription uses the method.</p>
+      <p><strong>Problem.</strong> Two payment methods can share one stored card: same shopper, same <code>storedPaymentMethodId</code>. After a delete, the sibling still reads <code>active</code>. A manual charge on a new subscription on the sibling was <code>Authorised</code>. <span class="badge verified">Verified in test 2026-10-06</span> Production is unobserved.</p>
+      <p><strong>Impact.</strong> A customer who removes a card can still be charged on it. Integrators must find and delete every sibling themselves.</p>
+      <p><strong>Proposal.</strong> Disable the stored card at Adyen on delete, and cancel every method that shares it. Or return the sibling IDs in the delete response.</p>
+
+      <h2>Webhooks</h2>
+
+      <h3 id="webhook-redelivery-and-replay">3. Webhook redelivery and replay</h3>
+      <p><strong>Problem.</strong> <span class="badge stated">Stated by Plorea</span> A failed delivery is not retried. A deploy, a timeout or a <code>500</code> loses the event for good. Webhook URLs are registered manually, per tenant.</p>
+      <p><strong>Impact.</strong> Integrators must poll everything as if webhooks did not exist. Webhooks then add little value.</p>
+      <p><strong>Proposal.</strong></p>
+      <ul>
+        <li>Retry non-2xx deliveries with exponential backoff for at least 24 hours.</li>
+        <li>An events endpoint to list and replay recent events.</li>
+        <li>An endpoint to register and update webhook URLs per environment.</li>
+      </ul>
+      <pre data-title="GET /events?since=2026-10-01T00:00:00Z&amp;type=payment.failed"><code class="lang-json">{ "items": [ { "eventId": "evt_…", "type": "payment.failed", "createdAt": "…", "deliveryStatus": "failed", "attempts": 6 } ], "hasMore": false }</code></pre>
+      <pre data-title="POST /events/{eventId}/redeliver"><code class="lang-json">{ "eventId": "evt_…", "deliveryStatus": "queued" }</code></pre>
+
+      <h2>Testing</h2>
+
+      <h3 id="sandbox-failure-triggers">4. Sandbox failure triggers</h3>
+      <p><strong>Problem.</strong> A failed subscription charge cannot be produced in test. Adyen's decline triggers live on the payment request, and Plorea's scheduler builds that request server-side. <span class="badge unobserved">Not observable in test</span></p>
+      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body, <code>payment_failed</code> and the state after the last retry. The <code>past_due</code> shape was seen once, in production. It cannot be produced in test.</p>
+      <p><strong>Proposal.</strong> Either of these works:</p>
+      <ul>
+        <li>Pass Adyen's <code>RequestedTestAcquirerResponseCode</code> through on manual charges in test.</li>
+        <li>Mark a test subscription so its next scheduled charge declines.</li>
+      </ul>
+      <pre data-title="POST /subscriptions/{id}/charge (test only)"><code class="lang-json">{ "reason": "dunning test", "testResponseCode": "51" }</code></pre>
+      <pre data-title="PATCH /subscriptions/{id} (test only)"><code class="lang-json">{ "testNextChargeOutcome": "refused" }</code></pre>
+
+      <h2>Platform</h2>
+
+      <h3 id="openapi-specification">6. OpenAPI specification</h3>
+      <p><strong>Problem.</strong> No published contract exists. Integrators learn the shapes by trial, and by asking Plorea.</p>
+      <p><strong>Impact.</strong> Each integrator repeats the same discovery. Client generation, mock servers and contract tests are not possible.</p>
+      <p><strong>Proposal.</strong> Publish an OpenAPI 3.1 file at a stable URL, for example <code>https://payments.plorea.no/openapi.json</code>. These docs and their captured responses are a starting point, free to use.</p>
+
+      <h3 id="machine-readable-error-codes">17. Machine-readable error codes</h3>
+      <p><strong>Problem.</strong> Errors carry one English <code>error</code> string. The strings are static templates, and one message can list fields that are present.</p>
+      <p><strong>Impact.</strong> Integrators can branch only on the HTTP status. Two different <code>400</code>s look the same to code.</p>
+      <p><strong>Proposal.</strong> Keep <code>error</code> for humans. Add a stable <code>code</code>, the failing <code>field</code>, and a request ID.</p>
+      <pre data-title="400 Bad Request"><code class="lang-json">{
+  "error": "Invalid merchantOrgNr — must be 9 digits",
+  "code": "invalid_merchant_org_nr",
+  "field": "merchantOrgNr",
+  "requestId": "req_…"
+}</code></pre>
+      <p>Return the same <code>requestId</code> in a response header on every call. Support can then find a call in seconds.</p>
+
+      <h3 id="changelog-and-versioning">18. Changelog and versioning</h3>
+      <p><strong>Problem.</strong> Behaviour changes without notice. In September 2026, session endpoints changed three times in four days. Each change was an improvement, but integrators found out by probing.</p>
+      <p><strong>Impact.</strong> Integrators cannot plan releases. A breaking change can reach production unnoticed.</p>
+      <p><strong>Proposal.</strong></p>
+      <ul>
+        <li>A public changelog page with dates.</li>
+        <li>A version header, for example <code>Plorea-Version: 2026-10-01</code>, so integrators opt in to breaking changes.</li>
+        <li>A notice period for breaking changes, sent by email to integrators.</li>
+        <li>A status page for incidents.</li>
+      </ul>
+
+      <h2>Smaller items</h2>
+      <ul>
+        <li><strong>Consistent spelling.</strong> Payments use <code>cancelled</code>, subscriptions use <code>canceled</code>. Pick one, or document both.</li>
+        <li><strong>Consistent metadata.</strong> An empty <code>metadata</code> returns <code>[]</code>, not <code>{}</code>. Return an object.</li>
+        <li><strong>Environment default.</strong> A missing <code>X-Environment</code> on refund uses live credentials. Reject a request with no header, or default to test everywhere.</li>
+        <li><strong>Native 3-D Secure.</strong> <span class="badge stated">Promised by Plorea</span> Request native 3DS2 on iOS and Android sessions.</li>
+        <li><strong>KYC visibility.</strong> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link.</li>
+      </ul>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

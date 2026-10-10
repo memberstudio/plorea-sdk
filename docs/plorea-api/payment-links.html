@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment links</title>
+  <meta name="description" content="Create hosted Plorea payment links, route the payout to the right merchant, avoid duplicate links and reconcile the result.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="payment-links">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Payments</p>
+        <h1>Payment links</h1>
+        <p class="lead">A payment link is a hosted page on <code>pay.plorea.no</code> that takes one payment for one amount. You create the link on your server, send the customer to it, and read the result back by your own reference. Payment links are the simplest way to take a one-off payment with Plorea.</p>
+      </header>
+
+      <h2>When to use a payment link</h2>
+      <p>Use a payment link when the customer pays one amount once. Typical cases are an invoice, a drop-in class, a deposit or a one-time fee.</p>
+      <ul>
+        <li><strong>Hosted page.</strong> Redirect the customer to <code>paymentLinkUrl</code>, or open it in a WebView. You need no client key and no origin whitelisting.</li>
+        <li><strong>Your own checkout.</strong> Create the link first, then open a Drop-in session on it. See <a href="checkout.html">Embedded and native checkout</a>. The link is still the payment record.</li>
+        <li><strong>Recurring billing.</strong> Do not use payment links. Store a card and create a <a href="subscriptions.html">subscription</a>.</li>
+      </ul>
+
+      <h2>The workflow</h2>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  A[Invoice or order in your system] --> B{Link for this reference already exists?}
+  B -- "no (404)" --> C[POST /payments/link]
+  B -- "open, same amount, not expired" --> D[Reuse the existing link]
+  B -- "expired, dead or other amount" --> E[Create link on suffixed reference ref-1]
+  B -- "authorised / paid" --> F[Stop: already paid]
+  C --> G[Store paymentLinkId, reference, expiresAt]
+  D --> G
+  E --> G
+  G --> H[Send customer to paymentLinkUrl]
+  H --> I[Webhook payment.authorised or payment.failed]
+  H --> J[Customer returns to returnUrl]
+  I --> K[GET /payments/status/reference]
+  J --> K
+  K --> L[Book the payment idempotently]
+        </pre>
+        <figcaption>Create or reuse, send, then confirm on the server. The status call decides, not the redirect.</figcaption>
+      </figure>
+
+      <h2>Create a payment link</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/link</code></div>
+      <p>The request creates a link and returns its URL immediately. Nothing is charged yet. The link stays payable until it expires or is paid.</p>
+
+      <h3>Request body</h3>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>reference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Your unique key for this payment. Use it for status, refund, cancel and webhook correlation. Use your own invoice or order number. Plorea does not reject duplicates. See <a href="#duplicate-references">Duplicate references</a>.</td></tr>
+            <tr><td><code>product</code><span class="req">required</span></td><td><span class="type">string</span></td><td>The text the customer sees on the pay page, for example <code>Invoice 2026-00123</code>.</td></tr>
+            <tr><td><code>amount</code><span class="req">required</span></td><td><span class="type">integer</span></td><td>The amount in minor units (øre). <code>450000</code> is 4 500,00 kr. A flat integer here, not an object.</td></tr>
+            <tr><td><code>currency</code><span class="req">required</span></td><td><span class="type">string</span></td><td><code>NOK</code>.</td></tr>
+            <tr><td><code>returnUrl</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Where the pay page sends the customer after the attempt. See <a href="#the-return-url">The return URL</a>.</td></tr>
+            <tr><td><code>tenantId</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Your tenant. It groups the payment with your other data on Plorea's side. A status read with another tenant's key fails with <code>403 Tenant mismatch</code>.</td></tr>
+            <tr><td><code>merchantOrgNr</code><span class="req">contract</span></td><td><span class="type">string</span></td><td>The Norwegian organisation number (9 digits) of the <strong>invoice issuer</strong>, who receives the payout. Contractually required, but the API does not enforce it. See <a href="#the-merchant-who-gets-paid">The merchant</a>. <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>merchantName</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>The issuer's legal name. Recommended. Plorea uses it in KYC communication.</td></tr>
+            <tr><td><code>merchantEmail</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Where Plorea sends the merchant's onboarding (KYC) email. Recommended.</td></tr>
+            <tr><td><code>merchantPhone</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>The issuer's phone number, for KYC.</td></tr>
+            <tr><td><code>merchantCountry</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>The issuer's country. The allowed format is not documented. <span class="badge open">Open question</span></td></tr>
+            <tr><td><code>email</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>The payer's email. Adyen can send a payment confirmation to it.</td></tr>
+            <tr><td><code>orderId</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your own order id. Use it to group several payment attempts (several references) for one order. Echoed on the status body.</td></tr>
+            <tr><td><code>doneId</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>The payer's universal Done user id, when you have one.</td></tr>
+            <tr><td><code>invoice_url</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>A link to the invoice PDF. The pay page shows it. Note the snake_case name.</td></tr>
+            <tr><td><code>enableSplits</code><span class="opt">optional</span></td><td><span class="type">boolean</span></td><td>Route the amount straight to the merchant's store through Adyen splits. The response echoes the result as <code>splitsEnabled</code>.</td></tr>
+            <tr><td><code>store</code><span class="opt">deprecated</span></td><td><span class="type">string</span></td><td>An explicit Adyen store. Do not send it. Plorea resolves the store from <code>merchantOrgNr</code>. <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for Plorea's reporting. No functional effect. <span class="badge stated">Stated by Plorea</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Example</h3>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payments/link \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-tenant",
+    "reference": "INV-2026-00123",
+    "orderId": "ORD-99",
+    "product": "Invoice INV-2026-00123",
+    "amount": 450000,
+    "currency": "NOK",
+    "email": "customer@example.com",
+    "returnUrl": "https://app.example.com/invoices/123/paid",
+    "invoice_url": "https://app.example.com/invoices/123.pdf",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Gym AS",
+    "merchantEmail": "billing@example.com"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$link = Plorea::payments()
+    -&gt;link(
+        reference: 'INV-2026-00123',
+        product: 'Invoice INV-2026-00123',
+        amount: Amount::nok(450000),               // 4 500,00 kr
+        returnUrl: 'https://app.example.com/invoices/123/paid',
+    )
+    -&gt;orderId('ORD-99')
+    -&gt;payerEmail('customer@example.com')
+    -&gt;invoiceUrl('https://app.example.com/invoices/123.pdf')
+    -&gt;merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@example.com')
+    -&gt;create();
+
+$link-&gt;url;        // https://pay.plorea.no/pl_...
+$link-&gt;id;         // pl_...
+$link-&gt;expiresAt;  // CarbonImmutable|null — store it</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payments/link', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'acme-tenant',
+    reference: 'INV-2026-00123',
+    orderId: 'ORD-99',
+    product: 'Invoice INV-2026-00123',
+    amount: 450000,
+    currency: 'NOK',
+    email: 'customer@example.com',
+    returnUrl: 'https://app.example.com/invoices/123/paid',
+    invoice_url: 'https://app.example.com/invoices/123.pdf',
+    merchantOrgNr: '999999999',
+    merchantName: 'Acme Gym AS',
+    merchantEmail: 'billing@example.com',
+  }),
+});
+if (!res.ok) throw new Error(`Plorea ${res.status}: ${(await res.json()).error}`);
+const link = await res.json();</code></pre></div>
+      </div>
+
+      <h3>Response</h3>
+      <pre data-title="200 OK"><code class="lang-json">{
+  "status": "created",
+  "environment": "test",
+  "paymentLinkUrl": "https://pay.plorea.no/pl_test_example_link",
+  "paymentLinkId": "pl_test_example_link",
+  "reference": "INV-2026-00123",
+  "tenantId": "acme-tenant",
+  "merchantAccount": "TestMerchantAccount",
+  "amount": 450000,
+  "currency": "NOK",
+  "store": "Test Store AS",
+  "themeId": null,
+  "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+  "splitsEnabled": false,
+  "clientType": "payments_only",
+  "skipKyc": false,
+  "partnerSplitsApplied": true,
+  "provider": "plorea",
+  "expiresAt": "2026-11-16T19:58:00.000Z"
+}</code></pre>
+      <dl class="fields">
+        <dt>paymentLinkUrl</dt><dd>Send the customer here.</dd>
+        <dt>paymentLinkId</dt><dd>The link id, prefixed <code>pl_</code>. Use it for <code>GET /pay/{id}</code> and for checkout sessions. Store it.</dd>
+        <dt>expiresAt</dt><dd>When the link stops being payable. Store it. It is your main expiry signal, because the status never changes to <code>expired</code>. <span class="badge verified">Verified</span></dd>
+        <dt>partnerSplitsApplied</dt><dd><code>true</code> when Plorea attached the merchant's split. It was <code>true</code> on links with a <code>merchantOrgNr</code> and <code>false</code> without. <span class="badge verified">Verified</span></dd>
+        <dt>store, balanceAccountId, merchantAccount</dt><dd>Plorea's routing. Informational. Do not depend on the values.</dd>
+      </dl>
+
+      <div class="callout warning">
+        <p class="callout-title">The response does not echo the merchant</p>
+        <p>The create response leaves out <code>merchantOrgNr</code> and <code>merchantName</code>. To confirm that Plorea stored them, read the pay page with <code>GET /pay/{paymentLinkId}</code>. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <h3>Expiry</h3>
+      <p>Plorea sets <code>expiresAt</code>. The request has no field to choose the lifetime, and the default lifetime is not documented. <span class="badge open">Open question</span> Observed links expired about ten weeks after creation, but do not rely on that. Read the value from each response.</p>
+
+      <h2 id="the-merchant-who-gets-paid">The merchant: who gets paid</h2>
+      <p>Plorea is a platform. One API key can take payments for many companies. <code>merchantOrgNr</code> tells Plorea which company receives the payout. Always send the organisation number of the <strong>invoice issuer</strong>, for example the gym or club that sent the invoice. Never send your own platform's number unless you issued the invoice.</p>
+      <ul>
+        <li><strong>Not enforced.</strong> The API accepts a link without <code>merchantOrgNr</code>. It even opens a checkout session on it. The payout then has no owner. <span class="badge verified">Verified</span> The PHP SDK refuses to create such a link and throws <code>PloreaException</code>.</li>
+        <li><strong>KYC starts by itself.</strong> The first payment for a new organisation number starts merchant onboarding. The merchant gets an email, at <code>merchantEmail</code> when you send one. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>The link stays payable during KYC.</strong> Plorea holds the payout until KYC is approved. This typically takes 1–5 business days. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>No store.</strong> Do not send <code>store</code> or a balance account. Plorea resolves both from the organisation number.</li>
+      </ul>
+      <div class="callout gap">
+        <p class="callout-title">What we would like from Plorea</p>
+        <p>Validate <code>merchantOrgNr</code> on link create, the same way subscriptions already reject a value that is not 9 digits. Echo the merchant fields in the create response. <span class="badge proposal">Proposal</span></p>
+      </div>
+
+      <h2 id="the-return-url">The return URL</h2>
+      <p>After the attempt, the pay page sends the customer to <code>returnUrl</code>. The customer arrives there both after a success and after giving up.</p>
+      <ol class="steps">
+        <li><strong>Build the URL on your server.</strong>Never copy a return URL from a request parameter. That is an open redirect.</li>
+        <li><strong>Put your own identifier in the path.</strong>For example <code>/invoices/123/paid</code>. Do not expect Plorea to append a reference or a result. What the pay page appends is not documented. <span class="badge open">Open question</span></li>
+        <li><strong>Read the status on the server.</strong>On the return page, call <code>GET /payments/status/{reference}</code>. Show "paid" only when the status is <code>authorised</code> or <code>paid</code>.</li>
+        <li><strong>Handle "still open".</strong>The webhook can arrive after the customer. Show "processing" and refresh, or wait for the webhook.</li>
+      </ol>
+      <div class="callout danger">
+        <p class="callout-title">The redirect is not proof of payment</p>
+        <p>A customer can open the return URL without paying. The status call or a signed webhook is the only proof.</p>
+      </div>
+
+      <h2>Read the pay page</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/pay/{paymentLinkId}</code></div>
+      <p>This endpoint returns the data that <code>pay.plorea.no</code> renders. It is the only place that answers two questions: has the link expired, and which merchant is attached.</p>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/pay/pl_test_example_link?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$page = Plorea::payByLink()-&gt;find('pl_test_example_link');
+
+$page-&gt;expired;        // bool, computed by Plorea
+$page-&gt;expiresAt;      // CarbonImmutable|null
+$page-&gt;merchantOrgNr;  // '999999999'
+$page-&gt;merchantName;
+$page-&gt;raw['partnerSplits'] ?? null;</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const page = await fetch(
+  'https://payments.plorea.no/pay/pl_test_example_link?platform=acme',
+  { headers: { Authorization: `Bearer ${key}`, 'X-Environment': 'test' } },
+).then((r) =&gt; r.json());
+
+if (page.expired) createReplacementLink();</code></pre></div>
+      </div>
+      <pre data-title="200 OK — link with a merchant"><code class="lang-json">{
+  "id": "pl_test_example_link",
+  "environment": "test",
+  "product": "Invoice INV-2026-00123",
+  "amount": 19900,
+  "currency": "NOK",
+  "reference": "INV-2026-00123",
+  "tenantId": "acme-tenant",
+  "merchantAccount": "TestMerchantAccount",
+  "merchantName": "Acme Gym AS",
+  "merchantOrgNr": "999999999",
+  "partnerSplits": {
+    "totalAmount": 19900,
+    "splits": [
+      {
+        "type": "Default",
+        "account": "BA_TEST_SPLIT_ACCOUNT",
+        "amount": { "value": 19900, "currency": "NOK" }
+      }
+    ]
+  },
+  "splits": null,
+  "store": null,
+  "email": null,
+  "themeId": null,
+  "returnUrl": "https://app.example.com/invoices/123/paid",
+  "createdAt": "2026-09-07T19:58:00.000Z",
+  "expiresAt": "2026-11-16T19:58:00.000Z",
+  "expired": false
+}</code></pre>
+      <dl class="fields">
+        <dt>expired</dt><dd>Plorea computes this flag. It is the authoritative expiry answer. <span class="badge verified">Verified</span></dd>
+        <dt>merchantOrgNr, merchantName</dt><dd>The merchant you sent. <code>null</code> when you sent none.</dd>
+        <dt>partnerSplits</dt><dd>How Plorea splits the amount. Populated once a merchant is attached, <code>null</code> before. <span class="badge verified">Verified</span></dd>
+      </dl>
+      <p>The pay page does not show the payment status. For that, read <code>GET /payments/status/{reference}</code>. See <a href="payment-lifecycle.html">Payment lifecycle and states</a>.</p>
+
+      <h2 id="duplicate-references">Duplicate references and firstOrCreate</h2>
+      <p>The API has <strong>no idempotency</strong>. Two <code>POST /payments/link</code> calls with the same reference create two links. Both are payable. A customer who double-clicks, or a job that retries after a timeout, can therefore be charged twice for one invoice. <span class="badge verified">Verified</span></p>
+      <p>Do not retry a link create blindly. Check for an existing link first. The PHP SDK does this in <code>firstOrCreate()</code>. You can build the same logic in any language:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>State of the existing reference</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>Unknown (<code>404</code>)</td><td>Create the link.</td></tr>
+            <tr><td>Open (<code>created</code>, <code>pending</code>, <code>active</code>), same amount, currency, tenant and environment, and the pay page says <code>expired: false</code></td><td>Reuse it.</td></tr>
+            <tr><td>Open but expired, or a different amount, or dead (<code>cancelled</code>, <code>refunded</code>, <code>failed</code>)</td><td>Create a new link on a suffixed reference: <code>INV-2026-00123-1</code>, then <code>-2</code>, and so on.</td></tr>
+            <tr><td>Paid (<code>authorised</code>, <code>paid</code>)</td><td>Stop. Never create a new link for a paid invoice.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Two details make this correct:</p>
+      <ul>
+        <li><strong>Walk the whole suffix chain.</strong> A superseded reference stays <code>created</code> forever. Nothing changes it when the customer pays the <code>-1</code> link. So check every suffix, and one past the last, before you reuse a link. Otherwise you can hand out an old link while a newer one is already paid.</li>
+        <li><strong>Judge expiry from the pay page.</strong> The status endpoint has no expiry field, and its status never becomes <code>expired</code>.</li>
+      </ul>
+      <div class="tabs">
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use Illuminate\Support\Facades\Cache;
+use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
+
+try {
+    // Serialise per reference: firstOrCreate() is not atomic.
+    // The lock must outlive the whole walk: each request can take 30 s,
+    // and firstOrCreate() sends several. block() releases it when done.
+    $link = Cache::lock("plorea:{$invoice-&gt;reference}", 900)-&gt;block(5, fn () =&gt; Plorea::payments()
+        -&gt;link($invoice-&gt;reference, $invoice-&gt;title, Amount::nok($invoice-&gt;ore), route('invoices.paid', $invoice))
+        -&gt;merchant(orgNr: '999999999', name: 'Acme Gym AS')
+        -&gt;firstOrCreate());
+} catch (PaymentAlreadyPaidException $e) {
+    // $e-&gt;status-&gt;reference may be a suffixed reference, e.g. INV-2026-00123-1.
+    $invoice-&gt;markPaid($e-&gt;status);
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// plorea(method, path, body?) wraps fetch with the auth and
+// X-Environment headers and returns the Response.
+const OPEN = ['created', 'pending', 'active'];
+const PAID = ['authorised', 'paid'];
+const ENVIRONMENT = 'test'; // the X-Environment you send
+
+async function firstOrCreate(base, payload, maxAttempts = 10) {
+  let reusable = null;
+  for (let i = 0; i &lt;= maxAttempts; i++) {
+    const reference = i === 0 ? base : `${base}-${i}`;
+    const res = await plorea('GET', `/payments/status/${encodeURIComponent(reference)}`);
+    if (res.status === 404) {
+      // End of the chain: reuse the first open link, or create here.
+      return reusable ?? plorea('POST', '/payments/link', { ...payload, reference });
+    }
+    const status = await res.json();
+    if (PAID.includes(status.status)) throw new Error(`Already paid as ${reference}`);
+    const page = OPEN.includes(status.status) &amp;&amp; status.paymentLinkId
+      ? await plorea('GET', `/pay/${status.paymentLinkId}`).then((r) =&gt; r.json())
+      : null;
+    const sameTerms = status.amount === payload.amount
+      &amp;&amp; status.currency?.toUpperCase() === payload.currency.toUpperCase()
+      &amp;&amp; (status.tenantId == null || status.tenantId === payload.tenantId)
+      &amp;&amp; (status.environment == null || status.environment === ENVIRONMENT);
+    // Keep the first reusable link. Keep walking to prove that no later
+    // suffix is paid, but never drop the candidate you already have.
+    if (!reusable &amp;&amp; page &amp;&amp; !page.expired &amp;&amp; sameTerms) reusable = status;
+  }
+  throw new Error('Too many superseded links');
+}</code></pre></div>
+      </div>
+      <div class="callout warning">
+        <p class="callout-title">Two caveats</p>
+        <ul>
+          <li>The check-then-create is <strong>not atomic</strong>. Two requests that race on a new reference can both create a link. Hold a lock per reference for the whole walk. Give the lock a lifetime longer than the worst case: every request can take up to your HTTP timeout, and the walk sends several. If the lock expires first, a second caller can create a duplicate link.</li>
+          <li>The suffix scheme assumes that <code>{reference}-1</code> is never a real invoice number in your system.</li>
+        </ul>
+      </div>
+      <div class="callout gap">
+        <p class="callout-title">What we would like from Plorea</p>
+        <p>Reject a duplicate <code>reference</code> with <code>409</code> and return the existing link, or accept an <code>Idempotency-Key</code> header. Then the suffix walk is no longer necessary. <span class="badge proposal">Proposal</span></p>
+      </div>
+
+      <h2>Reconcile the result</h2>
+      <p>Three signals can tell you about the outcome: the webhook, the customer's return, and your own status poll. They can arrive in any order, and the webhook can be lost. Plorea does not redeliver a failed webhook. <span class="badge stated">Stated by Plorea</span></p>
+      <ol class="steps">
+        <li><strong>Treat every signal as a ping.</strong>On any of the three, call <code>GET /payments/status/{reference}</code>.</li>
+        <li><strong>Compare the amount.</strong>Check <code>amount</code> and <code>currency</code> against your invoice. Flag a mismatch for manual handling. Do not book it automatically.</li>
+        <li><strong>Book idempotently.</strong>Key the booking on the reference. A second signal must not book the payment twice.</li>
+        <li><strong>Poll open links as a backstop.</strong>Run a scheduled job over links that are open and not expired. Stop polling when <code>expiresAt</code> has passed.</li>
+        <li><strong>Store the identifiers.</strong>Keep <code>reference</code>, <code>paymentLinkId</code>, <code>pspReference</code> and <code>expiresAt</code>. Support at Plorea and Adyen asks for the PSP reference.</li>
+      </ol>
+      <div class="tabs">
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$status = Plorea::payments()-&gt;status($invoice-&gt;plorea_reference);
+
+if ($status-&gt;isPaid()) {
+    if ($status-&gt;amount?-&gt;value !== $invoice-&gt;ore) {
+        $invoice-&gt;flagForReview('Plorea amount mismatch');
+        return;
+    }
+    $invoice-&gt;markPaid($status);   // idempotent on the reference
+} elseif ($status-&gt;is('failed')) {
+    $invoice-&gt;markDeclined();      // the customer can try again on a new link
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const s = await plorea('GET', `/payments/status/${ref}?platform=acme`).then((r) =&gt; r.json());
+
+if (['authorised', 'paid'].includes(s.status)) {
+  if (s.amount !== invoice.ore) return flagForReview(invoice);
+  await markPaid(invoice, s.pspReference); // idempotent on the reference
+} else if (s.status === 'failed') {
+  await markDeclined(invoice);
+}</code></pre></div>
+      </div>
+      <p>A declined payment reports <code>failed</code>, never <code>refused</code>. The status body has no decline reason. <span class="badge verified">Verified</span> See <a href="payment-lifecycle.html">Payment lifecycle and states</a> for all statuses.</p>
+
+      <h2>Common mistakes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mistake</th><th>Effect</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Retrying <code>POST /payments/link</code> after a timeout</td><td>Two payable links for one invoice</td><td>Check first, then create (<code>firstOrCreate</code>).</td></tr>
+            <tr><td>Sending your own org number as <code>merchantOrgNr</code></td><td>Money goes to the wrong company</td><td>Send the invoice issuer's number.</td></tr>
+            <tr><td>Waiting for status <code>expired</code></td><td>Never happens; the link looks open forever</td><td>Use <code>expiresAt</code> or <code>GET /pay/{id}</code>.</td></tr>
+            <tr><td>Marking paid on the return URL</td><td>Unpaid invoices marked paid</td><td>Read the status on the server.</td></tr>
+            <tr><td>Checking for <code>refused</code></td><td>Dead code; declines are missed</td><td>Check for <code>failed</code>.</td></tr>
+            <tr><td>Amount in kroner</td><td>The customer pays 1/100 of the price</td><td>Send øre: <code>450000</code> for 4 500 kr.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

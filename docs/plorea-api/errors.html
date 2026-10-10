@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Errors and Retries</title>
+  <meta name="description" content="Plorea API error responses, HTTP status mapping, SDK exceptions, and which requests are safe to retry.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="errors">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Integration</p>
+        <h1>Errors and retries</h1>
+        <p class="lead">How the Plorea API reports errors, what each HTTP status means, and which requests you can safely send again. Money-moving calls have no idempotency key, so retry logic needs care.</p>
+      </header>
+
+      <h2>The error body</h2>
+      <p>An error response has a JSON body with an <code>error</code> string. Some errors add context fields, such as the current <code>status</code> or the ID that caused the error. <span class="badge verified">Verified</span></p>
+      <pre data-title="400 — subscription is not chargeable"><code class="lang-json">{
+  "error": "Subscription is not chargeable",
+  "subscriptionId": "sub_test_example",
+  "status": "canceled"
+}</code></pre>
+      <pre data-title="404 — unknown reference"><code class="lang-json">{
+  "error": "Payment not found",
+  "reference": "order-9999"
+}</code></pre>
+      <pre data-title="403 — tenant mismatch"><code class="lang-json">{ "error": "Tenant mismatch" }</code></pre>
+      <p>The body shape is not fully consistent across endpoints. Read <code>error</code> first, then <code>message</code>, then fall back to the raw body. The SDK does this for you. <span class="badge verified">Verified</span></p>
+
+      <h2>HTTP status codes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>Typical causes</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td><code>200</code></td><td>Success</td><td>Also for an open, unpaid payment link.</td><td>Read the body.</td></tr>
+            <tr><td><code>400</code></td><td>Validation, or the current state does not allow the operation</td><td>Missing fields. Invalid <code>channel</code>. <code>merchantOrgNr</code> not 9 digits. Charging a cancelled subscription. A payment method that is not <code>active</code>. Reactivating an active subscription. A status change that is not allowed, such as pausing a <code>trialing</code> subscription. Deleting a payment method that a subscription uses.</td><td>Fix the request or your state machine. Do not retry unchanged.</td></tr>
+            <tr><td><code>401</code></td><td>Authentication failed</td><td>Missing or wrong API key. <strong>Missing <code>X-Environment</code> on refund.</strong></td><td>Check the key <em>and</em> the environment header.</td></tr>
+            <tr><td><code>402</code></td><td>Card declined</td><td>A manual subscription charge was declined by the acquirer. Only this.</td><td>Start dunning. The subscription itself is fine.</td></tr>
+            <tr><td><code>403</code></td><td>Forbidden</td><td><code>Tenant mismatch</code>: the resource belongs to another tenant. Also a scheduler-charge reference on the status endpoint.</td><td>Check which tenant owns the resource.</td></tr>
+            <tr><td><code>404</code></td><td>Not found</td><td>Unknown reference or ID. A bare <code>{"message":"Not Found"}</code> means the route does not exist, not the resource.</td><td>Often normal control flow: "does it exist?"</td></tr>
+            <tr><td><code>5xx</code></td><td>Plorea or provider error</td><td>—</td><td>Retry reads. For writes, re-read state first. See below.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>400 versus 402</h3>
+      <p>This distinction matters for subscriptions. <code>400</code> means your app sent a charge it should not have sent: the subscription is cancelled, or its card is not active. <code>402</code> means the card was declined. <span class="badge verified">Verified</span> for 400. <span class="badge unobserved">Not observable in test</span> for 402: a declined recurring charge cannot be produced with Adyen test cards, so the 402 body shape is unknown.</p>
+
+      <h3 id="the-401-that-is-not-about-the-key">The 401 that is not about the key</h3>
+      <div class="callout danger">
+        <p class="callout-title">Check X-Environment before you rotate your key</p>
+        <p>A <code>POST /payments/refund</code> without <code>X-Environment</code> goes to the <strong>live</strong> Adyen credentials. With a test key it answers <code>401</code> with <code>"errorType": "security"</code>. Nothing in the body mentions the environment, so it looks like a bad key. <span class="badge verified">Verified</span></p>
+        <p>This trap appears mostly in hand-written <code>curl</code> calls. The SDK sends the header on every request.</p>
+      </div>
+
+      <h2>Validation messages are static</h2>
+      <p>Plorea returns a fixed template, not a list of the fields that actually failed. A request with two missing fields gets a message that names all five required fields. <span class="badge verified">Verified</span></p>
+      <pre data-title="400 — POST /subscriptions with two fields missing"><code class="lang-json">{ "error": "tenantId, paymentMethodId, recurringType, amount and interval are required" }</code></pre>
+      <ul>
+        <li>Log the message and show it to developers.</li>
+        <li>Never parse it.</li>
+        <li>Never show it to a customer as a list of fields to fix.</li>
+        <li>Validate your own input before you call the API.</li>
+      </ul>
+      <p>Known messages, for log searching only:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Message</th><th>Endpoint</th></tr></thead>
+          <tbody>
+            <tr><td><code>channel must be one of Web, iOS, Android</code></td><td><code>POST /payments/session</code>, <code>POST /payment-methods/setup/session</code></td></tr>
+            <tr><td><code>tenantId, paymentMethodId, recurringType, amount and interval are required</code></td><td><code>POST /subscriptions</code></td></tr>
+            <tr><td><code>Invalid merchantOrgNr — must be 9 digits</code></td><td><code>POST /subscriptions</code></td></tr>
+            <tr><td><code>Payment method is not active</code></td><td><code>POST /subscriptions</code>, <code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>Subscription is not chargeable</code></td><td><code>POST /subscriptions/{id}/charge</code></td></tr>
+            <tr><td><code>Only canceled subscriptions can be reactivated</code></td><td><code>POST /subscriptions/{id}/reactivate</code></td></tr>
+            <tr><td><code>Cannot change status from trialing to paused</code></td><td><code>PATCH /subscriptions/{id}</code> (the body also has <code>allowedTransitions</code>)</td></tr>
+            <tr><td><code>status can only be set to active or paused</code></td><td><code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>nextChargeAt is required when reactivating a paused subscription</code></td><td><code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>nextChargeAt cannot be in the past</code></td><td><code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>Payment method not found</code></td><td><code>DELETE /payment-methods/{id}</code> (<code>404</code>)</td></tr>
+            <tr><td><code>Payment not found</code></td><td><code>GET /payments/status/{reference}</code></td></tr>
+            <tr><td><code>Tenant mismatch</code></td><td>Any endpoint that reads a tenant-scoped resource</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Handling errors in code</h2>
+      <p>The PHP SDK maps each status to an exception. Every exception extends <code>MemberFlow\Plorea\Exceptions\PloreaException</code>, so one <code>catch</code> covers the package.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Exception</th><th>Thrown when</th></tr></thead>
+          <tbody>
+            <tr><td><code>ValidationException</code></td><td>400</td></tr>
+            <tr><td><code>PaymentMethodInUseException</code></td><td>400 on a payment method delete that a subscription blocks. Extends <code>ValidationException</code>. The body lists <code>activeSubscriptionIds</code>.</td></tr>
+            <tr><td><code>AuthenticationException</code></td><td>401 and 403, including <code>Tenant mismatch</code></td></tr>
+            <tr><td><code>ChargeFailedException</code></td><td>402</td></tr>
+            <tr><td><code>NotFoundException</code></td><td>404</td></tr>
+            <tr><td><code>ServerException</code></td><td>5xx</td></tr>
+            <tr><td><code>RequestException</code></td><td>Parent of the five above, and any other non-2xx status. Exposes <code>$status</code> and <code>$response</code>.</td></tr>
+            <tr><td><code>ConnectionException</code></td><td>The API could not be reached, or the request timed out. The API key is redacted from the wrapped exception chain.</td></tr>
+            <tr><td><code>PaymentAlreadyPaidException</code></td><td><code>firstOrCreate()</code> found that the reference is already paid. Exposes <code>$status</code>.</td></tr>
+            <tr><td><code>PloreaException</code></td><td>Base class. Also thrown by the SDK's own guards, for example a missing <code>merchantOrgNr</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># -w prints the status code; the body carries the reason.
+curl -s -w '\nHTTP %{http_code}\n' -X POST \
+  https://payments.plorea.no/subscriptions/sub_test_example/charge \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{"platform":"acme","reason":"Upgrade difference"}'
+
+# {"error":"Subscription is not chargeable","subscriptionId":"sub_test_example","status":"canceled"}
+# HTTP 400</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+use MemberFlow\Plorea\Exceptions\ConnectionException;
+use MemberFlow\Plorea\Exceptions\ValidationException;
+use MemberFlow\Plorea\Facades\Plorea;
+
+try {
+    $charge = Plorea::subscriptions()-&gt;charge($subscriptionId);
+} catch (ChargeFailedException $e) {
+    // 402: the card was declined. Start dunning.
+    $e-&gt;status;             // 402
+    $e-&gt;response?-&gt;json();  // raw error body
+} catch (ValidationException $e) {
+    // 400: not chargeable (cancelled, or card not active).
+    // A bug in your own state handling. Do not retry.
+    report($e);
+} catch (ConnectionException $e) {
+    // Unknown outcome. Re-read the charge history before you act.
+    $charges = Plorea::subscriptions()-&gt;charges($subscriptionId);
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">class PloreaError extends Error {
+  constructor(status, body) {
+    super(body?.error ?? body?.message ?? `HTTP ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function plorea(path, { method = 'GET', body } = {}) {
+  const res = await fetch(`https://payments.plorea.no${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+      'X-Environment': process.env.PLOREA_ENVIRONMENT ?? 'test',
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: body ? JSON.stringify({ platform: 'acme', ...body }) : undefined,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new PloreaError(res.status, json);
+  return json;
+}
+
+try {
+  await plorea(`/subscriptions/${id}/charge`, { method: 'POST', body: {} });
+} catch (e) {
+  if (e.status === 402) startDunning(id);
+  else if (e.status === 400) reportBug(e);
+  else throw e;
+}</code></pre></div>
+      </div>
+
+      <h3>Not found is normal</h3>
+      <p>Use <code>404</code> to answer "does this payment exist?". An open link that nobody has paid returns <code>200</code>. Only a reference that Plorea has never seen returns <code>404</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="PHP SDK"><code class="lang-php">try {
+    $status = Plorea::payments()-&gt;status($reference);
+} catch (NotFoundException) {
+    $status = null; // never created
+}</code></pre>
+
+      <h2 id="retries-and-idempotency">Retries and idempotency</h2>
+      <p>The Plorea API has <strong>no idempotency keys</strong>. Two identical <code>POST /payments/link</code> calls create two payable links. Two identical charge calls bill the card twice. <span class="badge verified">Verified</span> for payment links.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Operation</th><th>Safe to retry?</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>All <code>GET</code> requests</td><td><strong>Yes</strong></td><td>Reads change nothing.</td></tr>
+            <tr><td><code>POST /payments/refund</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Plorea has not confirmed that a repeated <code>modificationReference</code> is deduplicated. Read the payment status before any retry. Do not retry automatically.</td></tr>
+            <tr><td><code>POST /payments/cancel</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Same as refund. Check <code>lastCancelReference</code>.</td></tr>
+            <tr><td><code>POST /payments/link</code></td><td><strong>No</strong></td><td>A retry can create a second live link for the same reference.</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td><strong>No</strong></td><td>No idempotency key. A retry can charge twice.</td></tr>
+            <tr><td><code>POST /subscriptions</code></td><td><strong>No</strong></td><td>A retry can create two subscriptions. Billing starts immediately on each.</td></tr>
+            <tr><td><code>POST /payment-methods/setup</code>, <code>…/setup/session</code></td><td>Mostly harmless</td><td>Creates an extra <code>pending_setup</code> method that nobody completes.</td></tr>
+            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Yes</td><td>Sets absolute values.</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/cancel</code>, <code>…/reactivate</code></td><td>Yes, but expect <code>400</code></td><td>The second reactivate answers "Only canceled subscriptions can be reactivated".</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>A timeout is an unknown, not a failure</h3>
+      <p>When a write times out, you do not know if Plorea processed it. Read the state back before you decide.</p>
+      <ol class="steps">
+        <li><strong>Payment link timed out</strong>Call <code>GET /payments/status/{reference}</code>. A <code>200</code> means the link exists. Reuse it. A <code>404</code> means you can create it.</li>
+        <li><strong>Charge timed out</strong>Call <code>GET /subscriptions/{id}/charges</code>. Look for a new <code>manual_charge</code> item before you charge again.</li>
+        <li><strong>Subscription create timed out</strong>Call <code>GET /subscriptions?externalId=…</code>. Look for a subscription with your <code>externalId</code>.</li>
+        <li><strong>Refund or cancel timed out</strong>Call <code>GET /payments/status/{reference}</code>. If <code>lastRefundReference</code> or <code>lastCancelReference</code> equals your <code>modificationReference</code>, Plorea accepted it. Otherwise, escalate to a person. Do not retry automatically: Plorea has not confirmed that a repeated <code>modificationReference</code> is safe. <span class="badge open">Open question</span></li>
+      </ol>
+
+      <h3>Create payment links safely</h3>
+      <p>The SDK provides <code>firstOrCreate()</code>. It reads the status of the reference first. If an open, reusable link exists, it returns that link. If the reference is already paid, it throws <code>PaymentAlreadyPaidException</code>. If a link exists but cannot be reused, for example because it expired, it creates a new link on a suffixed reference: <code>order-1001-1</code>, <code>order-1001-2</code>, and so on. Run it inside a lock per reference. Without the SDK, use the walk in <a href="payment-links.html#duplicate-references">Duplicate references and firstOrCreate</a>.</p>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># 1. Check first.
+curl -s -o /dev/null -w '%{http_code}' \
+  "https://payments.plorea.no/payments/status/order-1001?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" -H "X-Environment: test"
+# 404 -&gt; safe to create. 200 -&gt; inspect status and expiresAt before creating.</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use Illuminate\Support\Facades\Cache;
+use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
+
+// The lock must outlive the whole walk: each request can take 30 s,
+// and firstOrCreate() sends several. block() releases it when done.
+$link = Cache::lock("plorea:link:{$invoice-&gt;reference}", 900)-&gt;block(10, function () use ($invoice) {
+    try {
+        return Plorea::payments()
+            -&gt;link($invoice-&gt;reference, 'Invoice '.$invoice-&gt;number, Amount::nok($invoice-&gt;total), 'https://example.com/return')
+            -&gt;merchant(orgNr: '999999999')
+            -&gt;firstOrCreate();
+    } catch (PaymentAlreadyPaidException $e) {
+        $invoice-&gt;markPaid($e-&gt;status-&gt;pspReference);
+        return null;
+    }
+});</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Plorea has no firstOrCreate. Build it yourself: read the base
+// reference, then each suffix (order-1001-1, order-1001-2, ...).
+// Keep the first reusable link you find. Create a new link only on the
+// first suffix that returns 404. Hold the lock for the whole walk.
+// Full algorithm: payment-links.html#duplicate-references</code></pre></div>
+      </div>
+
+      <h3>Automatic retries in the SDK</h3>
+      <p><code>PLOREA_RETRY_TIMES</code> retries connection errors and 5xx responses. The default is <code>0</code> on purpose. A retry of a non-idempotent write can bill twice. Turn it on only if every write you send is safe to retry.</p>
+
+      <h2>Timeouts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>SDK default</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>PLOREA_TIMEOUT</code></td><td>30 s</td><td>Total request time.</td></tr>
+            <tr><td><code>PLOREA_CONNECT_TIMEOUT</code></td><td>10 s</td><td>Time to open the connection.</td></tr>
+            <tr><td><code>PLOREA_RETRY_TIMES</code></td><td>0</td><td>Retries on connection errors and 5xx.</td></tr>
+            <tr><td><code>PLOREA_RETRY_SLEEP</code></td><td>100 ms</td><td>Wait between retries.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Plorea does not publish timeouts or rate limits. <span class="badge open">Open question</span></p>
+
+      <h2>Never log the API key</h2>
+      <p>The API key can create links and refund payments. Keep it out of logs and error reports.</p>
+      <ul>
+        <li>Do not log request headers.</li>
+        <li>The PHP SDK strips the <code>Authorization</code> header from exceptions on both the response path and the connection path.</li>
+        <li>If the key appears in a chat, a ticket or a log, ask Plorea for a new key.</li>
+      </ul>
+
+      <div class="callout gap">
+        <p class="callout-title">What would help</p>
+        <ul>
+          <li>An <code>Idempotency-Key</code> header on link create, subscription create and charge. <span class="badge proposal">Proposal</span></li>
+          <li>Stable machine-readable error codes next to the human message, for example <code>"code": "payment_method_not_active"</code>. <span class="badge proposal">Proposal</span></li>
+          <li>A 401 body that names the environment that was used. <span class="badge proposal">Proposal</span></li>
+        </ul>
+        <p>See <a href="wishlist.html">Gaps and proposals</a>.</p>
+      </div>
+
+      <p class="site-foot">Community draft. Facts last checked against the test environment in October 2026. Example names use reserved values: <code>example.com</code>, Acme, organisation number <code>999999999</code>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

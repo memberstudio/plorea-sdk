@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Refunds and cancellations</title>
+  <meta name="description" content="Refund or cancel a Plorea payment: which one to use, how to retry safely, and how to track an asynchronous modification.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="refunds-and-cancellations">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Payments</p>
+        <h1>Refunds and cancellations</h1>
+        <p class="lead">A cancel stops money that has not moved yet. A refund sends back money that has moved. Both are <em>modifications</em> of an existing payment. Both are asynchronous: Plorea accepts the request at once, and the provider settles it later, sometimes many hours later.</p>
+      </header>
+
+      <h2>Cancel or refund?</h2>
+      <p>An authorisation reserves the money on the customer's card. A capture moves it. With Plorea, capture is automatic: Plorea settles through AmendoPOS a few minutes after the authorisation. There is no capture endpoint and no field that tells you whether the capture has happened. <span class="badge stated">Stated by Plorea</span></p>
+      <p>This gives a short cancel window and a simple rule:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Cancel</th><th>Refund</th></tr></thead>
+          <tbody>
+            <tr><td>Use when</td><td>The payment is authorised and not yet settled. In practice: minutes after the authorisation.</td><td>The payment has settled. In practice: everything older than a few minutes.</td></tr>
+            <tr><td>Amount</td><td>Always the full authorisation</td><td>Full, or a partial amount you choose</td></tr>
+            <tr><td>Customer sees</td><td>The reservation disappears. No debit line.</td><td>A debit and a later credit on the statement.</td></tr>
+            <tr><td>Endpoint</td><td><code>POST /payments/cancel</code></td><td><code>POST /payments/refund</code></td></tr>
+            <tr><td>Immediate status</td><td><code>cancel_requested</code></td><td><code>refund_requested</code></td></tr>
+            <tr><td>Final status</td><td><code>cancelled</code> <span class="badge stated">Stated</span></td><td><code>refunded</code> <span class="badge stated">Stated</span></td></tr>
+            <tr><td>Webhook</td><td>None <span class="badge stated">Stated</span></td><td><code>payment.refunded</code> on settlement</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart TD
+  S[GET /payments/status/reference] --> Q{status}
+  Q -- "created / pending / active" --> N[Nothing to undo. Let the link expire.]
+  Q -- "failed" --> F[Nothing was taken. Nothing to undo.]
+  Q -- "refund_requested / cancel_requested" --> W[Already in progress. Do not send again with a new reference.]
+  Q -- "authorised / paid" --> T{Authorised only minutes ago?}
+  T -- "yes" --> C[POST /payments/cancel]
+  T -- "no, or unsure" --> R[POST /payments/refund]
+  C --> P[Store cancelPspReference. Book on the request.]
+  R --> P2[Store refundPspReference. Book on the request.]
+        </pre>
+        <figcaption>When unsure, refund. A refund works on a settled payment. A cancel may not.</figcaption>
+      </figure>
+
+      <div class="callout warning">
+        <p class="callout-title">What a late cancel does is unknown</p>
+        <p>A cancel sent nine days after the authorisation was accepted and reads <code>cancel_requested</code>. <span class="badge verified">Verified</span> Whether the provider then turns it into a refund, or rejects it, has not been observed. <span class="badge open">Open question</span> Until Plorea documents this, prefer a refund for any payment that is not brand new.</p>
+      </div>
+
+      <h2>Refund a payment</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/refund</code></div>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>reference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>The reference of the payment to refund.</td></tr>
+            <tr><td><code>modificationReference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Your unique reference for <em>this refund attempt</em>. Plorea echoes it as <code>lastRefundReference</code>. It is not a confirmed idempotency key. See <a href="#retry-safely">Retry safely</a>.</td></tr>
+            <tr><td><code>amount</code><span class="opt">optional</span></td><td><span class="type">integer</span></td><td>Minor units (øre). Leave it out for a full refund. A flat integer, like on payment links.</td></tr>
+            <tr><td><code>reason</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Free text for your records. Echoed later as <code>lastRefundReason</code> on the status.</td></tr>
+            <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for reporting.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout danger">
+        <p class="callout-title">Send X-Environment, or you hit live</p>
+        <p>A refund request without the <code>X-Environment</code> header goes to Plorea's <strong>live</strong> Adyen credentials. With a test key, the answer is <code>401</code> with <code>"errorType": "security"</code>. Nothing in the answer says "wrong environment", so it looks like a bad API key. Watch for this when you copy a request into a terminal. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payments/refund \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reference": "INV-2026-00123",
+    "modificationReference": "INV-2026-00123-refund-1",
+    "amount": 450000,
+    "reason": "Customer requested refund"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$refund = Plorea::payments()-&gt;refund(
+    reference: 'INV-2026-00123',
+    modificationReference: 'INV-2026-00123-refund-1',
+    amount: Amount::nok(450000),   // omit for a full refund
+    reason: 'Customer requested refund',
+);
+
+// Persist this now. It is not available anywhere else later.
+$invoice-&gt;refunds()-&gt;create([
+    'modification_reference' =&gt; $refund-&gt;modificationReference,
+    'psp_reference' =&gt; $refund-&gt;refundPspReference,
+    'amount' =&gt; $refund-&gt;amount?-&gt;value,
+]);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payments/refund', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test', // never leave this out
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    reference: 'INV-2026-00123',
+    modificationReference: 'INV-2026-00123-refund-1',
+    amount: 450000,
+    reason: 'Customer requested refund',
+  }),
+});
+const refund = await res.json();
+await db.refunds.insert({ pspReference: refund.refundPspReference, ...refund });</code></pre></div>
+      </div>
+
+      <pre data-title="200 OK"><code class="lang-json">{
+  "status": "refund_requested",
+  "reference": "INV-2026-00123",
+  "modificationReference": "INV-2026-00123-refund-1",
+  "refundPspReference": "TESTREFUNDPSP001",
+  "paymentPspReference": "TESTPSPREF000001",
+  "amount": 450000,
+  "currency": "NOK",
+  "environment": "test"
+}</code></pre>
+      <dl class="fields">
+        <dt>status</dt><dd>Always <code>refund_requested</code> on success. It means "accepted", not "pending and maybe doomed".</dd>
+        <dt>refundPspReference</dt><dd>The provider's id for the refund. <strong>Store it now.</strong> It exists only on this response. Plorea and Adyen support ask for it. <span class="badge verified">Verified</span></dd>
+        <dt>paymentPspReference</dt><dd>The provider's id for the original payment. Same as <code>pspReference</code> on the status.</dd>
+      </dl>
+
+      <h3>Partial refunds</h3>
+      <p>Send an <code>amount</code> lower than the payment to refund part of it. The request accepts the field, and the response echoes it. A partial refund has not been taken through to settlement in test. <span class="badge open">Open question</span> Two more things are not documented:</p>
+      <ul>
+        <li>Whether a second partial refund on the same payment is accepted, and what the status shows between the two.</li>
+        <li>What the top-level <code>status</code> is after a partial refund settles. <code>refunded</code> would hide the part that is still paid.</li>
+      </ul>
+      <p>The status body keeps only the <em>last</em> refund (<code>lastRefund*</code>). Keep your own ledger of every refund you send, keyed on <code>modificationReference</code>.</p>
+
+      <h2>Cancel a payment</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/cancel</code></div>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>reference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>The reference of the payment to cancel.</td></tr>
+            <tr><td><code>modificationReference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Your unique reference for this cancel attempt.</td></tr>
+            <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for reporting.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payments/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reference": "INV-2026-00124",
+    "modificationReference": "INV-2026-00124-cancel-1"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$cancellation = Plorea::payments()-&gt;cancel('INV-2026-00124', 'INV-2026-00124-cancel-1');
+
+$cancellation-&gt;status;              // 'cancel_requested'
+$cancellation-&gt;cancelPspReference;  // store it</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const cancellation = await fetch('https://payments.plorea.no/payments/cancel', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    reference: 'INV-2026-00124',
+    modificationReference: 'INV-2026-00124-cancel-1',
+  }),
+}).then((r) =&gt; r.json());</code></pre></div>
+      </div>
+      <pre data-title="200 OK"><code class="lang-json">{
+  "status": "cancel_requested",
+  "reference": "INV-2026-00124",
+  "modificationReference": "INV-2026-00124-cancel-1",
+  "cancelPspReference": "TESTCANCELPSP001",
+  "paymentPspReference": "TESTPSPREF000002",
+  "environment": "test"
+}</code></pre>
+      <p>A cancel has no <code>amount</code>. It always releases the full authorisation.</p>
+
+      <h2>Track the modification</h2>
+      <p>The payment's own <code>status</code> changes immediately to <code>refund_requested</code> or <code>cancel_requested</code>. It stays there until the provider settles. There is no separate status per refund. <span class="badge verified">Verified</span></p>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  authorised --> refund_requested: POST /payments/refund
+  authorised --> cancel_requested: POST /payments/cancel
+  refund_requested --> refunded: provider settles (hours)
+  cancel_requested --> cancelled: provider settles
+        </pre>
+        <figcaption>The final states <code>refunded</code> and <code>cancelled</code> are stated by Plorea. They have not been observed in test.</figcaption>
+      </figure>
+
+      <h3>The status body during a modification</h3>
+      <pre data-title="GET /payments/status/INV-2026-00123 — refund in flight (excerpt)"><code class="lang-json">{
+  "reference": "INV-2026-00123",
+  "status": "refund_requested",
+  "pspReference": "TESTPSPREF000001",
+  "amount": 450000,
+  "currency": "NOK",
+  "webhookEventCode": "AUTHORISATION",
+  "webhookSuccess": true,
+  "lastRefundReference": "INV-2026-00123-refund-1",
+  "lastRefundRequestPspReference": "TESTREFUNDPSP001",
+  "lastRefundAmount": 450000,
+  "lastRefundReason": "Customer requested refund",
+  "lastRefundRequestedAt": "2026-08-26T12:10:00.000Z",
+  "lastCancelReference": null,
+  "lastCancelRequestPspReference": null,
+  "lastCancelRequestedAt": null
+}</code></pre>
+      <dl class="fields">
+        <dt>lastRefundReference</dt><dd>The <code>modificationReference</code> of the latest refund request.</dd>
+        <dt>lastRefundRequestPspReference</dt><dd>The provider id of the latest refund <em>request</em>. In one sample it equalled <code>refundPspReference</code>. <span class="badge verified">Verified once</span> Plorea has not said that the two are always equal. Keep storing the value from the refund response. <span class="badge open">Open question</span></dd>
+        <dt>lastCancel*</dt><dd>The same group for the latest cancel.</dd>
+        <dt>webhookEventCode, webhookSuccess</dt><dd>These describe Plorea's <em>inbound</em> Adyen notification for the original authorisation. They stay <code>AUTHORISATION</code> / <code>true</code> during a refund. They do not track the refund.</dd>
+      </dl>
+
+      <h3>How long settlement takes</h3>
+      <div class="callout warning">
+        <p class="callout-title">Plan in hours, not minutes</p>
+        <p>One test refund took more than 11 hours to settle. <span class="badge verified">Verified</span> A refund and a cancel requested on the same day were both still in the <code>_requested</code> state more than 24 hours later. Plorea says this is expected. <span class="badge stated">Stated by Plorea</span> Whether live is faster is not known. <span class="badge open">Open question</span></p>
+      </div>
+      <p>So:</p>
+      <ul>
+        <li><strong>Book on the request.</strong> When the API answers <code>refund_requested</code>, record the refund in your books and tell the customer it is on its way.</li>
+        <li><strong>Never time out into "failed".</strong> A job that polls every few minutes and gives up after one hour will report a healthy refund as failed. Do not reverse a refund in your books because time passed.</li>
+        <li><strong>Use the webhook, poll as a backstop.</strong> Listen for <code>payment.refunded</code>. Poll the status a few times a day as a backstop, because a lost webhook is not redelivered. See <a href="webhooks.html">Webhooks</a>.</li>
+        <li><strong>Subscription cancels are poll-only.</strong> Plorea sends no webhook for a subscription cancel. <span class="badge stated">Stated by Plorea</span></li>
+      </ul>
+
+      <h2 id="retry-safely">Retry safely</h2>
+      <p>Retry safety for refund and cancel is not known. <span class="badge open">Open question</span> The <code>modificationReference</code> is your reference for one attempt. Plorea has not confirmed that it deduplicates a repeated reference. Treat it as a reference, not as an idempotency key. Do not retry a refund or a cancel automatically.</p>
+      <ol class="steps">
+        <li><strong>Create the modification reference before the call.</strong>Derive it from your own refund record, for example <code>{reference}-refund-{n}</code>. Save it first.</li>
+        <li><strong>Send the request.</strong>On a timeout or a <code>5xx</code>, the outcome is unknown, not failed.</li>
+        <li><strong>Read the payment status.</strong>If <code>lastRefundReference</code> (or <code>lastCancelReference</code>) equals your modification reference, Plorea accepted the request. Stop.</li>
+        <li><strong>Otherwise, escalate to a person.</strong>A missing match does not prove that Plorea rejected the request. The request can still be in flight, and a later refund overwrites the <code>lastRefund*</code> fields. A person decides whether to send it again, with the same modification reference.</li>
+      </ol>
+      <p>Ask Plorea to confirm how it handles a repeated modification reference. Until then, the status check lowers the risk of a double refund. It does not remove the risk.</p>
+
+      <h2>Refunds on subscription charges</h2>
+      <p>A manual subscription charge has a reference of the form <code>{subscriptionId}-{chargeId}</code>. That reference resolves on <code>GET /payments/status</code>. <span class="badge verified">Verified</span> A refund on that reference has not been tested. It should work like a refund on any payment, but this is not confirmed. <span class="badge open">Open question</span> A <em>scheduled</em> charge reference does not resolve on the status endpoint. Whether such a charge can be refunded through this API is not known. <span class="badge open">Open question</span> See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+
+      <h2>Errors</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Body</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>401</code></td><td><code>errorType: "security"</code></td><td>Usually a missing <code>X-Environment</code>. Then a bad key.</td></tr>
+            <tr><td><code>403</code></td><td><code>{"error": "Tenant mismatch"}</code></td><td>The payment belongs to another tenant than your key.</td></tr>
+            <tr><td><code>404</code></td><td><code>{"error": "Payment not found", ...}</code></td><td>Unknown reference. Check the environment too.</td></tr>
+            <tr><td><code>5xx</code></td><td>varies</td><td>Unknown outcome. Read the status. If your modification reference is not there, escalate to a person. See <a href="#retry-safely">Retry safely</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>See <a href="errors.html">Errors and retries</a> for the full mapping.</p>
+
+      <div class="callout gap">
+        <p class="callout-title">What we would like from Plorea</p>
+        <ul>
+          <li>A list of refunds per payment, each with its own status. <span class="badge proposal">Proposal</span></li>
+          <li>A <code>payment.cancelled</code> webhook. <span class="badge proposal">Proposal</span></li>
+          <li>A field that says whether the payment is captured, or a <code>cancelOrRefund</code> endpoint that picks the right one. <span class="badge proposal">Proposal</span></li>
+          <li>Documented behaviour for partial refunds and repeated modification references. <span class="badge proposal">Proposal</span></li>
+        </ul>
+      </div>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,1230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Subscription workflows</title>
+  <meta name="description" content="Recipes for common subscription changes on the Plorea Payments API: trials, price increases, upgrades, downgrades, pauses, interval changes, card replacement, cancellation and reactivation.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="subscription-workflows">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Recurring billing</p>
+        <h1>Subscription workflows</h1>
+        <p class="lead">Step-by-step recipes for the changes that happen during a subscription's life: a free trial, a price increase, an upgrade, a pause, a new card, a cancellation. Each recipe says when to use it, which calls to make, and what can go wrong.</p>
+      </header>
+
+      <div class="callout note">
+        <p class="callout-title">Read this first</p>
+        <p>The Plorea API has a small set of subscription operations: create, read, update (<code>PATCH</code>), charge now, cancel and reactivate. <code>PATCH</code> also pauses and resumes. The API has no proration and no interval change. The recipes below build those workflows from the operations that exist. Where a recipe depends on behaviour we could not verify, the badge says so.</p>
+      </div>
+
+      <h2>The building blocks</h2>
+      <p>Every recipe on this page combines the same six operations. Learn their effects once.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Operation</th><th>Effect on billing</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /subscriptions</code></td><td>Starts billing immediately. With <code>trialEndsAt</code>, the first charge happens at the end of the trial.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Changes the amount, VAT, quantity, labels or card. Moves <code>nextChargeAt</code>. Pauses with <code>status: "paused"</code> and resumes with <code>status: "active"</code>. It does not charge. It cannot change the interval.</td><td><span class="badge verified">Verified</span> in test</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>Charges the stored card now. It does not move the schedule of later charges in a way you control.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>POST /subscriptions/{id}/cancel</code></td><td>Stops future charges. Returns <code>accessEndsAt</code> = last charge + one interval.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>POST /subscriptions/{id}/reactivate</code></td><td>Restarts a canceled subscription. Sets <code>nextChargeAt</code> to last charge + one interval. Does not charge twice.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET /subscriptions/{id}/charges</code></td><td>Lists the charges, newest first. The only reliable record of scheduled billing.</td><td><span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Three rules apply to every recipe:</p>
+      <ul>
+        <li><strong>Keep your own copy of the plan.</strong> Store the subscription ID, the amount, the interval and the company it bills for in your database. Reads return <code>merchantOrgNr</code>, but not <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Gate access on dates, not on status.</strong> Give access while <code>status</code> is <code>active</code> or <code>trialing</code>, or while <code>accessEndsAt</code> is in the future. A <code>past_due</code> subscription is in its retry window. Your grace policy decides its access. See <a href="dunning.html">Failed charges and dunning</a>.</li>
+        <li><strong>Do not retry a charge or a create blindly.</strong> The API has no idempotency keys. A retried call can charge twice or create two subscriptions. See <a href="errors.html">Errors and retries</a>. <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>You want to…</th><th>Recipe</th></tr></thead>
+          <tbody>
+            <tr><td>Let the customer try before they pay</td><td><a href="#sign-up-with-a-free-trial">Sign-up with a free trial</a></td></tr>
+            <tr><td>Raise the price for existing customers</td><td><a href="#raise-the-price">Raise the price</a></td></tr>
+            <tr><td>Move a customer to a bigger plan now</td><td><a href="#upgrade-mid-cycle">Upgrade mid-cycle</a></td></tr>
+            <tr><td>Move a customer to a smaller plan</td><td><a href="#downgrade">Downgrade</a></td></tr>
+            <tr><td>Freeze a membership for some weeks</td><td><a href="#pause-or-freeze">Pause or freeze</a></td></tr>
+            <tr><td>Switch from monthly to yearly</td><td><a href="#change-the-billing-interval">Change the billing interval</a></td></tr>
+            <tr><td>Replace an expired or lost card</td><td><a href="#replace-the-card">Replace the card</a></td></tr>
+            <tr><td>Charge for an extra item once</td><td><a href="#charge-a-one-off-extra">Charge a one-off extra</a></td></tr>
+            <tr><td>End a subscription</td><td><a href="#cancel-and-keep-access-to-period-end">Cancel and keep access to period end</a></td></tr>
+            <tr><td>Undo a cancellation</td><td><a href="#reactivate-a-canceled-subscription">Reactivate a canceled subscription</a></td></tr>
+            <tr><td>React when a renewal fails</td><td><a href="dunning.html">Failed charges and dunning</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2>Sign-up with a free trial</h2>
+      <p><strong>Use this when</strong> the customer gets a free period before the first charge. The same recipe also gives you a fixed billing date, for example "always bill on the 1st": set the trial to end on that date.</p>
+      <p>A trial needs a stored card first. The card setup makes a 1 NOK verification authorisation, so the customer proves the card works before the trial starts. <span class="badge verified">Verified</span></p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App as Your server
+  participant P as Plorea API
+  participant C as Customer
+  App->>P: POST /payment-methods/setup
+  P-->>App: paymentMethodId, adyenPaymentLinkUrl
+  App->>C: Redirect to adyenPaymentLinkUrl
+  C->>P: Enters card (1 NOK verification)
+  C-->>App: Returns to returnUrl
+  loop Until status is active or failed
+    App->>P: GET /payment-methods/{id}
+  end
+  App->>P: POST /subscriptions (trialEndsAt)
+  P-->>App: status "trialing", nextChargeAt = trialEndsAt
+  Note over P: Trial runs. Nothing is charged.
+  P->>P: Scheduler charges at trialEndsAt
+  P-->>App: Webhook subscription.charge_succeeded
+        </pre>
+        <figcaption>No webhook is sent for the card setup. Poll the payment method until it leaves <code>pending_setup</code>.</figcaption>
+      </figure>
+
+      <ol class="steps">
+        <li><strong>Store the card</strong>Call <code>POST /payment-methods/setup</code> with <code>recurringType: "Subscription"</code>. Send the customer to <code>adyenPaymentLinkUrl</code>. See <a href="payment-methods.html">Storing cards</a>.</li>
+        <li><strong>Wait for the card to become active</strong>Poll <code>GET /payment-methods/{id}</code> after the customer returns. <code>active</code> means you can subscribe. <code>failed</code> is final: start a new setup. No webhook is sent for setup. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Create the subscription with a trial end</strong>Send <code>trialEndsAt</code> in ISO 8601. The response has <code>status: "trialing"</code> and <code>nextChargeAt</code> equal to <code>trialEndsAt</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Save the subscription ID</strong>Store <code>subscriptionId</code> against your customer record before you do anything else.</li>
+        <li><strong>Give access during the trial</strong>Treat <code>trialing</code> as an access-granting status. It is a separate status, not a kind of <code>active</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Extend access on the first charge</strong>When <code>subscription.charge_succeeded</code> arrives, read the subscription and extend access to the new <code>nextChargeAt</code>.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-gym",
+    "customerId": "cust_1001",
+    "paymentMethodId": "pm_test_acme_001",
+    "recurringType": "Subscription",
+    "amount": { "value": 19900, "currency": "NOK" },
+    "interval": { "unit": "month", "count": 1 },
+    "trialEndsAt": "2026-11-01T00:00:00+00:00",
+    "retryPolicy": { "maxRetries": 3, "retryIntervalDays": 1 },
+    "externalId": "member-1001",
+    "title": "Acme Gym monthly",
+    "vatRate": 0.25,
+    "vatAmount": 3980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use Carbon\CarbonImmutable;
+use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Data\BillingInterval;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$subscription = Plorea::subscriptions()
+    -&gt;create('pm_test_acme_001', Amount::nok(19900), BillingInterval::monthly())
+    -&gt;customerId('cust_1001')
+    -&gt;externalId('member-1001')
+    -&gt;title('Acme Gym monthly')
+    -&gt;vat(rate: 0.25, amount: 3980)
+    -&gt;retryPolicy(3, retryIntervalDays: 1)
+    -&gt;trialUntil(CarbonImmutable::parse('2026-11-01T00:00:00+00:00'))
+    -&gt;save();
+
+$subscription-&gt;isTrialing();  // true
+$subscription-&gt;nextChargeAt;  // equals $subscription-&gt;trialEndsAt</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'acme-gym',
+    customerId: 'cust_1001',
+    paymentMethodId: 'pm_test_acme_001',
+    recurringType: 'Subscription',
+    amount: { value: 19900, currency: 'NOK' },
+    interval: { unit: 'month', count: 1 },
+    trialEndsAt: '2026-11-01T00:00:00+00:00',
+    retryPolicy: { maxRetries: 3, retryIntervalDays: 1 },
+    externalId: 'member-1001',
+    title: 'Acme Gym monthly',
+    vatRate: 0.25,
+    vatAmount: 3980,
+  }),
+});
+const subscription = await res.json(); // status: "trialing"</code></pre></div>
+      </div>
+
+      <pre data-title="Response — trial subscription"><code class="lang-json">{
+  "subscriptionId": "sub_test_acme_trial",
+  "tenantId": "acme-gym",
+  "customerId": "cust_1001",
+  "paymentMethodId": "pm_test_acme_001",
+  "recurringType": "Subscription",
+  "amount": { "value": 19900, "currency": "NOK" },
+  "quantity": null,
+  "interval": { "unit": "month", "count": 1 },
+  "trialEndsAt": "2026-11-01T00:00:00.000Z",
+  "nextChargeAt": "2026-11-01T00:00:00.000Z",
+  "retryPolicy": { "maxRetries": 3, "retryIntervalDays": 1 },
+  "status": "trialing",
+  "externalId": "member-1001",
+  "title": "Acme Gym monthly",
+  "description": null,
+  "metadata": [],
+  "vatRate": 0.25,
+  "vatAmount": 3980
+}</code></pre>
+
+      <h3>Pitfalls</h3>
+      <ul>
+        <li><strong>Without <code>trialEndsAt</code>, billing starts at once.</strong> The scheduler charges within seconds of create. There is no "start on date X" option except a trial. <span class="badge verified">Verified</span></li>
+        <li><strong>A cancel during the trial returns <code>accessEndsAt: null</code>.</strong> The value is derived from the last charge, and a trial has none. Treat <code>null</code> as "access ends now". Do not treat it as "access never ends". <span class="badge verified">Verified</span></li>
+        <li><strong>A <code>trialEndsAt</code> in the past</strong> has unknown behaviour. Always send a future date. <span class="badge open">Open question</span></li>
+        <li><strong>Send <code>vatAmount</code> as the VAT part of <code>amount</code>.</strong> All recorded responses fit VAT-inclusive amounts: for 25 % VAT, <code>vatAmount = amount × 0.25 / 1.25</code>, so 19900 øre gives 3980 øre. Plorea has not documented this. <span class="badge open">Open question</span></li>
+      </ul>
+
+      <!-- ================================================================ -->
+      <h2>Raise the price</h2>
+      <p><strong>Use this when</strong> you change the price of a plan for existing subscribers, for example a yearly price adjustment. The customer keeps the same card and the same billing date. The next renewal uses the new price.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+gantt
+  dateFormat YYYY-MM-DD
+  axisFormat %d %b
+  section Customer
+  Notice period (30 days)         :n, 2026-10-01, 30d
+  section Plorea
+  Last charge at old price (199 kr) :milestone, c1, 2026-10-15, 0d
+  PATCH amount + vatAmount        :milestone, p, 2026-10-20, 0d
+  First charge at new price (249 kr) :milestone, c2, 2026-11-15, 0d
+        </pre>
+        <figcaption>A PATCH takes effect at once. It has no effective date. Send the notice first. PATCH after the last renewal at the old price, and well before the first renewal at the new price.</figcaption>
+      </figure>
+
+      <ol class="steps">
+        <li><strong>Tell the customer</strong>Consumer rules and card scheme rules usually require advance notice of a price change. Check which rules apply to you. Send the notice before the renewal that uses the new price. State the new amount and the date of the first charge at that amount.</li>
+        <li><strong>Read the subscription</strong>Call <code>GET /subscriptions/{id}</code>. Note <code>nextChargeAt</code>. Confirm that the subscription is <code>active</code> or <code>trialing</code>.</li>
+        <li><strong>Send the new amount and the new VAT together</strong>Call <code>PATCH /subscriptions/{id}</code> with <code>amount</code>, <code>vatRate</code> and <code>vatAmount</code>. Send the VAT fields in the same call. Otherwise the stored VAT no longer matches the amount.</li>
+        <li><strong>Time the PATCH between two renewals</strong>The new amount applies to the next renewal the scheduler runs. Plorea has no effective-date field. PATCH after the last renewal at the old price has completed. Do not PATCH in the last hour before the first renewal at the new price. The scheduler may already be processing the charge.</li>
+        <li><strong>Check the next charge</strong>After the renewal, read <code>GET /subscriptions/{id}/charges</code>. Confirm that the newest charge has the new amount.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_acme_001 \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "amount": { "value": 24900, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 4980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$subscription = Plorea::subscriptions()-&gt;update('sub_test_acme_001')
+    -&gt;amount(Amount::nok(24900))
+    -&gt;vat(rate: 0.25, amount: 4980)
+    -&gt;save();
+
+$subscription-&gt;amount-&gt;value; // 24900
+$subscription-&gt;nextChargeAt;  // unchanged</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">await fetch('https://payments.plorea.no/subscriptions/sub_test_acme_001', {
+  method: 'PATCH',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    amount: { value: 24900, currency: 'NOK' },
+    vatRate: 0.25,
+    vatAmount: 4980,
+  }),
+});</code></pre></div>
+      </div>
+
+      <pre data-title="Response — PATCH"><code class="lang-json">{
+  "subscriptionId": "sub_test_acme_001",
+  "tenantId": "acme-gym",
+  "customerId": "cust_1001",
+  "externalId": "member-1001",
+  "title": "Acme Gym monthly",
+  "description": null,
+  "amount": { "value": 24900, "currency": "NOK" },
+  "quantity": null,
+  "interval": { "count": 1, "unit": "month" },
+  "trialEndsAt": null,
+  "nextChargeAt": "2026-11-15T09:55:00.000Z",
+  "status": "active",
+  "vatRate": 0.25,
+  "vatAmount": 4980,
+  "paymentMethodId": "pm_test_acme_001",
+  "storedPaymentMethodId": "TESTSTORED000001",
+  "updatedAt": "2026-10-01T08:00:00.000Z"
+}</code></pre>
+
+      <h3>What we know</h3>
+      <ul>
+        <li>The PATCH stores the new amount and returns it. It does not charge and does not move <code>nextChargeAt</code>. <span class="badge verified">Verified</span></li>
+        <li>The next scheduled charge uses the stored amount at the time it runs. This is the expected behaviour, but no renewal after a PATCH has been observed yet. Check the first renewal in production. <span class="badge open">Open question</span></li>
+        <li>There is no "effective from" date on a PATCH. You control timing only by when you send it.</li>
+      </ul>
+
+      <div class="callout tip">
+        <p class="callout-title">Grandfathering</p>
+        <p>To keep old customers on the old price, do nothing to their subscriptions. Price lives on each subscription, not on a shared plan. New sign-ups simply get the new amount at create.</p>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2>Upgrade mid-cycle</h2>
+      <p><strong>Use this when</strong> a customer moves to a more expensive plan and should get it now, not at the next renewal. Plorea has no proration. You calculate the difference for the rest of the period and charge it once. Then you PATCH the subscription so that later renewals use the new price.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App as Your server
+  participant P as Plorea API
+  App->>P: GET /subscriptions/{id}
+  P-->>App: amount, nextChargeAt, interval
+  Note over App: Compute the prorated difference yourself
+  App->>P: POST /subscriptions/{id}/charge (difference)
+  alt resultCode Authorised
+    P-->>App: charge_created, resultCode "Authorised"
+    App->>P: PATCH /subscriptions/{id} (new amount + VAT)
+    Note over App: Unlock the new plan
+  else 402 declined
+    P-->>App: 402
+    Note over App: Keep the old plan. Ask for a new card.
+  end
+        </pre>
+        <figcaption>Charge first, PATCH second. If the charge fails, nothing has changed.</figcaption>
+      </figure>
+
+      <h3>Work out the difference</h3>
+      <p>Use the remaining share of the current period. The formula below rounds to whole øre. Use the same rounding rule in your invoices.</p>
+      <pre data-title="Prorated upgrade"><code class="lang-plaintext">remaining_ratio = (nextChargeAt − now) / (nextChargeAt − periodStart)
+difference      = round((newAmount − oldAmount) × remaining_ratio)
+vatAmount       = round(difference × vatRate / (1 + vatRate))
+
+Example: 199 kr → 399 kr, 15 of 30 days left
+difference = (39900 − 19900) × 15/30 = 10000 øre (100,00 kr)
+vatAmount  = 10000 × 0.25 / 1.25    =  2000 øre</code></pre>
+      <p><code>periodStart</code> is the time of the last charge. Read it from the newest item in <code>GET /subscriptions/{id}/charges</code>, or from <code>lastChargeAt</code> on the subscription.</p>
+      <p>Prorate only an <code>active</code> subscription with a valid paid period: <code>lastChargeAt</code> and <code>nextChargeAt</code> are both set, and <code>lastChargeAt &lt; now &lt; nextChargeAt</code>. A <code>trialing</code> subscription has <code>lastChargeAt: null</code>. The customer has paid nothing yet, so there is no difference to charge. For a trial, PATCH the new price only.</p>
+
+      <ol class="steps">
+        <li><strong>Read the subscription and its last charge</strong>Get <code>status</code>, <code>amount</code>, <code>nextChargeAt</code> and <code>lastChargeAt</code>.</li>
+        <li><strong>Check the period</strong>Continue only if the subscription is <code>active</code> and <code>lastChargeAt &lt; now &lt; nextChargeAt</code>. For a trial, skip to the PATCH step.</li>
+        <li><strong>Calculate the difference</strong>Use the formula. If the difference is below your minimum, skip the charge.</li>
+        <li><strong>Record the upgrade before you charge</strong>Store an upgrade record with the state <code>charging</code>. If your process stops, this record tells you where to resume.</li>
+        <li><strong>Charge the difference</strong>Call <code>POST /subscriptions/{id}/charge</code> with <code>amount</code>, <code>vatRate</code>, <code>vatAmount</code> and a <code>reason</code> such as <code>"upgrade_proration"</code>.</li>
+        <li><strong>Check <code>resultCode</code></strong><code>status: "charge_created"</code> only says Plorea accepted the request. <code>resultCode: "Authorised"</code> says the bank approved. <span class="badge verified">Verified</span></li>
+        <li><strong>Save the charge at once</strong>Store <code>chargeId</code> and <code>reference</code> on the upgrade record. Set the state to <code>charged</code>. Do this before the PATCH.</li>
+        <li><strong>PATCH the new price</strong>Send the new <code>amount</code>, <code>vatAmount</code> and, if you use it, <code>quantity</code> and <code>title</code>. Then set the state to <code>done</code>.</li>
+        <li><strong>Resume, do not repeat</strong>If the PATCH fails, retry the PATCH only. An upgrade in the state <code>charged</code> is already paid. If the charge request timed out, read <code>/charges</code> before you charge again.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># 1. Charge the prorated difference
+curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/charge \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reason": "upgrade_proration",
+    "amount": { "value": 10000, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 2000
+  }'
+
+# 2. Only if resultCode is "Authorised": store the new price
+curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_acme_001 \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "title": "Acme Gym premium",
+    "amount": { "value": 39900, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 7980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+use MemberFlow\Plorea\Exceptions\ValidationException;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$subscriptions = Plorea::subscriptions();
+$current = $subscriptions-&gt;find('sub_test_acme_001');
+
+// $upgrade is your own record of this upgrade (for example an Eloquent model).
+// In the state 'charged' the difference is already paid: skip to the PATCH.
+if ($upgrade-&gt;state !== 'charged') {
+    $periodStart = $current-&gt;lastChargeAt;
+    $periodEnd = $current-&gt;nextChargeAt;
+    $now = now();
+
+    // Prorate only an active subscription with a valid paid period.
+    // A trial has lastChargeAt null: change the price only.
+    $hasPaidPeriod = $current-&gt;isActive()
+        &amp;&amp; $periodStart !== null &amp;&amp; $periodEnd !== null
+        &amp;&amp; $periodStart-&gt;lessThan($now) &amp;&amp; $now-&gt;lessThan($periodEnd);
+
+    if ($hasPaidPeriod) {
+        $ratio = $now-&gt;diffInSeconds($periodEnd) / $periodStart-&gt;diffInSeconds($periodEnd);
+        $difference = (int) round((39900 - $current-&gt;amount-&gt;value) * $ratio);
+        $vat = (int) round($difference * 0.25 / 1.25);
+
+        $upgrade-&gt;update(['state' =&gt; 'charging']);
+
+        try {
+            $charge = $subscriptions-&gt;charge(
+                $current-&gt;id,
+                amount: Amount::nok($difference),
+                reason: 'upgrade_proration',
+                vatRate: 0.25,
+                vatAmount: $vat,
+            );
+        } catch (ChargeFailedException $e) {
+            // 402: the card was declined. Keep the old plan.
+            return;
+        } catch (ValidationException $e) {
+            // 400: not chargeable (canceled, or card not active).
+            return;
+        }
+
+        if ($charge-&gt;resultCode !== 'Authorised') {
+            return;
+        }
+
+        // Save the charge before the PATCH, so a PATCH failure never repeats it.
+        $upgrade-&gt;update([
+            'state' =&gt; 'charged',
+            'charge_id' =&gt; $charge-&gt;id,
+            'charge_reference' =&gt; $charge-&gt;reference,
+        ]);
+    }
+}
+
+// Throws on failure. Retry later: the state stays 'charged', so no new charge.
+$subscriptions-&gt;update($current-&gt;id)
+    -&gt;title('Acme Gym premium')
+    -&gt;amount(Amount::nok(39900))
+    -&gt;vat(rate: 0.25, amount: 7980)
+    -&gt;save();
+
+$upgrade-&gt;update(['state' =&gt; 'done']);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const base = 'https://payments.plorea.no';
+const headers = {
+  Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+  'X-Environment': 'test',
+  'Content-Type': 'application/json',
+};
+
+// `upgrade` is your own stored record of this upgrade.
+// 10000 is the difference from the formula above. Compute it only for an
+// active subscription with lastChargeAt &lt; now &lt; nextChargeAt.
+if (upgrade.state !== 'charged') {
+  await upgrade.save({ state: 'charging' });
+
+  const charge = await fetch(`${base}/subscriptions/sub_test_acme_001/charge`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      platform: 'acme',
+      reason: 'upgrade_proration',
+      amount: { value: 10000, currency: 'NOK' },
+      vatRate: 0.25,
+      vatAmount: 2000,
+    }),
+  });
+
+  if (charge.status === 402) throw new Error('Card declined');
+  if (!charge.ok) throw new Error(`Not chargeable: ${charge.status}`);
+
+  const body = await charge.json();
+  if (body.resultCode !== 'Authorised') return;
+
+  // Save the charge before the PATCH, so a PATCH failure never repeats it.
+  await upgrade.save({ state: 'charged', chargeId: body.chargeId, reference: body.reference });
+}
+
+const patch = await fetch(`${base}/subscriptions/sub_test_acme_001`, {
+  method: 'PATCH',
+  headers,
+  body: JSON.stringify({
+    platform: 'acme',
+    title: 'Acme Gym premium',
+    amount: { value: 39900, currency: 'NOK' },
+    vatRate: 0.25,
+    vatAmount: 7980,
+  }),
+});
+// On failure, retry later. The state stays 'charged', so the charge is not repeated.
+if (!patch.ok) throw new Error(`PATCH failed: ${patch.status}`);
+await upgrade.save({ state: 'done' });</code></pre></div>
+      </div>
+
+      <pre data-title="Response — charge created"><code class="lang-json">{
+  "status": "charge_created",
+  "subscriptionId": "sub_test_acme_001",
+  "chargeId": "chg_test_acme_7",
+  "reference": "sub_test_acme_001-chg_test_acme_7",
+  "pspReference": "TESTCHARGEPSP007",
+  "resultCode": "Authorised",
+  "amount": { "value": 10000, "currency": "NOK" },
+  "vatRate": 0.25,
+  "vatAmount": 2000,
+  "nextChargeAt": "2026-11-15T09:55:00.000Z"
+}</code></pre>
+
+      <h3>Pitfalls</h3>
+      <ul>
+        <li><strong>Read <code>nextChargeAt</code> in the charge response.</strong> The response includes it. Whether a manual charge moves the schedule of later renewals is not confirmed. Compare <code>nextChargeAt</code> before and after the charge. <span class="badge open">Open question</span></li>
+        <li><strong>A manual charge emits <code>payment.authorised</code>,</strong> not <code>subscription.charge_succeeded</code>. Do not treat it as a renewal in your webhook handler. <span class="badge verified">Verified</span></li>
+        <li><strong>A manual charge reference resolves on <code>GET /payments/status/{reference}</code>.</strong> A scheduler charge reference does not. <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <!-- ================================================================ -->
+      <h2>Downgrade</h2>
+      <p><strong>Use this when</strong> a customer moves to a cheaper plan. The simple and safe pattern is "downgrade at period end": the customer keeps the current plan until <code>nextChargeAt</code>, and the next renewal uses the lower price.</p>
+
+      <ol class="steps">
+        <li><strong>Record the pending change</strong>Store the new plan and the date it takes effect (<code>nextChargeAt</code>) in your database.</li>
+        <li><strong>PATCH the lower price now</strong>Send <code>amount</code>, <code>vatAmount</code> and <code>quantity</code>. The PATCH does not charge or refund. The current period is already paid. <span class="badge verified">Verified</span></li>
+        <li><strong>Switch features at period end</strong>Keep the old features until <code>nextChargeAt</code>. Switch when <code>subscription.charge_succeeded</code> arrives with the lower amount.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_acme_001 \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "title": "Acme Gym basic",
+    "amount": { "value": 14900, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 2980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">Plorea::subscriptions()-&gt;update('sub_test_acme_001')
+    -&gt;title('Acme Gym basic')
+    -&gt;amount(Amount::nok(14900))
+    -&gt;vat(rate: 0.25, amount: 2980)
+    -&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">await fetch('https://payments.plorea.no/subscriptions/sub_test_acme_001', {
+  method: 'PATCH',
+  headers,
+  body: JSON.stringify({
+    platform: 'acme',
+    title: 'Acme Gym basic',
+    amount: { value: 14900, currency: 'NOK' },
+    vatRate: 0.25,
+    vatAmount: 2980,
+  }),
+});</code></pre></div>
+      </div>
+
+      <div class="callout warning">
+        <p class="callout-title">An immediate downgrade with a partial refund is not supported yet</p>
+        <p>To refund part of the current period you need to refund a scheduler charge. A scheduler charge reference does not resolve on <code>GET /payments/status/{reference}</code> (403, later 404). It is not known whether <code>POST /payments/refund</code> accepts it. <span class="badge open">Open question</span></p>
+        <p>Until Plorea confirms, give the difference as credit in your own system, or downgrade at period end.</p>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2>Pause or freeze</h2>
+      <p><strong>Use this when</strong> a customer stops paying for a known period and then continues, for example a gym membership frozen during an injury or a summer break. The customer keeps the card on file. No charge happens during the pause.</p>
+      <div class="callout note">
+        <p class="callout-title">Native pause, with one open question</p>
+        <p>Plorea recommends <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> to pause, and <code>{"status": "active", "nextChargeAt": "…"}</code> to resume. <span class="badge stated">Stated by Plorea</span> Both calls work as described in test. <span class="badge verified">Verified</span> In test, no charge was seen after a resume. Plorea has the question. <span class="badge open">Open question</span> Production is unobserved.</p>
+      </div>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  active --> paused: PATCH status paused<br/>nextChargeAt becomes null
+  paused --> active: PATCH status active<br/>+ future nextChargeAt
+  trialing --> trialing: PATCH nextChargeAt<br/>(cannot pause)
+        </pre>
+        <figcaption>Only an <code>active</code> subscription can pause. Only a <code>paused</code> one can resume. Captured in test on 2026-10-01.</figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Request</th><th>Result</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Pause an <code>active</code> subscription</td><td><code>200</code>, <code>status: "paused"</code>, <code>nextChargeAt: null</code>. The card, the amount and <code>lastChargeAt</code> are kept. There is no <code>pausedAt</code> field.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Pause a <code>trialing</code>, <code>paused</code> or <code>canceled</code> one</td><td><code>400</code>, for example "Cannot change status from trialing to paused", with <code>allowedTransitions</code></td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Any other <code>status</code> value</td><td><code>400</code> "status can only be set to active or paused"</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>nextChargeAt</code> alone on a <code>paused</code> one</td><td><code>200</code>. It stays <code>paused</code> with the date set. A later resume without a date keeps it.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>nextChargeAt</code> alone on a <code>trialing</code> one</td><td><code>200</code>. It stays <code>trialing</code>. <code>trialEndsAt</code> keeps its old value.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Resume with no date, and none set</td><td><code>400</code> "nextChargeAt is required when reactivating a paused subscription"</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Resume with a past date</td><td><code>400</code> "nextChargeAt cannot be in the past". It stays <code>paused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, <code>nextChargeAt</code> exactly as sent</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Resume an <code>active</code> one</td><td><code>400</code>, <code>allowedTransitions: ["paused"]</code></td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>A webhook for pause or resume</td><td>Plorea's catalogue lists none</td><td><span class="badge unobserved">Not observed</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ol class="steps">
+        <li><strong>Agree on the resume date</strong>Choose a date on or after the end of the paid period. Store the pause in your database: subscription ID, start and resume date. Plorea keeps no pause record.</li>
+        <li><strong>Check the status</strong>Read the subscription. Pause only an <code>active</code> one. To hold a <code>trialing</code> subscription, PATCH <code>nextChargeAt</code> alone to the new date instead.</li>
+        <li><strong>Pause</strong>Call <code>PATCH /subscriptions/{id}</code> with <code>status: "paused"</code>. Check that the response says <code>paused</code>. If it does not, stop and keep the subscription as it is.</li>
+        <li><strong>Decide access during the pause</strong>The pause response has no <code>accessEndsAt</code>. If the customer keeps access until the paid period ends, calculate that date yourself: <code>lastChargeAt</code> + one interval.</li>
+        <li><strong>Resume on the resume date</strong>Run a job that calls <code>PATCH /subscriptions/{id}</code> with <code>status: "active"</code> and a <code>nextChargeAt</code> in the future. To bill now, send a time a few minutes ahead. Nothing resumes on its own.</li>
+        <li><strong>Confirm the first charge</strong>After <code>nextChargeAt</code>, read <code>GET /subscriptions/{id}/charges</code>. Look for a new charge. In test none came. <span class="badge open">Open question</span> If no charge appears, the subscription is overdue. Ask Plorea before you charge by hand: a late scheduler run plus a manual charge bills the customer twice.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># 1. Pause. Stop unless the response says "status": "paused".
+curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_acme_001 \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "status": "paused" }'
+
+# 2. On the resume date: resume with a date in the future.
+curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_acme_001 \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "status": "active",
+    "nextChargeAt": "2026-08-01T00:05:00.000Z"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use Carbon\CarbonImmutable;
+use MemberFlow\Plorea\Facades\Plorea;
+use RuntimeException;
+
+$subscriptions = Plorea::subscriptions();
+
+// 1. Pause. A subscription that is not active throws ValidationException (400).
+$paused = $subscriptions-&gt;pause('sub_test_acme_001');
+if (! $paused-&gt;isPaused()) {
+    throw new RuntimeException("Pause did not complete for {$paused-&gt;id}");
+}
+
+// Plorea keeps no pause record. Store your own.
+$member-&gt;pauses()-&gt;create([
+    'subscription_id' =&gt; $paused-&gt;id,
+    'paused_at' =&gt; now(),
+    'resumes_at' =&gt; CarbonImmutable::parse('2026-08-01T00:00:00+00:00'),
+]);
+
+// 2. In a job on the resume date. A past date throws ValidationException
+//    and the subscription stays paused, so send a moment a little ahead.
+$resumed = $subscriptions-&gt;resume('sub_test_acme_001', now()-&gt;addMinutes(5));
+
+// To hold a trial instead: move the date, the status stays trialing.
+$subscriptions-&gt;update('sub_test_acme_002')
+    -&gt;nextChargeAt(CarbonImmutable::parse('2026-08-01T00:00:00+00:00'))
+    -&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const patch = (body) =&gt;
+  fetch(`${base}/subscriptions/sub_test_acme_001`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ platform: 'acme', ...body }),
+  });
+
+// 1. Pause.
+const pauseRes = await patch({ status: 'paused' });
+if (!pauseRes.ok) throw new Error(`Pause failed: ${pauseRes.status}`);
+const paused = await pauseRes.json();
+if (paused.status !== 'paused') throw new Error('Pause did not complete');
+
+// 2. In a job on the resume date. The date must be in the future.
+const resumeAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+const resumeRes = await patch({ status: 'active', nextChargeAt: resumeAt });
+if (!resumeRes.ok) throw new Error(`Resume failed: ${resumeRes.status}`);</code></pre></div>
+      </div>
+
+      <pre data-title="Response — PATCH status paused"><code class="lang-json">{
+  "subscriptionId": "sub_test_acme_001",
+  "tenantId": "acme-gym",
+  "customerId": "cust_1001",
+  "externalId": "member-1001",
+  "title": "Acme Gym monthly",
+  "description": null,
+  "amount": { "value": 19900, "currency": "NOK" },
+  "quantity": null,
+  "interval": { "count": 1, "unit": "month" },
+  "trialEndsAt": null,
+  "nextChargeAt": null,
+  "status": "paused",
+  "vatRate": 0.25,
+  "vatAmount": 3980,
+  "paymentMethodId": "pm_test_acme_001",
+  "storedPaymentMethodId": "TESTSTORED000001",
+  "updatedAt": "2026-07-01T08:00:00.000Z"
+}</code></pre>
+
+      <h3>Fallback: cancel, then a new subscription with a trial</h3>
+      <p>Use this only while the open question above blocks you, or in an environment where the resume charge has not been proven. The charge at the end of a trial is verified. The cost is a new subscription ID and a cancel that cannot be undone safely.</p>
+      <ol class="steps">
+        <li><strong>Prepare the new subscription first</strong>Read the old subscription. Build the full create request before you cancel: card, amount, interval, VAT, <code>externalId</code> and the company. A read returns <code>merchantOrgNr</code>, but not <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span> Take the name and email from your own record. Send optional fields such as <code>customerId</code> only when they have a value.</li>
+        <li><strong>Cancel the current subscription</strong>Call <code>POST /subscriptions/{id}/cancel</code> with <code>reason: "paused"</code>. Check that <code>status</code> is <code>canceled</code>. If not, stop. Do not create the new subscription.</li>
+        <li><strong>Create the new subscription on the same card</strong>Set <code>trialEndsAt</code> to the resume date, or to <code>accessEndsAt</code> if that is later. Use the same <code>externalId</code>.</li>
+        <li><strong>Block access during the pause</strong>The new subscription reports <code>trialing</code>. Use your own pause record to know that this trial is a pause.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># 1. Cancel. Stop here unless the response is 2xx with "status": "canceled".
+curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "reason": "paused" }'
+
+# 2. Create the paused subscription on the same card
+curl -X POST https://payments.plorea.no/subscriptions \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-gym",
+    "customerId": "cust_1001",
+    "paymentMethodId": "pm_test_acme_001",
+    "recurringType": "Subscription",
+    "amount": { "value": 19900, "currency": "NOK" },
+    "interval": { "unit": "month", "count": 1 },
+    "trialEndsAt": "2026-08-01T00:00:00+00:00",
+    "externalId": "member-1001",
+    "title": "Acme Gym monthly",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Gym AS",
+    "merchantEmail": "billing@example.com",
+    "metadata": { "pausedFrom": "sub_test_acme_001" },
+    "vatRate": 0.25,
+    "vatAmount": 3980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use Carbon\CarbonImmutable;
+use MemberFlow\Plorea\Facades\Plorea;
+use RuntimeException;
+
+$subscriptions = Plorea::subscriptions();
+$old = $subscriptions-&gt;find('sub_test_acme_001');
+$resumeAt = CarbonImmutable::parse('2026-08-01T00:00:00+00:00');
+
+// 1. Build the new subscription before you cancel. A read returns the
+//    organisation number, but not the name or email: take those from your record.
+$pending = $subscriptions
+    -&gt;create($old-&gt;paymentMethodId, $old-&gt;amount, $old-&gt;interval)
+    -&gt;metadata(['pausedFrom' =&gt; $old-&gt;id]);
+
+// Optional fields: send them only when they have a value.
+if ($old-&gt;merchantOrgNr !== null) {
+    $pending-&gt;merchant($old-&gt;merchantOrgNr, $member-&gt;merchant_name, $member-&gt;merchant_email);
+}
+if ($old-&gt;customerId !== null) $pending-&gt;customerId($old-&gt;customerId);
+if ($old-&gt;externalId !== null) $pending-&gt;externalId($old-&gt;externalId);
+if ($old-&gt;title !== null) $pending-&gt;title($old-&gt;title);
+if ($old-&gt;vatRate !== null &amp;&amp; $old-&gt;vatAmount !== null) {
+    $pending-&gt;vat(rate: $old-&gt;vatRate, amount: $old-&gt;vatAmount);
+}
+
+// 2. Cancel. The SDK throws on a failed response, so nothing below runs.
+$cancellation = $subscriptions-&gt;cancel($old-&gt;id, 'paused');
+if ($cancellation-&gt;status !== 'canceled') {
+    throw new RuntimeException("Cancel did not complete for {$old-&gt;id}");
+}
+$accessEndsAt = $cancellation-&gt;accessEndsAt ?? now();
+
+// 3. Create the paused subscription. Plorea only sees a trial.
+$paused = $pending-&gt;trialUntil($resumeAt-&gt;max($accessEndsAt))-&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Read the old subscription first: the cancel response lacks most fields.
+const oldRes = await fetch(`${base}/subscriptions/sub_test_acme_001`, { headers });
+if (!oldRes.ok) throw new Error(`Read failed: ${oldRes.status}`);
+const old = await oldRes.json();
+
+const cancelRes = await fetch(`${base}/subscriptions/sub_test_acme_001/cancel`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ platform: 'acme', reason: 'paused' }),
+});
+// Stop on any failure. Otherwise both subscriptions can bill.
+if (!cancelRes.ok) throw new Error(`Cancel failed: ${cancelRes.status}`);
+const cancel = await cancelRes.json();
+if (cancel.status !== 'canceled') throw new Error('Cancel did not complete');
+
+const paused = await fetch(`${base}/subscriptions`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'acme-gym',
+    customerId: 'cust_1001',
+    paymentMethodId: 'pm_test_acme_001',
+    recurringType: 'Subscription',
+    amount: { value: 19900, currency: 'NOK' },
+    interval: { unit: 'month', count: 1 },
+    trialEndsAt: '2026-08-01T00:00:00+00:00',
+    externalId: 'member-1001',
+    title: 'Acme Gym monthly',
+    // A read returns merchantOrgNr, but not the name or email.
+    merchantOrgNr: old.merchantOrgNr,
+    merchantName: member.merchantName,
+    merchantEmail: member.merchantEmail,
+    metadata: { pausedFrom: 'sub_test_acme_001' },
+    vatRate: 0.25,
+    vatAmount: 3980,
+  }),
+}).then((r) =&gt; r.json()); // status: "trialing"</code></pre></div>
+      </div>
+
+      <h3>Pitfalls</h3>
+      <ul>
+        <li><strong>A pause does not end on its own.</strong> If your resume job does not run, billing never restarts. Monitor the job.</li>
+        <li><strong>Webhooks do not tell you about the pause.</strong> Plorea's catalogue has no event for pause, resume, cancel or reactivate. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>A resume with a lapsed date looks overdue.</strong> A resumed subscription that was not charged stays <code>active</code> with a <code>nextChargeAt</code> in the past. Your overdue check flags it after the grace period. That is the open question above.</li>
+        <li><strong>Check the card before the resume date.</strong> A card that expires during the pause fails on the first charge. Read <code>expiryDate</code> on <code>GET /payment-methods/{id}</code> and ask for a new card early.</li>
+      </ul>
+
+      <!-- ================================================================ -->
+      <h2>Change the billing interval</h2>
+      <p><strong>Use this when</strong> a customer moves from monthly to yearly billing, or the other way. <code>PATCH</code> cannot change <code>interval</code>. <span class="badge verified">Verified</span> You end the old subscription and start a new one that begins billing when the paid period ends.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App as Your server
+  participant P as Plorea API
+  App->>P: GET /subscriptions/{old}
+  P-->>App: trialEndsAt, nextChargeAt
+  App->>P: POST /subscriptions/{old}/cancel
+  P-->>App: status canceled, accessEndsAt
+  App->>P: POST /subscriptions (interval year, trialEndsAt = start date)
+  P-->>App: status "trialing"
+  Note over P: Customer keeps paid access. No double charge.
+  P->>P: First yearly charge at accessEndsAt
+        </pre>
+      </figure>
+
+      <ol class="steps">
+        <li><strong>Read the old subscription first</strong>Note <code>trialEndsAt</code>. The cancel response does not return it. A read returns <code>merchantOrgNr</code>, but not the merchant name or email. <span class="badge verified">Verified</span> Take those two from your own record.</li>
+        <li><strong>Cancel the old subscription</strong>Check that the call succeeded and that <code>status</code> is <code>canceled</code>. If it failed, stop. Do not create the new subscription. Read <code>accessEndsAt</code> from the response.</li>
+        <li><strong>Choose the start date</strong>Use <code>accessEndsAt</code>. If it is <code>null</code>, the old subscription was in its trial. <span class="badge verified">Verified</span> Use the old <code>trialEndsAt</code> instead. Check that the start date is in the future. Without a future trial date, the new subscription bills at once. <span class="badge verified">Verified</span></li>
+        <li><strong>Create the new subscription</strong>Use the same <code>paymentMethodId</code> and company. Set the new <code>interval</code> and <code>amount</code>. Set <code>trialEndsAt</code> to the start date.</li>
+        <li><strong>Link the two subscriptions</strong>Keep the same <code>externalId</code>. Store the old ID in <code>metadata</code>.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "reason": "interval_change" }'
+# → { "status": "canceled", "accessEndsAt": "2026-11-15T09:55:00.000Z", ... }
+# Stop unless the response is 2xx with "status": "canceled".
+# accessEndsAt null → use the old trialEndsAt from GET /subscriptions/{id}.
+
+curl -X POST https://payments.plorea.no/subscriptions \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-gym",
+    "customerId": "cust_1001",
+    "paymentMethodId": "pm_test_acme_001",
+    "recurringType": "Subscription",
+    "amount": { "value": 199000, "currency": "NOK" },
+    "interval": { "unit": "year", "count": 1 },
+    "trialEndsAt": "2026-11-15T09:55:00+00:00",
+    "externalId": "member-1001",
+    "title": "Acme Gym yearly",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Gym AS",
+    "merchantEmail": "billing@example.com",
+    "metadata": { "replaces": "sub_test_acme_001" },
+    "vatRate": 0.25,
+    "vatAmount": 39800
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Data\BillingInterval;
+use MemberFlow\Plorea\Facades\Plorea;
+use RuntimeException;
+
+$subscriptions = Plorea::subscriptions();
+// Read first: the cancel response does not return trialEndsAt.
+$old = $subscriptions-&gt;find('sub_test_acme_001');
+
+// Build the new subscription before you cancel. A read returns the
+// organisation number, but not the name or email: take those from your record.
+$pending = $subscriptions
+    -&gt;create($old-&gt;paymentMethodId, Amount::nok(199000), BillingInterval::yearly())
+    -&gt;title('Acme Gym yearly')
+    -&gt;vat(rate: 0.25, amount: 39800)
+    -&gt;metadata(['replaces' =&gt; $old-&gt;id]);
+
+if ($old-&gt;merchantOrgNr !== null) {
+    $pending-&gt;merchant($old-&gt;merchantOrgNr, $member-&gt;merchant_name, $member-&gt;merchant_email);
+}
+if ($old-&gt;customerId !== null) $pending-&gt;customerId($old-&gt;customerId);
+if ($old-&gt;externalId !== null) $pending-&gt;externalId($old-&gt;externalId);
+
+// The SDK throws on a failed response, so nothing below runs.
+$cancellation = $subscriptions-&gt;cancel($old-&gt;id, 'interval_change');
+if ($cancellation-&gt;status !== 'canceled') {
+    throw new RuntimeException("Cancel did not complete for {$old-&gt;id}");
+}
+
+// accessEndsAt is null when the old subscription was in its trial.
+$startsAt = $cancellation-&gt;accessEndsAt ?? $old-&gt;trialEndsAt;
+if ($startsAt === null || $startsAt-&gt;isPast()) {
+    // No future start date: a create now bills at once. Decide by hand.
+    throw new RuntimeException("No future start date for {$old-&gt;id}");
+}
+
+$yearly = $pending-&gt;trialUntil($startsAt)-&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Read first: the cancel response does not return trialEndsAt.
+const oldRes = await fetch(`${base}/subscriptions/sub_test_acme_001`, { headers });
+if (!oldRes.ok) throw new Error(`Read failed: ${oldRes.status}`);
+const old = await oldRes.json();
+
+const cancelRes = await fetch(`${base}/subscriptions/sub_test_acme_001/cancel`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ platform: 'acme', reason: 'interval_change' }),
+});
+// Stop on any failure. Otherwise both subscriptions can bill.
+if (!cancelRes.ok) throw new Error(`Cancel failed: ${cancelRes.status}`);
+const cancel = await cancelRes.json();
+if (cancel.status !== 'canceled') throw new Error('Cancel did not complete');
+
+// accessEndsAt is null when the old subscription was in its trial.
+const startsAt = cancel.accessEndsAt ?? old.trialEndsAt;
+if (!startsAt || new Date(startsAt) &lt;= new Date()) {
+  // No future start date: a create now bills at once. Decide by hand.
+  throw new Error('No future start date');
+}
+
+const created = await fetch(`${base}/subscriptions`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'acme-gym',
+    customerId: 'cust_1001',
+    paymentMethodId: 'pm_test_acme_001',
+    recurringType: 'Subscription',
+    amount: { value: 199000, currency: 'NOK' },
+    interval: { unit: 'year', count: 1 },
+    trialEndsAt: startsAt,
+    externalId: 'member-1001',
+    title: 'Acme Gym yearly',
+    // A read returns merchantOrgNr, but not the name or email.
+    merchantOrgNr: old.merchantOrgNr,
+    merchantName: member.merchantName,
+    merchantEmail: member.merchantEmail,
+    metadata: { replaces: 'sub_test_acme_001' },
+    vatRate: 0.25,
+    vatAmount: 39800,
+  }),
+});
+if (!created.ok) throw new Error(`Create failed: ${created.status}`);</code></pre></div>
+      </div>
+
+      <div class="callout note">
+        <p class="callout-title">Immediate switch instead</p>
+        <p>To bill the yearly price today, create the new subscription without a trial and give credit for the unused monthly period in your own system. Refunding the unused part of a scheduler charge is an open question. See <a href="#downgrade">Downgrade</a>.</p>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2>Replace the card</h2>
+      <p><strong>Use this when</strong> the card expires, is lost, or a renewal fails. The subscription keeps its ID, price and schedule. Only the stored payment method changes.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App as Your server
+  participant P as Plorea API
+  participant C as Customer
+  App->>P: POST /payment-methods/setup (same shopperReference)
+  P-->>App: new paymentMethodId, adyenPaymentLinkUrl
+  App->>C: Redirect to setup page
+  C->>P: Enters new card
+  loop Until active or failed
+    App->>P: GET /payment-methods/{newId}
+  end
+  App->>P: PATCH /subscriptions/{id} (paymentMethodId = newId)
+  P-->>App: 200, new paymentMethodId
+        </pre>
+      </figure>
+
+      <ol class="steps">
+        <li><strong>Start a new card setup</strong>Call <code>POST /payment-methods/setup</code> with the same <code>shopperReference</code>, <code>tenantId</code> and <code>customerId</code>, and <code>recurringType: "Subscription"</code>.</li>
+        <li><strong>Wait for <code>active</code></strong>Poll <code>GET /payment-methods/{id}</code>. Do not PATCH a <code>pending_setup</code> or <code>failed</code> method.</li>
+        <li><strong>PATCH the subscription</strong>Send the new <code>paymentMethodId</code>. A method that is not active returns <code>400 "Payment method is not active"</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Collect a missed renewal</strong>If a renewal failed before the swap, check <a href="dunning.html">Failed charges and dunning</a> for when to charge now.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_acme_001 \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "paymentMethodId": "pm_test_acme_002" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\RecurringType;
+
+// 1. New setup for the same shopper
+$method = Plorea::paymentMethods()
+    -&gt;setup('member-1001', RecurringType::Subscription, 'https://example.com/billing/card-updated')
+    -&gt;customerId('cust_1001')
+    -&gt;description('Update card for Acme Gym')
+    -&gt;create();
+
+// redirect()-&gt;away($method-&gt;adyenPaymentLinkUrl);
+
+// 2. On return, after polling find() until isActive():
+$method = Plorea::paymentMethods()-&gt;find($method-&gt;id);
+
+if ($method-&gt;isActive()) {
+    Plorea::subscriptions()-&gt;update('sub_test_acme_001')
+        -&gt;paymentMethod($method-&gt;id)
+        -&gt;save();
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const method = await fetch(`${base}/payment-methods/pm_test_acme_002?platform=acme`, {
+  headers,
+}).then((r) =&gt; r.json());
+
+if (method.status === 'active') {
+  await fetch(`${base}/subscriptions/sub_test_acme_001`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ platform: 'acme', paymentMethodId: method.paymentMethodId }),
+  });
+}</code></pre></div>
+      </div>
+
+      <pre data-title="400 Bad Request — method not active"><code class="lang-json">{
+  "error": "Payment method is not active",
+  "status": "failed"
+}</code></pre>
+
+      <h3>Pitfalls</h3>
+      <ul>
+        <li><strong>The setup verification is a real 1 NOK authorisation.</strong> Some customers see it on their statement. Say so on the card update page.</li>
+        <li><strong><code>failed</code> is final.</strong> A failed method never becomes active. Start a new setup. <code>failureReason</code> is always <code>null</code>, so you cannot tell the customer why. <span class="badge verified">Verified</span></li>
+        <li><strong>The old method is not removed.</strong> There is no delete endpoint for payment methods. <span class="badge open">Open question</span></li>
+      </ul>
+
+      <!-- ================================================================ -->
+      <h2>Charge a one-off extra</h2>
+      <p><strong>Use this when</strong> the customer buys something once on top of the subscription, for example an extra seat, a towel rental or a late fee. Charge the stored card through the subscription.</p>
+      <ol class="steps">
+        <li><strong>Get consent</strong>The card was stored for <code>recurringType: "Subscription"</code>. Make sure your terms allow extra charges, or ask the customer each time.</li>
+        <li><strong>Charge</strong>Call <code>POST /subscriptions/{id}/charge</code> with <code>amount</code>, <code>vatRate</code>, <code>vatAmount</code> and a clear <code>reason</code>. Without <code>amount</code>, the subscription amount is charged.</li>
+        <li><strong>Handle the result</strong>402 means a decline. 400 means the subscription cannot be charged (canceled, or card not active). <span class="badge verified">Verified</span></li>
+      </ol>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/charge \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reason": "towel_rental",
+    "amount": { "value": 4900, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$charge = Plorea::subscriptions()-&gt;charge(
+    'sub_test_acme_001',
+    amount: Amount::nok(4900),
+    reason: 'towel_rental',
+    vatRate: 0.25,
+    vatAmount: 980,
+);
+
+$charge-&gt;status;     // "charge_created"
+$charge-&gt;resultCode; // "Authorised"
+$charge-&gt;reference;  // "sub_test_acme_001-chg_…"</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(`${base}/subscriptions/sub_test_acme_001/charge`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    platform: 'acme',
+    reason: 'towel_rental',
+    amount: { value: 4900, currency: 'NOK' },
+    vatRate: 0.25,
+    vatAmount: 980,
+  }),
+});</code></pre></div>
+      </div>
+      <pre data-title="400 Bad Request — subscription not chargeable"><code class="lang-json">{
+  "error": "Subscription is not chargeable",
+  "subscriptionId": "sub_test_acme_001",
+  "status": "canceled"
+}</code></pre>
+      <div class="callout warning">
+        <p class="callout-title">Never retry a charge blindly</p>
+        <p>The charge endpoint has no idempotency key. After a timeout or a 5xx, read <code>GET /subscriptions/{id}/charges</code> and look for your charge before you send it again. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2>Cancel and keep access to period end</h2>
+      <p><strong>Use this when</strong> the customer ends the subscription. The customer has paid for the current period, so keep access until it ends.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> trialing: create with trialEndsAt
+  [*] --> active: create
+  trialing --> active: first scheduled charge
+  trialing --> canceled: cancel (accessEndsAt = null)
+  active --> canceled: cancel (accessEndsAt = last charge + interval)
+  canceled --> active: reactivate
+  active --> paused: PATCH status paused
+  paused --> active: PATCH status active + nextChargeAt
+  active --> past_due: scheduled charge fails
+  past_due --> active: retry succeeds (not observed)
+        </pre>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. What follows the last retry is not observed. Plorea's documentation also names <code>payment_failed</code>, which has never been observed.</figcaption>
+      </figure>
+
+      <ol class="steps">
+        <li><strong>Cancel</strong>Call <code>POST /subscriptions/{id}/cancel</code> with a <code>reason</code>. The scheduler stops at once.</li>
+        <li><strong>Store <code>accessEndsAt</code></strong>It equals the last charge + one interval. <span class="badge verified">Verified</span></li>
+        <li><strong>Treat <code>null</code> as "now"</strong>A cancel during a trial returns <code>accessEndsAt: null</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Remove access when the date passes</strong>Run your own job. Plorea sends no webhook for cancel or for the end of access. <span class="badge stated">Stated by Plorea</span></li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "reason": "customer_requested" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$cancellation = Plorea::subscriptions()-&gt;cancel('sub_test_acme_001', 'customer_requested');
+
+// null after a trial cancel: access ends now, not never.
+$member-&gt;update(['access_ends_at' =&gt; $cancellation-&gt;accessEndsAt ?? now()]);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const cancellation = await fetch(`${base}/subscriptions/sub_test_acme_001/cancel`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ platform: 'acme', reason: 'customer_requested' }),
+}).then((r) =&gt; r.json());
+
+const accessEndsAt = cancellation.accessEndsAt ?? new Date().toISOString();</code></pre></div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab" data-label="After a paid period"><pre><code class="lang-json">{
+  "subscriptionId": "sub_test_acme_001",
+  "status": "canceled",
+  "canceledAt": "2026-10-20T10:04:00.000Z",
+  "accessEndsAt": "2026-11-15T09:55:00.000Z",
+  "reason": "customer_requested"
+}</code></pre></div>
+        <div class="tab" data-label="During a trial"><pre><code class="lang-json">{
+  "subscriptionId": "sub_test_acme_trial",
+  "status": "canceled",
+  "canceledAt": "2026-10-07T19:57:00.000Z",
+  "accessEndsAt": null,
+  "reason": "customer_requested"
+}</code></pre></div>
+      </div>
+
+      <div class="callout tip">
+        <p class="callout-title">Cancel immediately with a refund</p>
+        <p>Plorea has only "cancel at period end". To end access now and refund, cancel, then refund the last charge. This works for a manual charge. For a scheduler charge it is an open question. See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2>Reactivate a canceled subscription</h2>
+      <p><strong>Use this when</strong> the customer changes their mind after a cancel. Reactivate keeps the subscription ID, price and card.</p>
+      <ol class="steps">
+        <li><strong>Check if you need to reactivate at all</strong>Only a <code>canceled</code> subscription can be reactivated. Other statuses return <code>400 "Only canceled subscriptions can be reactivated"</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Check the card</strong>Read <code>GET /payment-methods/{id}</code>. If the card is no longer usable, run <a href="#replace-the-card">Replace the card</a> after you reactivate.</li>
+        <li><strong>Reactivate</strong>Call <code>POST /subscriptions/{id}/reactivate</code> with no body other than <code>platform</code>.</li>
+        <li><strong>Read <code>nextChargeAt</code></strong>It is set to last charge + one interval. A reactivate inside the paid period does not charge again. <span class="badge verified">Verified</span></li>
+      </ol>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/reactivate \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$subscription = Plorea::subscriptions()-&gt;find('sub_test_acme_001');
+
+if ($subscription-&gt;isCanceled()) {
+    $subscription = Plorea::subscriptions()-&gt;reactivate($subscription-&gt;id);
+}
+
+$subscription-&gt;nextChargeAt; // last charge + one interval</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(`${base}/subscriptions/sub_test_acme_001/reactivate`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ platform: 'acme' }),
+});
+if (res.status === 400) {
+  // Not canceled. Nothing to do.
+}</code></pre></div>
+      </div>
+      <pre data-title="Response — reactivated"><code class="lang-json">{
+  "subscriptionId": "sub_test_acme_001",
+  "tenantId": "acme-gym",
+  "status": "active",
+  "nextChargeAt": "2026-11-15T09:55:00.000Z",
+  "reactivatedAt": "2026-10-21T10:04:00.000Z",
+  "paymentMethodId": "pm_test_acme_001",
+  "amount": { "value": 19900, "currency": "NOK" },
+  "interval": { "count": 1, "unit": "month" },
+  "externalId": "member-1001",
+  "title": "Acme Gym monthly"
+}</code></pre>
+
+      <div class="callout note">
+        <p class="callout-title">History</p>
+        <p>Before September 2026, reactivate charged the card unconditionally. A customer could pay twice for a period they had already paid. Plorea fixed this. The fix is verified in test. Production is unobserved, so keep a guard: if <code>accessEndsAt</code> is still in the future, the customer may not need a reactivate. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <h2>Summary of gaps</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Workflow</th><th>Missing in the API</th><th>Workaround on this page</th></tr></thead>
+          <tbody>
+            <tr><td>Pause / freeze</td><td>Proof that a resumed subscription is charged <span class="badge open">Open question</span></td><td>Native pause; cancel + new subscription with trial as a fallback</td></tr>
+            <tr><td>Upgrade</td><td>Proration <span class="badge proposal">Proposal</span></td><td>Self-computed manual charge + PATCH</td></tr>
+            <tr><td>Downgrade with refund</td><td>Refund of a scheduler charge <span class="badge open">Open question</span></td><td>Downgrade at period end</td></tr>
+            <tr><td>Interval change</td><td><code>interval</code> on PATCH <span class="badge proposal">Proposal</span></td><td>Cancel + new subscription with trial</td></tr>
+            <tr><td>Price change</td><td>Effective date on PATCH <span class="badge proposal">Proposal</span></td><td>Time the PATCH yourself</td></tr>
+            <tr><td>Any change</td><td>Webhooks for cancel, reactivate, pause and resume <span class="badge proposal">Proposal</span></td><td>Poll and keep your own state</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The full list, with rationale, is on <a href="wishlist.html">Gaps and proposals</a>.</p>
+
+      <p class="site-foot">Community draft. Facts last checked against the test environment in October 2026. Example names use reserved values: <code>example.com</code>, Acme, organisation number <code>999999999</code>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

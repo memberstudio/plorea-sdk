@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Embedded checkout</title>
+  <meta name="description" content="Render the Plorea checkout with Adyen Drop-in on your own web page or in a native iOS or Android app.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="checkout">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Payments</p>
+        <h1>Embedded and native checkout</h1>
+        <p class="lead">The hosted pay page is Adyen Drop-in on a session. You can open the same kind of session yourself and mount Drop-in on your own web page or in a native iOS or Android app. The customer then pays without leaving your product.</p>
+      </header>
+
+      <h2>Choose a surface</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Surface</th><th>What you need</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td>Hosted pay page (<code>paymentLinkUrl</code>) in a browser or WebView</td><td>Nothing extra</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Drop-in on your own web domain</td><td>Your origins whitelisted by Plorea</td><td><span class="badge verified">Verified</span> authorises from a whitelisted origin</td></tr>
+            <tr><td>Native iOS app</td><td><code>channel: "iOS"</code></td><td><span class="badge verified">Verified</span> authorises end to end</td></tr>
+            <tr><td>Native Android app</td><td><code>channel: "Android"</code></td><td><span class="badge stated">Stated by Plorea</span> not yet tried on a device</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>If you only need a payment inside an app, a WebView on the hosted page is the cheapest option. Choose Drop-in when you want the checkout to look and feel like your product.</p>
+
+      <h2>How it fits together</h2>
+      <p>The browser or app never talks to Plorea. Your API key stays on your server. The server opens the session and passes four values to the client. Drop-in then talks to Adyen directly.</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant C as Browser or app
+  participant S as Your server
+  participant P as Plorea API
+  participant A as Adyen
+  C->>S: "I want to pay invoice 123" (channel)
+  S->>P: POST /payments/link (or reuse the existing link)
+  P-->>S: paymentLinkId
+  S->>P: POST /payments/session (paymentLinkId, returnUrl, channel)
+  P-->>S: sessionId, sessionData, clientKey, environment, channel
+  S-->>C: sessionId, sessionData, clientKey, environment
+  C->>A: Drop-in mounts the session and submits the card
+  A-->>C: Result, or a 3DS redirect to returnUrl
+  A-->>P: AUTHORISATION
+  P-->>S: Webhook payment.authorised / payment.failed
+  C->>S: "Done"
+  S->>P: GET /payments/status/{reference}
+  S-->>C: The real result
+        </pre>
+        <figcaption>The session is always opened on a payment link. The link remains the payment record.</figcaption>
+      </figure>
+
+      <h2>Before you start: what to ask Plorea for</h2>
+      <ol class="steps">
+        <li><strong>Your web origins whitelisted.</strong>List every domain that mounts Drop-in. Adyen checks the browser's <code>Origin</code> against the client key. An origin that is not on the list fails late, in Drop-in's <code>/sessions/{id}/setup</code> call, as a CORS or <code>403</code> error that looks like a credentials problem.</li>
+        <li><strong>Your app identifiers registered.</strong>The iOS bundle id with the Apple Team ID, and the Android package name. Include staging builds. Adyen does not check them on app calls today, so a missing id blocks nothing. Register them before go-live anyway. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Optionally, a client key for each environment.</strong>Every session response now carries a <code>clientKey</code>, so you rarely need your own. Keep one as a fallback only.</li>
+      </ol>
+      <h3>Origin whitelisting rules</h3>
+      <ul>
+        <li><strong>Per key, browsers only.</strong> The allow-list belongs to a client key. Adyen checks it only when the caller sends an <code>Origin</code> header. A native SDK sends none, so native apps pass with any valid key. <span class="badge verified">Verified</span></li>
+        <li><strong>Wildcards cover subdomains, not the bare domain.</strong> <code>https://*.example.com</code> covers <code>pay.example.com</code> and <code>a.b.example.com</code>. It does not cover <code>https://example.com</code>. Ask for the bare domain separately. <span class="badge verified">Verified</span></li>
+        <li><strong>No localhost.</strong> <code>localhost</code> is not whitelisted. Develop against a whitelisted staging subdomain, or use a tunnel on such a subdomain. <span class="badge verified">Verified</span></li>
+        <li><strong>Use the key from the session.</strong> The hosted pay page uses its own key, registered only for <code>pay.plorea.no</code>. That key answers <code>403</code> from your origin. The key in the session response is the one registered for your origins. <span class="badge verified">Verified</span></li>
+        <li><strong>Customers' own domains.</strong> Every domain needs a manual whitelist entry, and no API for this is planned. Serve the payment step from a wildcard subdomain you control, for example <code>{customer}.example.com</code>. <span class="badge stated">Stated by Plorea</span></li>
+      </ul>
+
+      <h2>Create a checkout session</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/session</code></div>
+      <p>The session derives everything (amount, currency, merchant, reference) from the payment link. Create the link first. See <a href="payment-links.html">Payment links</a>.</p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>paymentLinkId</code><span class="req">required</span></td><td><span class="type">string</span></td><td>The <code>pl_…</code> id of the link to pay.</td></tr>
+            <tr><td><code>returnUrl</code><span class="opt">recommended</span></td><td><span class="type">string</span></td><td>Where a redirect payment method (3DS, wallets, bank redirects) brings the customer back. An <code>https</code> URL, a universal link, an App Link or a custom scheme such as <code>acmeapp://payment/return</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>channel</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td><code>Web</code>, <code>iOS</code> or <code>Android</code>. Case-sensitive. Default <code>Web</code>. Any other value, including <code>ios</code>, returns <code>400</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for reporting.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payments/session \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "paymentLinkId": "pl_test_example_link",
+    "returnUrl": "https://app.example.com/invoices/123/return",
+    "channel": "Web"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\Channel;
+use MemberFlow\Plorea\Facades\Plorea;
+
+public function store(Request $request, Invoice $invoice)
+{
+    $this-&gt;authorize('pay', $invoice);
+
+    $channel = Channel::from($request-&gt;validate([
+        'channel' =&gt; ['required', Rule::enum(Channel::class)],
+    ])['channel']);
+
+    $link = Plorea::payments()
+        -&gt;link($invoice-&gt;reference, $invoice-&gt;title, $invoice-&gt;amount(), route('invoices.paid', $invoice))
+        -&gt;merchant(orgNr: '999999999', name: 'Acme Gym AS')
+        -&gt;firstOrCreate();
+
+    $session = Plorea::payByLink()-&gt;session(
+        $link-&gt;id,
+        returnUrl: $this-&gt;returnUrlFor($channel, $invoice),  // chosen on the server
+        channel: $channel,
+    );
+
+    // Serialises to sessionId, sessionData, clientKey, environment — nothing else.
+    return response()-&gt;json($session);
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Express route on your server. The API key never leaves it.
+app.post('/api/invoices/:id/checkout', async (req, res) =&gt; {
+  const invoice = await loadInvoiceFor(req.user, req.params.id);
+  const channel = ['Web', 'iOS', 'Android'].includes(req.body.channel) ? req.body.channel : 'Web';
+  const link = await firstOrCreateLink(invoice); // see Payment links
+
+  const session = await fetch('https://payments.plorea.no/payments/session', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+      'X-Environment': process.env.PLOREA_ENVIRONMENT,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      platform: 'acme',
+      paymentLinkId: link.paymentLinkId,
+      returnUrl: returnUrlFor(channel, invoice),
+      channel,
+    }),
+  }).then((r) =&gt; r.json());
+
+  const { sessionId, sessionData, clientKey, environment } = session;
+  res.json({ sessionId, sessionData, clientKey, environment });
+});</code></pre></div>
+      </div>
+      <pre data-title="200 OK"><code class="lang-json">{
+  "sessionId": "CS_TEST_EXAMPLE_SESSION",
+  "sessionData": "Ab02b4c0!BQABAgB…",
+  "environment": "test",
+  "channel": "iOS",
+  "clientKey": "test_FAKECLIENTKEY0000000000000000"
+}</code></pre>
+      <dl class="fields">
+        <dt>sessionId, sessionData</dt><dd>Pass both to Drop-in. Treat them as opaque.</dd>
+        <dt>clientKey</dt><dd>The Adyen client key for Drop-in. Returned for every channel since September 2026. It is publishable, but it is tied to your origins. <span class="badge verified">Verified</span></dd>
+        <dt>environment</dt><dd><code>test</code> or <code>live</code>. Map <code>live</code> to Adyen's live <strong>Europe</strong> environment in the native SDKs. A live session has not been observed yet. <span class="badge open">Open question</span></dd>
+        <dt>channel</dt><dd>The channel Plorea opened the session for. <code>Web</code> when you sent none.</dd>
+      </dl>
+      <pre data-title="400 Bad Request — channel with the wrong case"><code class="lang-json">{ "error": "channel must be one of Web, iOS, Android" }</code></pre>
+
+      <div class="callout tip">
+        <p class="callout-title">Good server habits</p>
+        <ul>
+          <li><strong>Pass on only four fields.</strong> Do not forward the whole response. Keep tenant and customer data on the server.</li>
+          <li><strong>One session per attempt.</strong> Sessions expire. Do not cache them. Reuse the <em>link</em>, not the session.</li>
+          <li><strong>Choose <code>returnUrl</code> on the server.</strong> Never take it from the request. That is an open redirect.</li>
+          <li><strong>Authorise the caller.</strong> Check that the user may pay this invoice before you open a session.</li>
+        </ul>
+      </div>
+
+      <h2>Web: mount Drop-in</h2>
+      <p>The examples use Adyen Web v6. Load Adyen's script and stylesheet, then mount Drop-in on a container element.</p>
+      <pre data-title="checkout.js"><code class="lang-javascript">const { AdyenCheckout, Dropin } = window.AdyenWeb;
+
+const session = await fetch(`/api/invoices/${invoiceId}/checkout`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+  body: JSON.stringify({ channel: 'Web' }),
+}).then((r) =&gt; r.json());
+
+const checkout = await AdyenCheckout({
+  clientKey: session.clientKey,
+  environment: session.environment, // "test" or "live"
+  countryCode: 'NO',
+  locale: 'nb-NO',
+  session: { id: session.sessionId, sessionData: session.sessionData },
+  // These are UI hints only. The server decides whether the invoice is paid.
+  onPaymentCompleted: () =&gt; location.assign(`/invoices/${invoiceId}/paid`),
+  onPaymentFailed: () =&gt; showRetry(),
+  onError: (error) =&gt; reportError(error),
+});
+
+new Dropin(checkout).mount('#checkout');</code></pre>
+
+      <h3>Finish a redirect payment</h3>
+      <p>3-D Secure and redirect methods leave your page. The customer returns to <code>returnUrl</code> with <code>sessionId</code> and <code>redirectResult</code> in the query string. Finish the payment there:</p>
+      <pre data-title="return page"><code class="lang-javascript">const params = new URLSearchParams(location.search);
+
+const checkout = await AdyenCheckout({
+  clientKey,             // from your server, as before
+  environment,
+  session: { id: params.get('sessionId') },
+  onPaymentCompleted: () =&gt; showProcessing(),
+  onPaymentFailed: () =&gt; showRetry(),
+});
+
+checkout.submitDetails({ details: { redirectResult: params.get('redirectResult') } });</code></pre>
+
+      <h3>Content Security Policy</h3>
+      <p>Drop-in loads from and connects to Adyen's <code>checkoutshopper-*.adyen.com</code> hosts. 3-D Secure opens an iframe to the card issuer. A strict CSP needs <code>script-src</code>, <code>style-src</code>, <code>connect-src</code> and <code>frame-src</code> entries for these. Use Adyen's CSP guide for the current host list.</p>
+
+      <h2>Native apps: iOS and Android</h2>
+      <p>Ask your server for a session with <code>channel</code> set to <code>iOS</code> or <code>Android</code>. Pass the four fields to Adyen's native SDK in <em>sessions</em> mode.</p>
+      <div class="tabs">
+        <div class="tab" data-label="iOS (Swift)"><pre><code class="lang-swift">import Adyen
+import AdyenSession
+import AdyenDropIn
+
+let s = try await api.createCheckoutSession(invoiceId: invoiceId, channel: "iOS")
+
+let context = try AdyenContext(
+    apiContext: APIContext(
+        environment: s.environment == "live" ? Environment.liveEurope : Environment.test,
+        clientKey: s.clientKey
+    ),
+    payment: nil
+)
+let configuration = AdyenSession.Configuration(
+    sessionIdentifier: s.sessionId,
+    initialSessionData: s.sessionData,
+    context: context
+)
+AdyenSession.initialize(with: configuration, delegate: self, presentationDelegate: self) { result in
+    // Build DropInComponent with the session and present it.
+}
+
+// SceneDelegate: hand the return URL back to Adyen (3DS comes back this way).
+func scene(_ scene: UIScene, openURLContexts contexts: Set&lt;UIOpenURLContext&gt;) {
+    if let url = contexts.first?.url { RedirectComponent.applicationDidOpen(from: url) }
+}</code></pre></div>
+        <div class="tab" data-label="Android (Kotlin)"><pre><code class="lang-kotlin">val s = api.createCheckoutSession(invoiceId, channel = "Android")
+
+val environment = if (s.environment == "live") Environment.EUROPE else Environment.TEST
+val sessionModel = SessionModel(id = s.sessionId, sessionData = s.sessionData)
+
+val result = CheckoutSessionProvider.createSession(
+    sessionModel,
+    CheckoutConfiguration(environment = environment, clientKey = s.clientKey),
+)
+if (result is CheckoutSessionResult.Success) {
+    DropIn.startPayment(this, dropInLauncher, result.checkoutSession)
+}
+// Declare an intent filter for the return URL on the activity that handles it.</code></pre></div>
+      </div>
+      <p class="muted">Native snippets are outlines. Adyen's SDK APIs change between major versions. Check Adyen's own guide for the version you use.</p>
+
+      <div class="callout warning">
+        <p class="callout-title">3-D Secure arrives as a browser redirect</p>
+        <p>Plorea's sessions do not ask for native 3DS2 today. A 3-D Secure challenge opens in a browser and returns through <code>returnUrl</code>. <span class="badge verified">Verified on iOS</span> So the return-URL handling is on the critical path for card payments in your app. Plorea plans to enable native 3DS2 on <code>iOS</code> and <code>Android</code> sessions. <span class="badge stated">Stated by Plorea</span></p>
+      </div>
+
+      <h3>Return URLs for apps</h3>
+      <ul>
+        <li><strong>Universal links (iOS) and App Links (Android)</strong> are the recommended choice. They need <code>apple-app-site-association</code> and <code>assetlinks.json</code> on your domain.</li>
+        <li><strong>A custom scheme</strong> such as <code>acmeapp://payment/return</code> is accepted on both session endpoints. <span class="badge verified">Verified</span> An earlier version of the API rejected it with <code>400 "returnUrl must be a valid http(s) URL"</code>. If you see that error, report it to Plorea.</li>
+      </ul>
+
+      <h2>Confirm the result on the server</h2>
+      <p><code>onPaymentCompleted</code> and the native result callbacks are hints for the UI. They are not proof of payment.</p>
+      <ol class="steps">
+        <li><strong>The client says "done".</strong>Your server reads <code>GET /payments/status/{reference}</code> and answers with the real state.</li>
+        <li><strong>The webhook pushes the result.</strong><code>payment.authorised</code> or <code>payment.failed</code> arrives a few seconds after the decision. Use it to update a customer who closed the app. See <a href="webhooks.html">Webhooks</a>.</li>
+        <li><strong>Book idempotently.</strong>The webhook, the poll and the return page can race. Key the booking on the reference.</li>
+        <li><strong>Time out abandoned sessions yourself.</strong>A session that the customer closes stays <code>created</code> forever. Nothing marks it failed. <span class="badge verified">Verified</span> Stop waiting after a timeout you choose, and open a new session for the next try.</li>
+      </ol>
+
+      <h2>Storing a card with Drop-in</h2>
+      <p>Card setup has its own session endpoint, <code>POST /payment-methods/setup/session</code>. It takes the same <code>channel</code> values and returns a <code>clientKey</code> for every channel. It differs in one important way: there is no webhook for card setup, so you must poll the payment method. On a platform, send <code>merchantOrgNr</code> and optionally <code>merchantName</code>. The 3-D Secure challenge then shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span> See <a href="payment-methods.html">Storing cards</a>.</p>
+
+      <h2>Wallets and app store rules</h2>
+      <ul>
+        <li><strong>Apple Pay and Google Pay</strong> show only when Plorea's Adyen account is set up for them. Apple Pay on the web needs Apple's domain-association file on every domain. Apple Pay in an app needs an Apple merchant id and certificate. Ask Plorea which wallets it offers before you promise them. <span class="badge open">Open question</span></li>
+        <li><strong>App stores.</strong> Apple and Google require in-app purchase for digital goods used inside the app. Physical goods and real-world services, such as a gym membership or an invoice, are generally exempt. Check the current store rules for your case.</li>
+      </ul>
+
+      <h2>Troubleshooting</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>CORS or <code>403</code> on <code>/sessions/{id}/setup</code> in the browser</td><td>Origin not whitelisted, or a key registered for other origins</td><td>Use the session's <code>clientKey</code>. Ask Plorea to whitelist the origin.</td></tr>
+            <tr><td>Works on <code>app.example.com</code>, fails on <code>example.com</code></td><td>Wildcard does not cover the bare domain</td><td>Ask for the bare domain as a separate entry.</td></tr>
+            <tr><td>Fails on <code>localhost</code></td><td>Not whitelisted</td><td>Use a whitelisted staging subdomain.</td></tr>
+            <tr><td><code>400 channel must be one of …</code></td><td>Wrong case, e.g. <code>ios</code></td><td>Send <code>iOS</code>, <code>Android</code> or <code>Web</code> exactly.</td></tr>
+            <tr><td>App never learns the result after 3DS</td><td>Return URL not handled</td><td>Handle the URL and pass it to Adyen's redirect component.</td></tr>
+            <tr><td>Status stays <code>created</code></td><td>Customer abandoned the session</td><td>Time out on your side. Open a new session.</td></tr>
+            <tr><td>Drop-in error that mentions the environment</td><td><code>test_</code> key with a live session, or the reverse</td><td>Use the key and environment from the same response.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout gap">
+        <p class="callout-title">What we would like from Plorea</p>
+        <ul>
+          <li>A self-service API, or a portal, to register web origins and app ids. <span class="badge proposal">Proposal</span></li>
+          <li>A terminal state, or an <code>expiresAt</code>, on sessions. <span class="badge proposal">Proposal</span></li>
+          <li>Native 3DS2 on app sessions, as announced. <span class="badge proposal">Proposal</span></li>
+        </ul>
+      </div>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

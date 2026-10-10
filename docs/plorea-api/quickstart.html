@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plorea Quickstart</title>
+  <meta name="description" content="Take your first test payment with the Plorea Payments API, then store a card and start a subscription.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="quickstart">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Start here</p>
+        <h1>Quickstart</h1>
+        <p class="lead">Take a test payment end to end in about ten minutes. You create a payment link, pay it with an Adyen test card, read the result and receive the webhook. The last section stores a card and starts a subscription on it.</p>
+      </header>
+
+      <h2>Before you begin</h2>
+      <p>You need three things from Plorea. Plorea issues all three by hand. There is no self-service dashboard.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Example</th><th>What it is for</th></tr></thead>
+          <tbody>
+            <tr><td>Test API key</td><td><code>plr_test_FAKE0000000000000000</code></td><td>The bearer token on every request. Test keys start with <code>plr_test_</code>.</td></tr>
+            <tr><td>Tenant ID</td><td><code>acme-test</code></td><td>The <code>tenantId</code> you send in request bodies. Plorea scopes data by tenant.</td></tr>
+            <tr><td>Webhook signing secret</td><td><code>whsec_FAKE…</code></td><td>The key to verify webhook signatures. Only needed for step 5.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>You also need an organisation number for the company that receives the money. In test, use the reserved value <code>999999999</code>.</p>
+
+      <div class="callout warning">
+        <p class="callout-title">Keep the key secret</p>
+        <p>Use the API key only on your server. Never put it in a browser, a mobile app or a log line. Store it in an environment variable.</p>
+      </div>
+
+      <pre data-title="Shell"><code class="lang-bash">export PLOREA_API_KEY="plr_test_FAKE0000000000000000"
+export PLOREA_TENANT_ID="acme-test"</code></pre>
+
+      <h2>The flow you will build</h2>
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  A["1. Create link"] --> B["2. Open link"]
+  B --> C["3. Pay with test card"]
+  C --> D["4. Read status"]
+  C -.-> E["5. Receive webhook"]
+  D --> F["Mark order paid"]
+  E -.-> D
+        </pre>
+        <figcaption>The webhook is a signal to read the status again. The status call is the source of truth.</figcaption>
+      </figure>
+
+      <h2>Step 1: Create a payment link</h2>
+      <p>A payment link is a hosted page on <code>pay.plorea.no</code>. You choose the <code>reference</code>. It identifies the payment in every later call. Use your own order or invoice number.</p>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/link</code></div>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payments/link \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-test",
+    "reference": "ORDER-1001",
+    "product": "Annual membership",
+    "amount": 10000,
+    "currency": "NOK",
+    "email": "buyer@example.com",
+    "returnUrl": "https://shop.example.com/orders/1001/return",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme AS",
+    "merchantEmail": "billing@example.com"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$link = Plorea::payments()
+    -&gt;link(
+        reference: 'ORDER-1001',
+        product: 'Annual membership',
+        amount: Amount::nok(10000),          // 100,00 kr
+        returnUrl: 'https://shop.example.com/orders/1001/return',
+    )
+    -&gt;payerEmail('buyer@example.com')
+    -&gt;merchant(orgNr: '999999999', name: 'Acme AS', email: 'billing@example.com')
+    -&gt;create();
+
+$link-&gt;url;        // send the customer here
+$link-&gt;id;         // pl_...
+$link-&gt;expiresAt;  // store this</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payments/link', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: process.env.PLOREA_TENANT_ID,
+    reference: 'ORDER-1001',
+    product: 'Annual membership',
+    amount: 10000,
+    currency: 'NOK',
+    email: 'buyer@example.com',
+    returnUrl: 'https://shop.example.com/orders/1001/return',
+    merchantOrgNr: '999999999',
+    merchantName: 'Acme AS',
+    merchantEmail: 'billing@example.com',
+  }),
+});
+const link = await res.json();
+console.log(link.paymentLinkUrl);</code></pre></div>
+      </div>
+
+      <p>The response gives you the URL and the expiry. Store <code>paymentLinkId</code>, <code>reference</code> and <code>expiresAt</code> on your order.</p>
+      <pre data-title="200 OK"><code class="lang-json">{
+  "status": "created",
+  "environment": "test",
+  "paymentLinkUrl": "https://pay.plorea.no/pl_test_example",
+  "paymentLinkId": "pl_test_example",
+  "reference": "ORDER-1001",
+  "tenantId": "acme-test",
+  "merchantAccount": "TestMerchantAccount",
+  "amount": 10000,
+  "currency": "NOK",
+  "store": "Test Store AS",
+  "themeId": null,
+  "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+  "splitsEnabled": false,
+  "clientType": "payments_only",
+  "skipKyc": false,
+  "partnerSplitsApplied": false,
+  "provider": "plorea",
+  "expiresAt": "2099-12-31T12:00:00.000Z"
+}</code></pre>
+
+      <div class="callout danger">
+        <p class="callout-title">Do not retry a create blindly</p>
+        <p>The API does not deduplicate references. If a create times out and you send it again, the customer can get two payable links for one order. Read the status of the reference first. A <code>404</code> means no link exists yet. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <div class="callout note">
+        <p class="callout-title">Why send merchantOrgNr in test</p>
+        <p>The organisation number tells Plorea which company gets the payout. The API accepts a link without it, but Plorea requires it by contract. Send it from day one so your code is ready for live. <span class="badge stated">Stated by Plorea</span> The create response does not echo it back. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <h2>Step 2: Open the link</h2>
+      <p>Redirect the customer to <code>paymentLinkUrl</code>. For this test, open it in your own browser. The page shows the product, the amount and an Adyen card form.</p>
+
+      <h2>Step 3: Pay with a test card</h2>
+      <p>Use an Adyen test card. The test environment never moves real money.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Card number</th><th>Expiry</th><th>CVC</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td><code>4111 1111 1111 1111</code></td><td><code>03/30</code></td><td><code>737</code></td><td>Authorised. Status becomes <code>authorised</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>4000 0000 0000 0259</code></td><td>any future date</td><td>any</td><td>Declined after a 3DS2 challenge. Status becomes <code>failed</code>. <span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Adyen publishes the full list of test cards in its own documentation. After payment, the page sends the customer to your <code>returnUrl</code>.</p>
+
+      <div class="callout warning">
+        <p class="callout-title">The return URL proves nothing</p>
+        <p>Anyone can open your return URL. The customer can also close the tab before the redirect. Never mark an order as paid because the customer came back. Read the status in step 4.</p>
+      </div>
+
+      <h2>Step 4: Read the status</h2>
+      <p>Read the payment by the reference you chose. Send <code>platform</code> in the query string on a <code>GET</code>.</p>
+      <div class="endpoint"><span class="method get">GET</span><code>/payments/status/{reference}</code></div>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/payments/status/ORDER-1001?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Accept: application/json"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$status = Plorea::payments()-&gt;status('ORDER-1001');
+
+if ($status-&gt;isPaid()) {
+    // authorised or paid: the success state. Book the order.
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/payments/status/ORDER-1001?platform=acme',
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+);
+const payment = await res.json();
+const paid = ['authorised', 'paid'].includes(payment.status);</code></pre></div>
+      </div>
+
+      <pre data-title="200 OK — after a successful test payment"><code class="lang-json">{
+  "reference": "ORDER-1001",
+  "tenantId": "acme-test",
+  "platform": "unknown",
+  "orderId": null,
+  "status": "authorised",
+  "provider": "adyen",
+  "pspReference": "TESTPSPREF000001",
+  "paymentLinkId": "pl_test_example",
+  "paymentLinkUrl": "https://pay.plorea.no/pl_test_example",
+  "amount": 10000,
+  "currency": "NOK",
+  "environment": "test",
+  "merchantAccount": "TestMerchantAccount",
+  "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+  "store": "Test Store AS",
+  "splitsEnabled": false,
+  "createdAt": "2026-10-10T12:00:00.000Z",
+  "updatedAt": "2026-10-10T12:05:00.000Z",
+  "webhookEventCode": "AUTHORISATION",
+  "webhookSuccess": true,
+  "lastWebhookAt": "2026-10-10T12:05:00.000Z",
+  "lastRefundReference": null,
+  "lastRefundRequestPspReference": null,
+  "lastRefundAmount": null,
+  "lastRefundReason": null,
+  "lastRefundRequestedAt": null,
+  "lastCancelReference": null,
+  "lastCancelRequestPspReference": null,
+  "lastCancelRequestedAt": null
+}</code></pre>
+      <p>In test, a successful payment stays on <code>authorised</code>. Treat both <code>authorised</code> and <code>paid</code> as paid. <a href="payment-lifecycle.html">Payment lifecycle and states</a> explains why.</p>
+      <p>Before you book the order, compare <code>amount</code> and <code>currency</code> with the values on your order. Flag a mismatch for manual review.</p>
+
+      <h2>Step 5: Receive the webhook</h2>
+      <p>Plorea posts a signed event to your webhook URL when the payment is authorised or fails. Plorea registers the URL by hand, per tenant. Plorea can register one URL for test and one for live, on request. <span class="badge stated">Stated by Plorea</span></p>
+
+      <ol class="steps">
+        <li><strong>Expose a local URL</strong>Run a tunnel tool, for example <code>cloudflared</code> or <code>ngrok</code>, in front of your local server. You get a public HTTPS address.</li>
+        <li><strong>Register the URL</strong>Send the URL to Plorea through a secure channel. Ask for it as your <em>test</em> URL. Get the signing secret back.</li>
+        <li><strong>Verify the signature</strong>Compute the base64 HMAC-SHA256 of the raw body with the secret as the key. Compare it with <code>x-plorea-signature</code> in constant time.</li>
+        <li><strong>Read the status again</strong>Use the <code>reference</code> in the event to call <code>GET /payments/status/{reference}</code>. Book on that answer.</li>
+        <li><strong>Answer 200 quickly</strong>Plorea does not retry a failed delivery. Do the heavy work in a queue. <span class="badge stated">Stated by Plorea</span></li>
+      </ol>
+
+      <pre data-title="POST to your webhook URL — payment.authorised"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000001",
+  "createdAt": "2026-10-10T12:05:00.000Z",
+  "tenantId": "acme-test",
+  "type": "payment.authorised",
+  "data": {
+    "reference": "ORDER-1001",
+    "orderId": null,
+    "status": "authorised",
+    "provider": "adyen",
+    "pspReference": "TESTPSPREF000001",
+    "paymentLinkId": "pl_test_example",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_example",
+    "amount": 10000,
+    "currency": "NOK",
+    "environment": "test",
+    "eventCode": "AUTHORISATION",
+    "success": true
+  }
+}</code></pre>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Check a signature by hand. body.json holds the raw body, byte for byte.
+openssl dgst -sha256 -hmac "$PLOREA_WEBHOOK_SECRET" -binary body.json | base64</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">// The SDK registers POST /plorea/webhook and verifies the signature
+// with PLOREA_WEBHOOK_SECRET. Listen for the event it dispatches.
+use Illuminate\Support\Facades\Event;
+use MemberFlow\Plorea\Events\PaymentStatusUpdated;
+use MemberFlow\Plorea\Facades\Plorea;
+
+Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) {
+    // Deduplicate on $event-&gt;eventId, then re-fetch the truth.
+    $status = Plorea::payments()-&gt;status($event-&gt;reference);
+
+    if ($status-&gt;isPaid()) {
+        Order::where('reference', $event-&gt;reference)-&gt;first()?-&gt;markPaid();
+    }
+});</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">import crypto from 'node:crypto';
+import express from 'express';
+
+const app = express();
+
+// Keep the raw bytes. A JSON parser that re-encodes the body breaks the HMAC.
+app.post('/plorea/webhook', express.raw({ type: 'application/json' }), async (req, res) =&gt; {
+  const expected = crypto
+    .createHmac('sha256', process.env.PLOREA_WEBHOOK_SECRET) // the secret string, verbatim
+    .update(req.body)
+    .digest('base64');
+  const given = req.get('x-plorea-signature') ?? '';
+
+  const ok = given.length === expected.length &amp;&amp;
+    crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  if (!ok) return res.sendStatus(403);
+
+  const event = JSON.parse(req.body.toString('utf8'));
+  await queue.add('plorea-event', event); // dedupe on event.eventId in the worker
+  res.sendStatus(200);
+});</code></pre></div>
+      </div>
+
+      <div class="callout tip">
+        <p class="callout-title">No webhook yet? Poll</p>
+        <p>Registration takes a round trip with Plorea. Until then, poll <code>GET /payments/status/{reference}</code> after the customer returns, and on a schedule for open orders. Keep the poll as a backstop after webhooks work too, because a lost delivery is never sent again.</p>
+      </div>
+
+      <hr>
+
+      <h2>Next: store a card and start a subscription</h2>
+      <p>Recurring billing has two parts. First the customer stores a card. Then you create a subscription on that card. Plorea runs the scheduler and charges the card on each interval.</p>
+
+      <h3>Store a card</h3>
+      <p>Create a setup. Plorea returns a hosted Adyen page. The customer enters the card there. Adyen makes a 1 NOK verification authorisation. <span class="badge verified">Verified</span></p>
+      <div class="endpoint"><span class="method post">POST</span><code>/payment-methods/setup</code></div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payment-methods/setup \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-test",
+    "customerId": "cust_42",
+    "shopperReference": "acme-shopper-42",
+    "recurringType": "Subscription",
+    "returnUrl": "https://shop.example.com/billing/return",
+    "description": "Card for Acme membership"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\RecurringType;
+
+$method = Plorea::paymentMethods()
+    -&gt;setup('acme-shopper-42', RecurringType::Subscription, 'https://shop.example.com/billing/return')
+    -&gt;customerId('cust_42')
+    -&gt;description('Card for Acme membership')
+    -&gt;create();
+
+return redirect($method-&gt;adyenPaymentLinkUrl);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payment-methods/setup', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'acme-test',
+    customerId: 'cust_42',
+    shopperReference: 'acme-shopper-42',
+    recurringType: 'Subscription',
+    returnUrl: 'https://shop.example.com/billing/return',
+    description: 'Card for Acme membership',
+  }),
+});
+const method = await res.json(); // redirect to method.adyenPaymentLinkUrl</code></pre></div>
+      </div>
+      <pre data-title="200 OK"><code class="lang-json">{
+  "paymentMethodId": "pm_test_example",
+  "tenantId": "acme-test",
+  "customerId": null,
+  "shopperReference": "acme-shopper-42",
+  "recurringType": "Subscription",
+  "status": "pending_setup",
+  "environment": "test",
+  "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+  "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+  "expiresAt": "2026-10-11T12:00:00+02:00"
+}</code></pre>
+      <p>After the customer returns, poll <code>GET /payment-methods/{paymentMethodId}</code> until <code>status</code> is <code>active</code> or <code>failed</code>. Plorea sends no webhook for card setup. <span class="badge stated">Stated by Plorea</span></p>
+      <p>On a platform, also send <code>merchantOrgNr</code> (and optionally <code>merchantName</code>) on the setup. The 3-D Secure challenge then shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span></p>
+
+      <h3>Create a subscription</h3>
+      <p>Create the subscription on the active card. Billing starts at once: without a trial, the scheduler charges the first period within seconds. <span class="badge verified">Verified</span></p>
+      <div class="endpoint"><span class="method post">POST</span><code>/subscriptions</code></div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/subscriptions \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-test",
+    "customerId": "cust_42",
+    "paymentMethodId": "pm_test_example",
+    "recurringType": "Subscription",
+    "amount": { "value": 24900, "currency": "NOK" },
+    "interval": { "unit": "month", "count": 1 },
+    "externalId": "acme-membership-42",
+    "title": "Acme membership",
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "merchantOrgNr": "999999999"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Data\BillingInterval;
+
+$subscription = Plorea::subscriptions()
+    -&gt;create('pm_test_example', Amount::nok(24900), BillingInterval::monthly())
+    -&gt;customerId('cust_42')
+    -&gt;externalId('acme-membership-42')
+    -&gt;title('Acme membership')
+    -&gt;vat(rate: 0.25, amount: 4980)
+    -&gt;merchant(orgNr: '999999999')
+    -&gt;save();
+
+$subscription-&gt;nextChargeAt; // the first charge, which is now</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'acme-test',
+    customerId: 'cust_42',
+    paymentMethodId: 'pm_test_example',
+    recurringType: 'Subscription',
+    amount: { value: 24900, currency: 'NOK' },
+    interval: { unit: 'month', count: 1 },
+    externalId: 'acme-membership-42',
+    title: 'Acme membership',
+    vatRate: 0.25,
+    vatAmount: 4980,
+    merchantOrgNr: '999999999',
+  }),
+});
+const subscription = await res.json();</code></pre></div>
+      </div>
+      <p>Each scheduled charge sends a <code>subscription.charge_succeeded</code> webhook. A failed scheduled charge moves the subscription to <code>past_due</code> and sends <code>subscription.charge_failed</code>. That event is not in Plorea's catalogue and is not redelivered, so you must also poll. Read <a href="subscriptions.html">Subscriptions</a> and <a href="dunning.html">Failed charges and dunning</a> before you go live.</p>
+
+      <h2>What to read next</h2>
+      <div class="cards">
+        <a class="card" href="concepts.html"><h3>Core concepts</h3><p>References, tenants, environments, amounts and idempotency.</p></a>
+        <a class="card" href="payment-lifecycle.html"><h3>Payment lifecycle</h3><p>Every status, and how to decide "paid" in code.</p></a>
+        <a class="card" href="webhooks.html"><h3>Webhooks</h3><p>Signature checks, deduplication and the event catalogue.</p></a>
+      </div>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>
