@@ -50,6 +50,15 @@
         <li><strong>Docs:</strong> the site is published. It covers the API as of this date.</li>
       </ul>
 
+      <h3 id="2026-10-09">2026-10-09</h3>
+      <ul>
+        <li><strong>Production charge incident, fixed.</strong> From 1 to 9 October, every scheduled production charge failed with <code>"PaymentDetail not found"</code>. Plorea's scheduler had charged production subscriptions against Adyen's test environment. Plorea fixed it on 9 October, and the retried charges came back <code>authorised</code>. <span class="badge verified">Verified</span> It was an incident, not a card decline. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Webhook routing.</strong> Production <code>subscription.*</code> deliveries went to the test URL with <code>environment: "test"</code> until 9 October. Plorea states that the routing is fixed. <span class="badge open">Open question</span> until we see it. Do not filter on <code>environment</code>, and keep polling. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</li>
+        <li><strong>Charge history order.</strong> <code>GET /subscriptions/{id}/charges</code> is not reliably newest first. Sort by <code>createdAt</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Refund on an <code>authorised</code> payment.</strong> A partial and a full refund both stayed refunds, not cancels. <code>refund_requested</code> means accepted, not settled. <span class="badge verified">Verified</span> in test.</li>
+        <li><strong>Delete a stored card.</strong> The delete does not deactivate the card at Adyen today. <span class="badge stated">Stated by Plorea</span></li>
+      </ul>
+
       <h3 id="2026-10-06">2026-10-06</h3>
       <ul>
         <li><strong>Delete a stored card.</strong> <code>DELETE /payment-methods/{id}</code> works in test. Production is not observed yet. The method becomes <code>cancelled</code>. A card that an active or trialing subscription uses is refused with <code>400</code>. Until 2026-10-05 the route was missing and answered a bare <code>404</code>. <span class="badge verified">Verified</span> See <a href="payment-methods.html#delete-a-card">Delete a card</a>.</li>
