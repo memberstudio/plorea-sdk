@@ -59,7 +59,7 @@
       <p><strong>Impact.</strong> Integrators cannot retry safely. A retry after a timeout can bill a customer twice. Today each integrator must look up the payment first and invent a suffix scheme for new references.</p>
       <p><strong>Proposal.</strong> Accept an <code>Idempotency-Key</code> header on every <code>POST</code>. Store the first response for 24 hours. Return it again for the same key and the same body. Return <code>409</code> for the same key with a different body.</p>
       <pre data-title="Request"><code class="lang-http">POST /payments/link
-Idempotency-Key: 4f1c2a0e-7b0e-4c55-9d1e-acme-order-1001
+Idempotency-Key: acme-order-1001-attempt-1
 X-Environment: test</code></pre>
       <pre data-title="Replayed response"><code class="lang-http">HTTP/1.1 200 OK
 Idempotent-Replayed: true</code></pre>
