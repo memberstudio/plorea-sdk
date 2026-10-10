@@ -952,7 +952,7 @@ if (!created.ok) throw new Error(`Create failed: ${created.status}`);</code></pr
 
       <div class="callout note">
         <p class="callout-title">Immediate switch instead</p>
-        <p>To bill the yearly price today, create the new subscription without a trial and give credit for the unused monthly period in your own system. Refunding the unused part of a scheduler charge is an open question. See <a href="#downgrade">Downgrade</a>.</p>
+        <p>To bill the yearly price today, create the new subscription without a trial and give credit for the unused monthly period in your own system. A scheduled charge could not be refunded through the API in production. Refund the unused part in the Plorea portal, or give credit in your own system. See <a href="#downgrade">Downgrade</a>.</p>
       </div>
 
       <!-- ================================================================ -->
@@ -1105,8 +1105,9 @@ stateDiagram-v2
   paused --> active: PATCH status active + nextChargeAt
   active --> past_due: scheduled charge fails
   past_due --> active: retry succeeds (not observed)
+  past_due --> payment_failed: last attempt fails
         </pre>
-        <figcaption>Subscription states. <code>past_due</code> was seen in production. After three failed retries, production showed <code>payment_failed</code>, not <code>canceled</code>. The way out of <code>payment_failed</code> is untested: see <a href="dunning.html#after-the-last-retry">Failed charges and dunning</a>. The arrow from <code>paused</code> back to <code>active</code> is verified for the status only. No charge has followed it yet.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. After three failed attempts, production showed <code>payment_failed</code>, not <code>canceled</code>. The way out of <code>payment_failed</code> is untested: see <a href="dunning.html#after-the-last-retry">Failed charges and dunning</a>. The arrow from <code>paused</code> back to <code>active</code> is verified for the status only. No charge has followed it yet.</figcaption>
       </figure>
 
       <ol class="steps">
@@ -1154,14 +1155,14 @@ const accessEndsAt = cancellation.accessEndsAt ?? new Date().toISOString();</cod
 
       <div class="callout tip">
         <p class="callout-title">Cancel immediately with a refund</p>
-        <p>Plorea has only "cancel at period end". To end access now and refund, cancel, then refund the last charge. This works for a manual charge. For a scheduler charge it is an open question. See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+        <p>Plorea has only "cancel at period end". To end access now and refund, cancel, then refund the last charge. A refund of a manual charge is untested. <span class="badge open">Open question</span> A refund of a scheduled charge failed through the API in production. Refund it in the Plorea portal and record it in your own system. <span class="badge verified">Verified</span> See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
       </div>
 
       <!-- ================================================================ -->
       <h2>Reactivate a canceled subscription</h2>
       <p><strong>Use this when</strong> the customer changes their mind after a cancel. Reactivate keeps the subscription ID, price and card.</p>
       <ol class="steps">
-        <li><strong>Check if you need to reactivate at all</strong>Only a <code>canceled</code> subscription can be reactivated. Other statuses return <code>400 "Only canceled subscriptions can be reactivated"</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Check if you need to reactivate at all</strong>Only a <code>canceled</code> subscription can be reactivated. An <code>active</code> subscription returns <code>400 "Only canceled subscriptions can be reactivated"</code>. <span class="badge verified">Verified</span> Other statuses, <code>payment_failed</code> included, are untested. <span class="badge unobserved">Unobserved</span></li>
         <li><strong>Check the card</strong>Read <code>GET /payment-methods/{id}</code>. If the card is no longer usable, run <a href="#replace-the-card">Replace the card</a> after you reactivate.</li>
         <li><strong>Reactivate</strong>Call <code>POST /subscriptions/{id}/reactivate</code> with no body other than <code>platform</code>.</li>
         <li><strong>Read <code>nextChargeAt</code></strong>It is set to last charge + one interval. A reactivate inside the paid period does not charge again. <span class="badge verified">Verified</span></li>
@@ -1213,7 +1214,7 @@ if (res.status === 400) {
           <tbody>
             <tr><td>Pause / freeze</td><td>Proof that a resumed subscription, or any active one with a moved <code>nextChargeAt</code>, is charged. None was seen in test. <span class="badge open">Open question</span></td><td>Native pause; cancel + new subscription with trial as a fallback</td></tr>
             <tr><td>Upgrade</td><td>Proration <span class="badge proposal">Proposal</span></td><td>Self-computed manual charge + PATCH</td></tr>
-            <tr><td>Downgrade with refund</td><td>Refund of a scheduler charge <span class="badge open">Open question</span></td><td>Downgrade at period end</td></tr>
+            <tr><td>Downgrade with refund</td><td>Refund of a scheduled charge failed through the API. Portal only. <span class="badge verified">Verified</span></td><td>Downgrade at period end</td></tr>
             <tr><td>Interval change</td><td><code>interval</code> on PATCH <span class="badge proposal">Proposal</span></td><td>Cancel + new subscription with trial</td></tr>
             <tr><td>Price change</td><td>Effective date on PATCH <span class="badge proposal">Proposal</span></td><td>Time the PATCH yourself</td></tr>
             <tr><td>Any change</td><td>Webhooks for cancel, reactivate, pause and resume <span class="badge proposal">Proposal</span></td><td>Poll and keep your own state</td></tr>

@@ -301,7 +301,7 @@ gantt
           <tbody>
             <tr><td><code>PATCH</code> with a new <code>amount</code> and <code>nextChargeAt</code></td><td>Not tested on a <code>payment_failed</code> subscription. Changing both fields in one update is unverified on any status. Moving <code>nextChargeAt</code> on an <code>active</code> subscription has never produced a charge. <span class="badge unobserved">Unobserved</span></td></tr>
             <tr><td><code>PATCH status: "active"</code> (resume)</td><td>Verified only from <code>paused</code>. On an <code>active</code> subscription it returns <code>400</code> with <code>allowedTransitions: ["paused"]</code>. Not tested on <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></td></tr>
-            <tr><td><code>POST /subscriptions/{id}/reactivate</code></td><td>Verified only from <code>canceled</code>. Other statuses return <code>400</code> "Only canceled subscriptions can be reactivated". Not tested on <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></td></tr>
+            <tr><td><code>POST /subscriptions/{id}/reactivate</code></td><td>Verified only from <code>canceled</code>. An <code>active</code> subscription returns <code>400</code> "Only canceled subscriptions can be reactivated". Not tested on <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></td></tr>
             <tr><td>Plorea resets the retry count by hand</td><td>One reset set the status to <code>active</code> and <code>retryCount</code> to <code>0</code>. It charged the card at once and moved the billing anchor. The API has no call for this reset. <span class="badge verified">Verified</span> in production once</td></tr>
           </tbody>
         </table>
@@ -319,7 +319,7 @@ gantt
       <ol class="steps">
         <li><strong>PATCH the new card first</strong>A retry can only succeed on a working card. Whether pending retries use the card stored at retry time is not confirmed. <span class="badge open">Open question</span></li>
         <li><strong>Re-read the subscription and the charges</strong>Check whether a retry already succeeded.</li>
-        <li><strong>Wait until the retry window ends</strong>While the subscription is <code>past_due</code>, Plorea still retries and <code>nextChargeAt</code> is the next attempt. The API does not say when Plorea stops retrying. One production case stopped after three attempts about 24 hours apart. Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> Compute the end on your own clock: the time you first flagged the case, plus <code>maxRetries</code> × <code>retryIntervalDays</code>, plus a margin. Do not charge before that time.</li>
+        <li><strong>Wait until the retry window ends</strong>While the subscription is <code>past_due</code>, Plorea still retries and <code>nextChargeAt</code> is the next attempt. The API does not say when Plorea stops retrying. One production case stopped after three attempts about 24 hours apart. Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> Compute the end on your own clock: the time you first flagged the case, plus <code>maxRetries</code> × <code>retryIntervalDays</code>, plus a margin. Do not charge before that time. Elapsed time alone does not prove that Plorea stopped. Then re-read the subscription. Charge only when it reads <code>payment_failed</code> with <code>nextChargeAt</code> null. A manual charge on a <code>payment_failed</code> subscription, and its effect on later billing, is untested. <span class="badge unobserved">Unobserved</span> Try it on one subscription first.</li>
         <li><strong>Charge once</strong>Call <code>POST /subscriptions/{id}/charge</code> without an <code>amount</code>. The subscription amount is used. Use <code>reason: "dunning_recovery"</code>.</li>
         <li><strong>Save the charge reference at once</strong>Store it on the case before any other step. If the case already has a reference, do not charge again. Reconcile that charge instead.</li>
         <li><strong>Handle 402 and 400</strong><code>402</code> means the new card also declined. <code>400</code> means the subscription is canceled or the card is not active.</li>
@@ -354,6 +354,10 @@ if ($case-&gt;recovery_reference === null) {
         return; // Plorea may still retry. A charge now risks a double charge.
     }
 
+    if (! $subscription-&gt;hasPaymentFailure() || $subscription-&gt;nextChargeAt !== null) {
+        return; // Time alone does not prove the retries stopped.
+    }
+
     try {
         $charge = $subscriptions-&gt;charge($subscription-&gt;id, reason: 'dunning_recovery');
     } catch (ChargeFailedException $e) {
@@ -379,6 +383,11 @@ if ($landed?-&gt;isAuthorised() === true) {
 if (!dunningCase.recoveryReference) {
   // retriesEndAt = first flagged + maxRetries × retryIntervalDays + margin.
   if (Date.now() &lt; dunningCase.retriesEndAt.getTime()) return;
+
+  const sub = await fetch(`${base}/subscriptions/${id}?platform=acme`, { headers })
+    .then((r) =&gt; r.json());
+  // Time alone does not prove the retries stopped.
+  if (sub.status !== 'payment_failed' || sub.nextChargeAt !== null) return;
 
   const res = await fetch(`${base}/subscriptions/${id}/charge`, {
     method: 'POST',

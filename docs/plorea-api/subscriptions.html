@@ -42,13 +42,14 @@ stateDiagram-v2
   active --> active: scheduled charge succeeds
   active --> past_due: scheduled charge fails
   past_due --> active: retry succeeds (not observed)
+  past_due --> payment_failed: last attempt fails
   active --> paused: PATCH status paused
   paused --> active: PATCH status active + nextChargeAt
   trialing --> canceled: POST /cancel
   active --> canceled: POST /cancel
   canceled --> active: POST /reactivate
         </pre>
-        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. After three failed retries, production showed <code>payment_failed</code>. The way out of <code>past_due</code> and of <code>payment_failed</code> is untested. The pause paths were captured in test. No charge has followed a resume yet.</figcaption>
+        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. After three failed attempts, production showed <code>payment_failed</code>. Recovery from <code>past_due</code> to <code>active</code> is untested. Every way out of <code>payment_failed</code> is untested. The pause paths were captured in test. No charge has followed a resume yet.</figcaption>
       </figure>
       <div class="table-wrap">
         <table>
@@ -69,7 +70,7 @@ stateDiagram-v2
       </div>
 
       <h2>Billing timeline</h2>
-      <p><strong>Billing starts immediately.</strong> The create response already holds the first <code>nextChargeAt</code>. Without a trial, the scheduler should charge the card at once. A no-trial signup was charged at once in production on 2026-10-10. <span class="badge verified">Verified</span> in production. In test on 2026-10-06, new subscriptions without a trial were not charged: the scheduler kept moving <code>nextChargeAt</code> 15 to 20 minutes forward. <span class="badge open">Open question</span> An earlier test run did charge within seconds. Always confirm the first charge in <code>GET /subscriptions/{id}/charges</code>.</p>
+      <p><strong>First charge.</strong> The create response already holds the first <code>nextChargeAt</code>. Without a trial, the scheduler should charge the card at once. A no-trial signup was charged at once in production on 2026-10-10. <span class="badge verified">Verified</span> in production. In test on 2026-10-06, new subscriptions without a trial were not charged: the scheduler kept moving <code>nextChargeAt</code> 15 to 20 minutes forward. <span class="badge open">Open question</span> An earlier test run did charge within seconds. Always confirm the first charge in <code>GET /subscriptions/{id}/charges</code>.</p>
       <p>After each successful charge, Plorea sets <code>lastChargeAt</code> and moves <code>nextChargeAt</code> forward by one interval. There is no option to start billing on a fixed day, such as the 1st of the month. To get that effect, set a trial that ends on that day. A trial is charged on its end date. <span class="badge verified">Verified</span> Do not move <code>nextChargeAt</code> on an <code>active</code> subscription to reach a billing day. The new date is stored, but no such subscription has been charged on a moved date. <span class="badge open">Open question</span></p>
       <figure class="diagram">
         <pre class="mermaid">
@@ -684,7 +685,7 @@ const latest = items[0];</code></pre></div>
           </tbody>
         </table>
       </div>
-      <p>Read scheduled outcomes from the charge history, never from <code>payments/status</code>. To refund a charge, see <a href="refunds-and-cancellations.html">Refunds and cancellations</a>. Refunds of scheduled charges are an open question for the same reason.</p>
+      <p>Read scheduled outcomes from the charge history, never from <code>payments/status</code>. To refund a charge, see <a href="refunds-and-cancellations.html">Refunds and cancellations</a>. A refund of a scheduled charge failed through the API in production, with the same error. Refund it in the Plorea portal.</p>
 
       <h2 id="cancel">Cancel</h2>
       <div class="endpoint"><span class="method post">POST</span><code>/subscriptions/{subscriptionId}/cancel</code></div>

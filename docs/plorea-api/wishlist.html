@@ -121,7 +121,7 @@ Idempotent-Replayed: true</code></pre>
       <ul>
         <li>The event is not in Plorea's webhook catalogue.</li>
         <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
-        <li>After three failed retries, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> How to leave <code>payment_failed</code> is untested, and the API has no call for the reset Plorea did by hand. <span class="badge unobserved">Unobserved</span></li>
+        <li>After three failed attempts, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> How to leave <code>payment_failed</code> is untested, and the API has no call for the reset Plorea did by hand. <span class="badge unobserved">Unobserved</span></li>
         <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
         <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
       </ul>
@@ -164,7 +164,7 @@ Idempotent-Replayed: true</code></pre>
       <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "interval": { "unit": "year", "count": 1 }, "amount": { "value": 299000, "currency": "NOK" }, "effective": "next_charge" }</code></pre>
 
       <h3 id="proration">12. Proration</h3>
-      <p><strong>Problem.</strong> A mid-cycle upgrade has no proration. Integrators compute the difference and send a manual charge. A downgrade needs a refund of a scheduled charge, and it is unclear whether that works.</p>
+      <p><strong>Problem.</strong> A mid-cycle upgrade has no proration. Integrators compute the difference and send a manual charge. A downgrade needs a refund of a scheduled charge, and the API refused one in production.</p>
       <p><strong>Impact.</strong> Every integrator writes the same date and VAT maths.</p>
       <p><strong>Proposal.</strong> An optional <code>proration</code> flag on <code>PATCH</code>, and a preview endpoint.</p>
       <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "amount": { "value": 49900, "currency": "NOK" }, "proration": "charge_now" }</code></pre>
@@ -173,7 +173,7 @@ Idempotent-Replayed: true</code></pre>
       <h3 id="scheduled-charges-on-the-status-endpoint">14. Scheduled charges on the status endpoint</h3>
       <p><span class="badge open">Reported to Plorea</span></p>
       <p><strong>Problem.</strong> The reference of a scheduled charge returns <code>403</code> or <code>404</code> on <code>GET /payments/status</code>. A manual charge reference works.</p>
-      <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge may not be possible.</p>
+      <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge failed through the API in production. It needs the portal.</p>
       <p><strong>Proposal.</strong> Resolve every charge reference on the status endpoint, with <code>platform: "subscription"</code>, as manual charges already do.</p>
 
       <h3 id="charge-after-resume">19. Charge after resume</h3>
