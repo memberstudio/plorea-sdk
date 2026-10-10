@@ -60,7 +60,8 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
         <li><strong>Use nine digits.</strong> On <code>POST /subscriptions</code>, any other value returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
         <li><strong>Tell each merchant about KYC.</strong> The first live payment for a new organisation number starts onboarding by email. The payment succeeds. The payout waits until KYC is approved, which takes 1 to 5 business days. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>Onboard a merchant ahead of time if needed.</strong> No API exists to start or read KYC. Plorea suggests a small payment link with the merchant's organisation number, paid by yourself. <span class="badge stated">Stated by Plorea</span></li>
-        <li><strong>Keep your own record</strong> of which company each subscription bills for. Reads of a subscription do not return <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></li>
+        <li><strong>Keep your own record</strong> of the merchant name and email. Subscription reads return <code>merchantOrgNr</code> since 2026-09-22, but not the name or the email. <span class="badge verified">Verified</span> Compare the returned number with your record.</li>
+        <li><strong>Send the merchant on card setup too.</strong> Then the 3-D Secure challenge shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span></li>
       </ul>
       <div class="callout gap">
         <p class="callout-title">Missing: KYC status</p>
@@ -113,7 +114,8 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
             <tr><td>Webhook signature failures</td><td>A wrong secret, a body-rewriting proxy, or an attack.</td></tr>
             <tr><td>Links open past <code>expiresAt</code></td><td>The status never reports <code>expired</code>.</td></tr>
             <tr><td>Card setups in <code>pending_setup</code> past <code>expiresAt</code></td><td>No webhook is sent for setup.</td></tr>
-            <tr><td>Subscriptions with <code>nextChargeAt</code> in the past</td><td>A failed scheduler charge sends no webhook. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
+            <tr><td>Subscriptions in <code>past_due</code></td><td>A scheduled charge failed. <code>nextChargeAt</code> moves forward, so the date alone does not show it. The <code>subscription.charge_failed</code> webhook is not redelivered. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
+            <tr><td>Subscriptions with <code>nextChargeAt</code> in the past</td><td>The scheduler did not charge. A resumed subscription was seen in this state. <span class="badge open">Open question</span></td></tr>
             <tr><td>Refunds in <code>refund_requested</code> for more than a few days</td><td>Settlement is slow, but not that slow.</td></tr>
           </tbody>
         </table>

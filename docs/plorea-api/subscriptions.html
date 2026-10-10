@@ -29,7 +29,7 @@
       <ul>
         <li>An <code>active</code> payment method with <code>recurringType: "Subscription"</code>. See <a href="payment-methods.html">Storing cards</a>.</li>
         <li>A place in your database to store <code>subscriptionId</code>, <code>externalId</code> and, if you bill for other companies, <code>merchantOrgNr</code>.</li>
-        <li>A webhook endpoint for <code>subscription.charge_succeeded</code>, and a scheduled job that polls. See <a href="webhooks.html">Webhooks</a> and <a href="dunning.html">Failed charges and dunning</a>.</li>
+        <li>A webhook endpoint for <code>subscription.charge_succeeded</code> and <code>subscription.charge_failed</code>, and a scheduled job that polls. See <a href="webhooks.html">Webhooks</a> and <a href="dunning.html">Failed charges and dunning</a>.</li>
       </ul>
 
       <h2>The lifecycle</h2>
@@ -40,14 +40,15 @@ stateDiagram-v2
   [*] --> active: create without trial
   trialing --> active: trial ends, first charge
   active --> active: scheduled charge succeeds
-  active --> payment_failed: charge fails (never observed)
-  payment_failed --> active: retry succeeds (never observed)
+  active --> past_due: scheduled charge fails
+  past_due --> active: retry succeeds (not observed)
+  active --> paused: PATCH status paused
+  paused --> active: PATCH status active + nextChargeAt
   trialing --> canceled: POST /cancel
   active --> canceled: POST /cancel
-  payment_failed --> canceled: POST /cancel
   canceled --> active: POST /reactivate
         </pre>
-        <figcaption>Subscription statuses. The <code>payment_failed</code> paths are modelled from Plorea's description, not observed.</figcaption>
+        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. The way out of <code>past_due</code>, and the state after the last retry, are not observed. The pause paths were captured in test.</figcaption>
       </figure>
       <div class="table-wrap">
         <table>
@@ -55,8 +56,10 @@ stateDiagram-v2
           <tbody>
             <tr><td><code>trialing</code></td><td>In a free trial. Nothing is charged until <code>trialEndsAt</code>.</td><td>Yes</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>active</code></td><td>Billing on schedule.</td><td>Yes</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>past_due</code></td><td>A scheduled charge failed and Plorea retries it. <code>retryCount</code> counts the failed attempts. <code>failureReason</code> holds the provider's message. <code>nextChargeAt</code> moves to the next retry. See <a href="dunning.html">Failed charges and dunning</a>.</td><td>Your decision</td><td><span class="badge verified">Verified</span> in production</td></tr>
+            <tr><td><code>paused</code></td><td>Billing stopped by <code>PATCH</code>. <code>nextChargeAt</code> is null until a resume. See <a href="subscription-workflows.html#pause-or-freeze">Pause or freeze</a>.</td><td>Your decision</td><td><span class="badge verified">Verified</span> in test</td></tr>
             <tr><td><code>canceled</code></td><td>No more charges. Spelled the US way, with one L.</td><td>Until <code>accessEndsAt</code></td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>payment_failed</code></td><td>A scheduled charge failed. Retries may follow.</td><td>Your decision</td><td><span class="badge unobserved">Not observable in test</span></td></tr>
+            <tr><td><code>payment_failed</code></td><td>Named in Plorea's documentation. The failure status seen on the wire is <code>past_due</code>.</td><td>Your decision</td><td><span class="badge unobserved">Never observed</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -103,7 +106,7 @@ sequenceDiagram
             <tr><td><code>interval</code><span class="req">required</span></td><td class="type">object</td><td><code>{"unit": "month", "count": 1}</code>. Units: <code>day</code>, <code>week</code>, <code>month</code>, <code>year</code>. <code>count: 3</code> with <code>month</code> bills quarterly. You cannot change the interval later.</td></tr>
             <tr><td><code>externalId</code><span class="opt">recommended</span></td><td class="type">string</td><td>Your own ID for the thing being billed. You can list subscriptions by it, and the charge webhook includes it. Always set it.</td></tr>
             <tr><td><code>trialEndsAt</code><span class="opt">optional</span></td><td class="type">datetime</td><td>ISO 8601, for example <code>2026-11-01T00:00:00+00:00</code>. Sets status <code>trialing</code> and <code>nextChargeAt</code> to this time.</td></tr>
-            <tr><td><code>retryPolicy</code><span class="opt">optional</span></td><td class="type">object</td><td><code>{"maxRetries": 3, "retryIntervalDays": 1}</code>. How often Plorea retries a failed charge. The responses show <code>maxRetries: 3</code> when you send none. Retry behaviour is <span class="badge unobserved">Not observable in test</span>.</td></tr>
+            <tr><td><code>retryPolicy</code><span class="opt">optional</span></td><td class="type">object</td><td><code>{"maxRetries": 3, "retryIntervalDays": 1}</code>. How often Plorea retries a failed charge. The responses show <code>maxRetries: 3</code> when you send none. After a failure, <code>nextChargeAt</code> moves forward by <code>retryIntervalDays</code>. <span class="badge verified">Verified</span> in production. What happens after the last retry is <span class="badge unobserved">Not observed</span>.</td></tr>
             <tr><td><code>title</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan name, for example <code>Acme Gym Monthly</code>.</td></tr>
             <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Free text.</td></tr>
             <tr><td><code>quantity</code><span class="opt">optional</span></td><td class="type">integer</td><td>Number of units, such as seats. Informational. Plorea charges <code>amount</code> as sent and does not multiply it. <span class="badge open">Open question</span></td></tr>
@@ -289,7 +292,7 @@ const subscription = await plorea('POST', 'subscriptions', {
   "vatRate": 0.25,
   "vatAmount": 4980
 }</code></pre>
-      <p>A trial is also the tool for a fixed start date, a pause and an interval change. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+      <p>A trial is also the tool for a fixed start date and an interval change. To pause, use <code>PATCH</code> with <code>status</code>. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
 
       <h2 id="route-the-money-to-a-company">Route the money to a company</h2>
       <p>A platform that bills for many companies names the receiving company on each subscription. Send the company's nine-digit organisation number as <code>merchantOrgNr</code>. Every charge on the subscription, scheduled or manual, then settles to that company. <span class="badge stated">Stated by Plorea</span></p>
@@ -332,7 +335,8 @@ $membership-&gt;update(['merchant_org_nr' =&gt; $subscription-&gt;merchantOrgNr]
       </div>
       <ul>
         <li>The create response echoes <code>merchantOrgNr</code> as its last key. It does not echo the name or email. <span class="badge verified">Verified</span></li>
-        <li>Reads, lists and charge history do <strong>not</strong> return <code>merchantOrgNr</code>. Store it in your own database when you create the subscription. <span class="badge verified">Verified</span></li>
+        <li>Since 2026-09-22, a read and each list item return <code>merchantOrgNr</code>. Charge history returns it once, on the envelope, not on each charge. A subscription without a company returns <code>null</code>. <span class="badge verified">Verified</span></li>
+        <li>No response returns <code>merchantName</code> or <code>merchantEmail</code>. Store them in your own database if you need them again, for example to create a replacement subscription. <span class="badge verified">Verified</span></li>
         <li>A value that is not nine digits returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
         <li>Use the client company's number, never your platform's own number.</li>
         <li>KYC for a new company starts on its first charge. Settlement splits apply from that charge. Charge webhooks carry the organisation number. <span class="badge stated">Stated by Plorea</span></li>
@@ -379,6 +383,7 @@ $subscription-&gt;amount-&gt;value;  // 29900</code></pre></div>
   "description": "Golden fixture subscription",
   "vatRate": 0.25,
   "vatAmount": 4980,
+  "merchantOrgNr": null,
   "metadata": [],
   "createdAt": "2026-09-04T09:55:00.000Z",
   "updatedAt": "2026-09-04T09:55:00.000Z"
@@ -390,14 +395,15 @@ $subscription-&gt;amount-&gt;value;  // 29900</code></pre></div>
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>subscriptionId</code></td><td class="type">string</td><td>Plorea's ID, prefixed <code>sub_</code>.</td></tr>
-            <tr><td><code>status</code></td><td class="type">enum</td><td><code>trialing</code>, <code>active</code>, <code>canceled</code>, or <code>payment_failed</code> (never observed).</td></tr>
-            <tr><td><code>nextChargeAt</code></td><td class="type">datetime | null</td><td>When the scheduler charges next. Null after cancel.</td></tr>
+            <tr><td><code>status</code></td><td class="type">enum</td><td><code>trialing</code>, <code>active</code>, <code>past_due</code>, <code>paused</code> or <code>canceled</code>. Plorea's documentation also names <code>payment_failed</code> (never observed).</td></tr>
+            <tr><td><code>nextChargeAt</code></td><td class="type">datetime | null</td><td>When the scheduler charges next. Null after cancel and during a pause. After a failed charge, the time of the next retry.</td></tr>
             <tr><td><code>lastChargeAt</code></td><td class="type">datetime | null</td><td>The last successful charge. Null during a trial.</td></tr>
             <tr><td><code>lastPaymentReference</code></td><td class="type">string | null</td><td>Payment reference of the last charge, <code>{subscriptionId}-{chargeId}</code>.</td></tr>
-            <tr><td><code>retryCount</code></td><td class="type">integer</td><td>Retries of the current failed charge. Always 0 so far. <span class="badge unobserved">Not observable in test</span></td></tr>
-            <tr><td><code>failureReason</code></td><td class="type">string | null</td><td>Always null so far. Do not depend on it.</td></tr>
+            <tr><td><code>retryCount</code></td><td class="type">integer</td><td>Failed attempts on the current charge. <code>1</code> after the first failure. <span class="badge verified">Verified</span> in production</td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string | null</td><td>The provider's free-text message after a failed charge, for example <code>"PaymentDetail not found"</code>. Show it. Do not branch on it.</td></tr>
             <tr><td><code>canceledAt</code>, <code>cancelReason</code></td><td class="type">datetime, string | null</td><td>Set by cancel.</td></tr>
             <tr><td><code>accessEndsAt</code></td><td class="type">datetime | null</td><td>End of the paid period after cancel. See <a href="#cancel">Cancel</a>.</td></tr>
+            <tr><td><code>merchantOrgNr</code></td><td class="type">string | null</td><td>The company that receives the money. <code>null</code> when the subscription has none. See <a href="#route-the-money-to-a-company">Route the money to a company</a>.</td></tr>
             <tr><td><code>shopperReference</code>, <code>storedPaymentMethodId</code></td><td class="type">string</td><td>Copied from the payment method.</td></tr>
             <tr><td><code>amount</code>, <code>interval</code>, <code>quantity</code>, <code>vatRate</code>, <code>vatAmount</code>, <code>retryPolicy</code>, <code>trialEndsAt</code>, <code>externalId</code>, <code>title</code>, <code>description</code>, <code>metadata</code></td><td class="type">—</td><td>As sent on create or the last update.</td></tr>
           </tbody>
@@ -437,6 +443,7 @@ const { count, items } = await plorea('GET', `subscriptions?${qs}`);</code></pre
       "externalId": "GOLDEN-EXT-001",
       "title": "Golden fixture plan",
       "description": "Golden fixture subscription",
+      "merchantOrgNr": null,
       "canceledAt": null,
       "cancelReason": null,
       "createdAt": "2026-09-04T09:55:00.000Z",
@@ -456,8 +463,10 @@ const { count, items } = await plorea('GET', `subscriptions?${qs}`);</code></pre
         <li><code>amount</code>, <code>quantity</code>, <code>vatRate</code>, <code>vatAmount</code> — the price.</li>
         <li><code>paymentMethodId</code> — a new <code>active</code> card. Any other status returns <code>400</code>.</li>
         <li><code>externalId</code>, <code>title</code>, <code>description</code> — your labels.</li>
+        <li><code>nextChargeAt</code> — moves the next charge. A past date returns <code>400</code>. On a <code>trialing</code> subscription, <code>trialEndsAt</code> keeps its old value. <span class="badge verified">Verified</span> in test</li>
+        <li><code>status</code> — <code>"paused"</code> or <code>"active"</code> only. See <a href="subscription-workflows.html#pause-or-freeze">Pause or freeze</a>. <span class="badge verified">Verified</span> in test</li>
       </ul>
-      <p>You <strong>cannot</strong> change <code>interval</code>, <code>trialEndsAt</code>, <code>nextChargeAt</code> or <code>merchantOrgNr</code>. To change the interval, cancel and create a new subscription. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+      <p>You <strong>cannot</strong> change <code>interval</code>, <code>trialEndsAt</code> or <code>merchantOrgNr</code>. To change the interval, cancel and create a new subscription. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_golden \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
@@ -620,6 +629,7 @@ const latest = items[0];</code></pre></div>
       </div>
       <pre data-title="200 OK"><code class="lang-json">{
   "subscriptionId": "sub_test_golden",
+  "merchantOrgNr": null,
   "items": [
     {
       "subscriptionId": "sub_test_golden",
@@ -659,7 +669,8 @@ const latest = items[0];</code></pre></div>
         <li>The charge response says <code>charge_created</code>. The history item for the same charge says <code>authorised</code>. <span class="badge verified">Verified</span></li>
         <li><code>reason</code> is <code>scheduled_charge</code> or <code>manual_charge</code>. Your own reason from the charge request does not appear here.</li>
         <li>The response has no <code>count</code> and no paging fields. We cannot tell a complete history from a cut-off one. <span class="badge open">Open question</span></li>
-        <li>We have only seen <code>status: "authorised"</code>. The status of a failed charge is <span class="badge unobserved">Not observable in test</span>.</li>
+        <li>A failed scheduled charge reads <code>status: "failed"</code>, <code>reason: "scheduled_charge"</code>, <code>retryNumber: 0</code> and the provider's <code>failureReason</code>. <span class="badge verified">Verified</span> in production. It cannot be produced in test.</li>
+        <li><code>merchantOrgNr</code> appears once, on the envelope, not on each charge. <span class="badge verified">Verified</span></li>
       </ul>
 
       <h3 id="charge-references">Charge references</h3>
@@ -774,7 +785,7 @@ if (current.status === 'canceled') {
       <p>Use two signals together.</p>
       <ol class="steps">
         <li><strong>Webhook</strong>A scheduled charge sends <code>subscription.charge_succeeded</code> with <code>subscriptionId</code>, <code>externalId</code>, <code>amount</code> and the new <code>nextChargeAt</code>. Extend access to <code>nextChargeAt</code>. A manual charge sends <code>payment.authorised</code> instead. <span class="badge verified">Verified</span></li>
-        <li><strong>Polling</strong>Plorea does not redeliver failed webhooks, and sends nothing for a failed charge. Run a scheduled job that reads each subscription. If <code>nextChargeAt</code> is more than an hour in the past and the status is not <code>canceled</code>, the renewal did not complete. See <a href="dunning.html">Failed charges and dunning</a>.</li>
+        <li><strong>Polling</strong>Plorea does not redeliver failed webhooks. Run a scheduled job that reads each subscription. Look at it if the status is <code>past_due</code>, or if <code>nextChargeAt</code> is more than an hour in the past and the status is not <code>canceled</code> or <code>paused</code>. See <a href="dunning.html">Failed charges and dunning</a>.</li>
       </ol>
       <div class="tabs">
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
@@ -787,7 +798,7 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
         ?-&gt;extendAccessTo($subscription-&gt;nextChargeAt); // idempotent
 });
 
-// Hourly: subscriptions that are overdue or report payment_failed.
+// Hourly: subscriptions that are past_due, payment_failed or overdue.
 foreach (Plorea::subscriptions()-&gt;needingAttention('membership-456') as $subscription) {
     // Ask the customer for a new card.
 }</code></pre></div>
@@ -798,9 +809,11 @@ if (event.type === 'subscription.charge_succeeded') {
 
 // Hourly job.
 const sub = await plorea('GET', `subscriptions/${id}?platform=acme`);
-const overdue = sub.status !== 'canceled'
+const overdue = !['canceled', 'paused'].includes(sub.status)
   &amp;&amp; sub.nextChargeAt
-  &amp;&amp; Date.parse(sub.nextChargeAt) + 3600e3 &lt; Date.now();</code></pre></div>
+  &amp;&amp; Date.parse(sub.nextChargeAt) + 3600e3 &lt; Date.now();
+// past_due moves nextChargeAt forward, so it is never overdue: check it too.
+const needsAttention = overdue || sub.status === 'past_due' || sub.status === 'payment_failed';</code></pre></div>
       </div>
 
       <h2>Webhooks and events</h2>
@@ -810,22 +823,23 @@ const overdue = sub.status !== 'canceled'
           <tbody>
             <tr><td>Scheduled charge succeeds</td><td><code>subscription.charge_succeeded</code> <span class="badge verified">Verified</span></td></tr>
             <tr><td>Manual charge succeeds</td><td><code>payment.authorised</code> <span class="badge verified">Verified</span></td></tr>
-            <tr><td>Scheduled charge fails</td><td>None <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td>Scheduled charge fails</td><td><code>subscription.charge_failed</code>, seen in test. Not in Plorea's catalogue, and none arrived for the production failure. <span class="badge verified">Verified</span> in test</td></tr>
             <tr><td>Cancel, reactivate</td><td>None <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td>Pause, resume</td><td>None in the catalogue <span class="badge unobserved">Not observed</span></td></tr>
             <tr><td>Create, update</td><td>None seen <span class="badge open">Open question</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout gap">
         <p class="callout-title">What would help</p>
-        <p>A <code>subscription.charge_failed</code> webhook with a refusal reason. Webhooks for cancel and reactivate. Paging on both list endpoints. Lookup of scheduled charges on <code>payments/status</code>. A native pause. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+        <p><code>subscription.charge_failed</code> in the official catalogue, with a stable refusal code and the next retry time. Webhooks for cancel, reactivate, pause and resume. Paging on both list endpoints. Lookup of scheduled charges on <code>payments/status</code>. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
       </div>
 
       <h2>Next steps</h2>
       <div class="cards">
         <a class="card" href="subscription-workflows.html"><h3>Subscription workflows</h3><p>Price increases, upgrades, pauses, interval changes, card swaps and cancellation recipes.</p></a>
         <a class="card" href="dunning.html"><h3>Failed charges and dunning</h3><p>How to find renewals that did not complete, and how to recover them.</p></a>
-        <a class="card" href="webhooks.html"><h3>Webhooks</h3><p>Verify signatures and handle <code>subscription.charge_succeeded</code>.</p></a>
+        <a class="card" href="webhooks.html"><h3>Webhooks</h3><p>Verify signatures and handle <code>subscription.charge_succeeded</code> and <code>subscription.charge_failed</code>.</p></a>
       </div>
     </article>
   </main>

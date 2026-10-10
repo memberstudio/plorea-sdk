@@ -294,6 +294,7 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
+      <p>A delete returns a short body: <code>{paymentMethodId, tenantId, customerId, shopperReference, environment, status, previousStatus, cancelledAt, updatedAt}</code>. A repeat delete returns <code>{paymentMethodId, tenantId, status, alreadyCancelled, updatedAt}</code>. See <a href="api-reference.html#delete-a-payment-method">Delete a payment method</a>. <span class="badge verified">Verified</span></p>
       <p>The setup responses carry a subset. The hosted setup adds <code>adyenPaymentLinkId</code> and <code>adyenPaymentLinkUrl</code>. The session setup adds <code>sessionId</code>, <code>sessionData</code>, <code>channel</code>, <code>clientKey</code>, <code>amount</code> (<code>100</code>, the 1 NOK verification) and <code>currency</code>.</p>
 
       <h3 id="payment-method-statuses">Payment method statuses</h3>
@@ -304,6 +305,7 @@ stateDiagram-v2
             <tr><td><code>pending_setup</code></td><td>The customer has not completed the setup.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>active</code></td><td>The card is stored and chargeable.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>failed</code></td><td>The 1 NOK verification was refused. Final. Start a new setup.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>cancelled</code></td><td>Deleted. Final. UK spelling, unlike a subscription's <code>canceled</code>. The card fields stay. A new subscription on it returns <code>400</code>. A sibling method that shares the stored card stays <code>active</code>.</td><td><span class="badge verified">Verified</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -337,12 +339,12 @@ stateDiagram-v2
             <tr><td><code>quantity</code></td><td class="type">integer</td><td>yes</td><td>A label. We have no evidence that it multiplies the amount.</td></tr>
             <tr><td><code>interval</code></td><td class="type">object</td><td>no</td><td><code>{unit, count}</code>. Unit is <code>day</code>, <code>week</code>, <code>month</code> or <code>year</code>. Cannot be changed.</td></tr>
             <tr><td><code>trialEndsAt</code></td><td class="type">datetime</td><td>yes</td><td>End of the trial.</td></tr>
-            <tr><td><code>nextChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>When the scheduler charges next. Equals <code>trialEndsAt</code> during a trial.</td></tr>
+            <tr><td><code>nextChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>When the scheduler charges next. Equals <code>trialEndsAt</code> during a trial. Moves to the retry when <code>past_due</code>. Null when <code>paused</code> or <code>canceled</code>.</td></tr>
             <tr><td><code>retryPolicy</code></td><td class="type">object</td><td>no</td><td><code>{maxRetries, retryIntervalDays}</code>.</td></tr>
-            <tr><td><code>retryCount</code></td><td class="type">integer</td><td>no</td><td>Retries used on the current failed charge. Always 0 in test. <span class="badge unobserved">Non-zero not observable</span></td></tr>
+            <tr><td><code>retryCount</code></td><td class="type">integer</td><td>no</td><td>Failed attempts on the current charge. <code>1</code> after the first failed scheduled charge, seen in production. Always 0 in test. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>lastChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>Time of the last successful charge.</td></tr>
-            <tr><td><code>lastPaymentReference</code></td><td class="type">string</td><td>yes</td><td><code>{subscriptionId}-{chargeId}</code> of the last charge.</td></tr>
-            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>Reason for a failed charge. Never populated in test. <span class="badge unobserved">Not observable in test</span></td></tr>
+            <tr><td><code>lastPaymentReference</code></td><td class="type">string</td><td>yes</td><td><code>{subscriptionId}-{chargeId}</code> of the last charge, also a failed one.</td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>The provider's free-text reason for a failed charge, for example <code>"PaymentDetail not found"</code>. Seen in production. Show it, never branch on it. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>canceledAt</code></td><td class="type">datetime</td><td>yes</td><td>When it was cancelled.</td></tr>
             <tr><td><code>cancelReason</code></td><td class="type">string</td><td>yes</td><td>The reason sent with the cancel.</td></tr>
             <tr><td><code>accessEndsAt</code></td><td class="type">datetime</td><td>yes</td><td>Last charge plus one interval. Null when cancelled during a trial: treat null as "access ends now". <span class="badge verified">Verified</span></td></tr>
@@ -352,6 +354,7 @@ stateDiagram-v2
             <tr><td><code>description</code></td><td class="type">string</td><td>yes</td><td>Display text.</td></tr>
             <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>Decimal, for example <code>0.25</code>.</td></tr>
             <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre. Plorea does not calculate it.</td></tr>
+            <tr><td><code>merchantOrgNr</code></td><td class="type">string</td><td>yes</td><td>The company that receives the money. Returned on reads since 2026-09-22. Null when none was set. The name and email are never returned. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. Empty comes back as <code>[]</code>.</td></tr>
             <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
             <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>Last change.</td></tr>
@@ -365,9 +368,10 @@ stateDiagram-v2
           <thead><tr><th>Endpoint</th><th>Shape</th></tr></thead>
           <tbody>
             <tr><td><code>POST /subscriptions</code></td><td>Core fields plus <code>retryPolicy</code>. Echoes <code>merchantOrgNr</code> as the last key when sent. No <code>accessEndsAt</code>, no <code>lastChargeAt</code>. <span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>GET /subscriptions/{id}</code></td><td>Full object. No <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>GET /subscriptions</code></td><td><code>{externalId | tenantId, count, items}</code>. Items have no <code>retryPolicy</code>, <code>accessEndsAt</code>, VAT or <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Core fields, VAT and card IDs, <code>updatedAt</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET /subscriptions/{id}</code></td><td>Full object, with <code>merchantOrgNr</code> since 2026-09-22. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET /subscriptions</code></td><td><code>{externalId | tenantId, count, items}</code>. Items have no <code>retryPolicy</code>, <code>accessEndsAt</code> or VAT. Items have <code>merchantOrgNr</code> since 2026-09-22. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Core fields, VAT and card IDs, <code>updatedAt</code>. The same shape for a pause or a resume. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET …/charges</code></td><td><code>{subscriptionId, items}</code>. Adds <code>merchantOrgNr</code> to the envelope, not to the items, when a merchant is set. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST …/cancel</code></td><td><code>{subscriptionId, status, canceledAt, accessEndsAt, reason}</code>. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST …/reactivate</code></td><td><code>{subscriptionId, tenantId, status, nextChargeAt, reactivatedAt, paymentMethodId, amount, interval, externalId, title}</code>. <span class="badge verified">Verified</span></td></tr>
           </tbody>
@@ -381,8 +385,10 @@ stateDiagram-v2
           <tbody>
             <tr><td><code>active</code></td><td>Billing on schedule.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>trialing</code></td><td>In a trial. The first charge happens at <code>trialEndsAt</code>. A separate state, not a kind of active.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>past_due</code></td><td>A scheduled charge failed. Plorea retries it. <code>retryCount</code> and <code>failureReason</code> are set, and <code>nextChargeAt</code> is the retry. Not overdue. Seen in production on 2026-10-01.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paused</code></td><td>Billing paused with <code>PATCH status</code>. <code>nextChargeAt</code> is null. Resume with <code>active</code> and a future <code>nextChargeAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>canceled</code></td><td>Cancelled. US spelling. Access continues until <code>accessEndsAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>payment_failed</code></td><td>A charge failed and retries are exhausted or pending. Documented by Plorea. Never observed.</td><td><span class="badge unobserved">Not observable in test</span></td></tr>
+            <tr><td><code>payment_failed</code></td><td>Documented by Plorea. Never observed. The failure status seen on the wire is <code>past_due</code>.</td><td><span class="badge unobserved">Not observed</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -395,9 +401,12 @@ stateDiagram-v2
   trialing --> canceled: cancel (accessEndsAt null)
   active --> canceled: cancel
   canceled --> active: reactivate
-  active --> payment_failed: charge fails (unobserved)
+  active --> paused: PATCH status paused
+  paused --> active: PATCH status active + nextChargeAt
+  active --> past_due: scheduled charge fails
+  past_due --> past_due: retry fails (unobserved)
         </pre>
-        <figcaption>Subscription states. The transition to <code>payment_failed</code> cannot be produced in test. How a subscription leaves <code>payment_failed</code> is an open question. Reactivate works only from <code>canceled</code>.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. What follows the last retry is an open question. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. <code>payment_failed</code> is documented but never seen, so it is not drawn.</figcaption>
       </figure>
 
       <h3>Interval units</h3>
@@ -425,7 +434,7 @@ stateDiagram-v2
       </div>
 
       <h3>Charge history item</h3>
-      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code> newest first. <span class="badge verified">Verified</span></p>
+      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code> newest first. With a merchant, the envelope also has <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
@@ -438,9 +447,9 @@ stateDiagram-v2
             <tr><td><code>amount</code></td><td class="type">object</td><td>no</td><td><code>{currency, value}</code>.</td></tr>
             <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>VAT rate.</td></tr>
             <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre.</td></tr>
-            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"authorised"</code>. Failed charge values are not observable in test.</td></tr>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"authorised"</code> or <code>"failed"</code>. <code>"failed"</code> was seen in production on a scheduled charge. Test cannot produce it.</td></tr>
             <tr><td><code>retryNumber</code></td><td class="type">integer</td><td>no</td><td>0 for the first attempt.</td></tr>
-            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>Null on every observed charge.</td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>Null on a successful charge. The provider's free text on a failed one.</td></tr>
             <tr><td><code>reason</code></td><td class="type">string</td><td>no</td><td><code>"manual_charge"</code> or <code>"scheduled_charge"</code>.</td></tr>
             <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
             <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>Last change.</td></tr>
@@ -496,7 +505,7 @@ stateDiagram-v2
 }</code></pre>
 
       <h3>Charge event data</h3>
-      <p>Sent with <code>subscription.charge_succeeded</code> for a scheduled charge. <span class="badge verified">Verified</span></p>
+      <p>Sent with <code>subscription.charge_succeeded</code> for a successful scheduled charge. <span class="badge verified">Verified</span></p>
       <pre data-title="subscription.charge_succeeded"><code class="lang-json">{
   "eventId": "evt_00000000000000000000000000000002",
   "createdAt": "2026-09-04T10:04:58.000Z",
@@ -515,6 +524,25 @@ stateDiagram-v2
     "environment": "test"
   }
 }</code></pre>
+      <p>Sent with <code>subscription.charge_failed</code> for a failed scheduled charge. The same fields, plus <code>failureReason</code> and <code>retryCount</code>. No <code>pspReference</code> and no <code>nextChargeAt</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="subscription.charge_failed"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000003",
+  "createdAt": "2026-10-06T20:34:59.157Z",
+  "tenantId": "acme",
+  "type": "subscription.charge_failed",
+  "data": {
+    "subscriptionId": "sub_test_example",
+    "chargeId": "chg_test_example_3",
+    "reference": "sub_test_example-chg_test_example_3",
+    "customerId": "golden-customer-001",
+    "shopperReference": "acme-member-001",
+    "externalId": "membership-001",
+    "amount": { "value": 29900, "currency": "NOK" },
+    "failureReason": "PaymentDetail not found",
+    "retryCount": 1,
+    "environment": "test"
+  }
+}</code></pre>
 
       <h3 id="event-types">Event types</h3>
       <div class="table-wrap">
@@ -525,10 +553,11 @@ stateDiagram-v2
             <tr><td><code>payment.failed</code></td><td>A payment is declined. Never <code>payment.refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>A scheduled charge succeeded.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td>A scheduled charge failed. Not in Plorea's catalogue, but captured in test on 2026-10-01 and 2026-10-06. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</td><td><span class="badge verified">Verified</span></td></tr>
           </tbody>
         </table>
       </div>
-      <p>No event is sent for card setup, subscription cancel, reactivate or a failed charge. No <code>payment.captured</code> event exists. <span class="badge stated">Stated by Plorea</span></p>
+      <p>No event is sent for card setup, subscription cancel or reactivate. No <code>payment.captured</code> event exists. <span class="badge stated">Stated by Plorea</span> Plorea also said a failed charge sends nothing. The capture above shows otherwise.</p>
 
       <h2>Error</h2>
       <p>Every error has the same body: one <code>error</code> string. Branch on the HTTP status. The message is a fixed template. See <a href="errors.html">Errors and retries</a>.</p>

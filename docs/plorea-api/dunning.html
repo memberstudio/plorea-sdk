@@ -17,12 +17,12 @@
       <header class="page-head">
         <p class="eyebrow">Recurring billing</p>
         <h1>Failed charges and dunning</h1>
-        <p class="lead">Dunning is the process of recovering a renewal that the bank declined: you detect the failure, tell the customer, get a working card, and collect the money. On Plorea, the detection step needs extra care, because a failed renewal sends no webhook.</p>
+        <p class="lead">Dunning is the process of recovering a renewal that the bank declined: you detect the failure, tell the customer, get a working card, and collect the money. On Plorea, the detection step needs extra care, because the failure webhook is new, unofficial and never redelivered.</p>
       </header>
 
       <div class="callout danger">
-        <p class="callout-title">A failed renewal is silent</p>
-        <p>Plorea sends no webhook when a scheduled charge fails. <span class="badge stated">Stated by Plorea</span> If you only listen for webhooks, a declined renewal looks exactly like "nothing happened". You must poll. This page shows how.</p>
+        <p class="callout-title">Do not rely on the failure webhook alone</p>
+        <p>A failed scheduled charge moves the subscription to <code>past_due</code>. <span class="badge verified">Verified</span> in production. In test, Plorea also sent a <code>subscription.charge_failed</code> webhook. <span class="badge verified">Verified</span> in test. That event is not in Plorea's catalogue, none arrived for the production failure, and a failed delivery is never redelivered. You must poll as well. This page shows how.</p>
       </div>
 
       <h2>Two kinds of failure</h2>
@@ -32,46 +32,51 @@
           <thead><tr><th></th><th>Manual charge</th><th>Scheduled renewal</th></tr></thead>
           <tbody>
             <tr><td>Who starts it</td><td>You, with <code>POST /subscriptions/{id}/charge</code></td><td>Plorea's scheduler, at <code>nextChargeAt</code></td></tr>
-            <tr><td>How you learn about a decline</td><td>The HTTP response: <code>402</code> <span class="badge stated">Stated by Plorea</span></td><td>Only by polling. No webhook. <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td>How you learn about a decline</td><td>The HTTP response: <code>402</code> <span class="badge stated">Stated by Plorea</span></td><td>Polling: <code>status</code> becomes <code>past_due</code>. <span class="badge verified">Verified</span> Also <code>subscription.charge_failed</code>, seen in test only. <span class="badge verified">Verified</span> in test</td></tr>
             <tr><td>How you learn about a state problem</td><td><code>400</code>: subscription not chargeable, or card not active <span class="badge verified">Verified</span></td><td>Not applicable</td></tr>
-            <tr><td>Retries</td><td>None. You decide.</td><td>Plorea retries by <code>retryPolicy</code> <span class="badge stated">Stated by Plorea</span></td></tr>
-            <tr><td>Can you reproduce it in test?</td><td>No <span class="badge unobserved">Not observable in test</span></td><td>No <span class="badge unobserved">Not observable in test</span></td></tr>
+            <tr><td>Retries</td><td>None. You decide.</td><td>Plorea retries by <code>retryPolicy</code>. The first retry was scheduled one <code>retryIntervalDays</code> later. <span class="badge verified">Verified</span> in production</td></tr>
+            <tr><td>Can you reproduce it in test?</td><td>No <span class="badge unobserved">Not observable in test</span></td><td>Not with a decline. A method whose stored card is gone fails the same way. <span class="badge unobserved">Not observable in test</span></td></tr>
           </tbody>
         </table>
       </div>
 
       <h2>What is known</h2>
-      <p>No failed subscription charge has ever been observed in the test environment. This is not for lack of trying. Adyen's test cards decline only through fields on the payment request. For a stored card, that request is the card setup. A card that declines therefore fails the setup and is never stored. No test card stores successfully and then declines later. <span class="badge unobserved">Not observable in test</span></p>
-      <p>So the failure shapes below come from Plorea's description, not from a response we have seen. Write code that tolerates small differences.</p>
+      <p>One failed scheduled charge was captured in production on 2026-10-01. The stored card could no longer be found by the provider. In test, the same cause produced the <code>subscription.charge_failed</code> webhook three times. A real decline has not been observed. Adyen's test cards decline only through fields on the payment request. For a stored card, that request is the card setup, so a declining card is never stored. <span class="badge unobserved">Not observable in test</span></p>
+      <p>Write code that tolerates small differences between a decline and the captured case.</p>
 
       <dl class="fields">
         <dt>402 Payment Required on a manual charge</dt>
         <dd>Means the card was declined. Nothing else returns 402. A canceled subscription or an inactive card returns 400 instead. <span class="badge stated">Stated by Plorea</span> for 402, <span class="badge verified">Verified</span> for 400.</dd>
+        <dt>status: "past_due"</dt>
+        <dd>The subscription status after a failed scheduled charge. <code>retryCount</code> is <code>1</code>. <code>failureReason</code> holds the provider's message, for example <code>"PaymentDetail not found"</code>. <code>lastChargeAt</code> stays at the last success. <code>lastPaymentReference</code> points at the failed charge. <span class="badge verified">Verified</span> in production</dd>
+        <dt>nextChargeAt after a failure</dt>
+        <dd>Moves to the failure time plus <code>retryPolicy.retryIntervalDays</code>: the next retry. A <code>past_due</code> subscription is therefore <strong>not</strong> overdue. Check the status as well as the date. <span class="badge verified">Verified</span> in production</dd>
         <dt>retryPolicy {maxRetries, retryIntervalDays}</dt>
-        <dd>Set on create. After a declined renewal the scheduler tries again every <code>retryIntervalDays</code> days, up to <code>maxRetries</code> times. <span class="badge stated">Stated by Plorea</span> The exact timing and what happens after the last retry have not been observed. <span class="badge open">Open question</span></dd>
+        <dd>Set on create. The default is <code>{maxRetries: 3, retryIntervalDays: 1}</code>. Later retries and the state after the last retry (a final status, or <code>canceled</code>) have not been observed. <span class="badge open">Open question</span></dd>
+        <dt>A failed item in the charge history</dt>
+        <dd><code>GET /subscriptions/{id}/charges</code> lists the failed attempt with <code>status: "failed"</code>, <code>reason: "scheduled_charge"</code>, <code>retryNumber: 0</code> and the same <code>failureReason</code>. <span class="badge verified">Verified</span> in production</dd>
+        <dt>subscription.charge_failed webhook</dt>
+        <dd><code>data</code> holds <code>subscriptionId</code>, <code>chargeId</code>, <code>reference</code>, <code>customerId</code>, <code>shopperReference</code>, <code>externalId</code>, <code>amount</code>, <code>failureReason</code>, <code>retryCount</code> and <code>environment</code>. It has no <code>pspReference</code> and no <code>nextChargeAt</code>. Whether it fires once per retry, or only for the first failure, is unknown. <span class="badge verified">Verified</span> in test</dd>
         <dt>status: "payment_failed"</dt>
-        <dd>The subscription status after a failed renewal, according to Plorea. Never observed. <span class="badge unobserved">Not observable in test</span></dd>
-        <dt>retryCount, failureReason on the subscription</dt>
-        <dd>Fields exist in every read. <code>retryCount</code> has always been <code>0</code> and <code>failureReason</code> always <code>null</code>. <span class="badge verified">Verified</span> for the shape. Their values after a failure are unknown.</dd>
-        <dt>retryNumber, failureReason on a charge</dt>
-        <dd>Fields exist on each item of <code>GET /subscriptions/{id}/charges</code>. Whether a failed attempt appears there as its own item is unknown. <span class="badge open">Open question</span></dd>
+        <dd>Named in Plorea's documentation. Never observed. The failure status seen on the wire is <code>past_due</code>. <span class="badge unobserved">Never observed</span></dd>
         <dt>No reason codes</dt>
-        <dd><code>failureReason</code> is <code>null</code> even for a genuine refusal on a card setup. <span class="badge verified">Verified</span> Do not branch on it. Branch on <code>status</code>.</dd>
+        <dd><code>failureReason</code> is free text from the provider, not a stable code. On a failed card setup it is <code>null</code> even for a genuine refusal. <span class="badge verified">Verified</span> Show it if you like. Do not branch on it. Branch on <code>status</code>.</dd>
       </dl>
 
       <h2>Detect failures by polling</h2>
       <p>The scheduler charges within seconds of <code>nextChargeAt</code> and then moves <code>nextChargeAt</code> forward by one interval. <span class="badge verified">Verified</span> This gives a reliable test that does not depend on any failure field:</p>
       <div class="callout tip">
         <p class="callout-title">The overdue rule</p>
-        <p>An <code>active</code> subscription whose <code>nextChargeAt</code> is more than a grace period in the past did not complete its cycle. Something went wrong: a decline, a retry in progress, or a stuck scheduler. A <code>canceled</code> subscription is never overdue: it keeps its old <code>nextChargeAt</code>.</p>
+        <p>An <code>active</code> subscription whose <code>nextChargeAt</code> is more than a grace period in the past did not complete its cycle. Something went wrong without a failure status, for example a stuck scheduler. A <code>canceled</code> or <code>paused</code> subscription is never overdue. A <code>past_due</code> one is not overdue either, because its <code>nextChargeAt</code> moved to the next retry.</p>
       </div>
-      <p>Flag a subscription for attention when either test is true:</p>
+      <p>Flag a subscription for attention when any test is true:</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Test</th><th>Basis</th></tr></thead>
           <tbody>
-            <tr><td><code>status</code> is <code>payment_failed</code></td><td>Plorea's description. Never observed. <span class="badge unobserved">Not observable in test</span></td></tr>
-            <tr><td><code>status</code> is not <code>canceled</code>, and <code>nextChargeAt</code> + grace &lt; now</td><td>Fields observed on the wire. Carries the weight. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>status</code> is <code>past_due</code></td><td>A failed charge that Plorea retries. <span class="badge verified">Verified</span> in production</td></tr>
+            <tr><td><code>status</code> is <code>payment_failed</code></td><td>Plorea's documentation. Never observed. <span class="badge unobserved">Never observed</span></td></tr>
+            <tr><td><code>status</code> is not <code>canceled</code> or <code>paused</code>, and <code>nextChargeAt</code> + grace &lt; now</td><td>A cycle that stalled without a failure status. <span class="badge verified">Verified</span> fields</td></tr>
           </tbody>
         </table>
       </div>
@@ -80,7 +85,9 @@
         <pre class="mermaid">
 flowchart TD
   J[Scheduled job, e.g. hourly] --> L[GET /subscriptions?externalId=...]
-  L --> F{status payment_failed<br/>or nextChargeAt overdue?}
+  L --> P{status past_due<br/>or payment_failed?}
+  P -- yes --> D
+  P -- no --> F{nextChargeAt overdue?}
   F -- no --> OK[Nothing to do]
   F -- yes --> C[GET /subscriptions/id/charges]
   C --> N{Newest charge<br/>authorised and recent?}
@@ -93,8 +100,9 @@ flowchart TD
       <ol class="steps">
         <li><strong>Schedule a job</strong>Run it at least as often as your shortest grace period. Hourly suits monthly plans.</li>
         <li><strong>List subscriptions per billed entity</strong>Call <code>GET /subscriptions?externalId=…</code> or <code>?tenantId=…</code>. The list has never been seen to paginate. If you hold many subscriptions per filter, compare <code>count</code> with your own records. <span class="badge open">Open question</span></li>
-        <li><strong>Apply the two tests</strong>Keep the subscriptions that are <code>payment_failed</code> or overdue.</li>
-        <li><strong>Read the charge history</strong>Call <code>GET /subscriptions/{id}/charges</code>. The newest item comes first.</li>
+        <li><strong>Apply the tests</strong>Keep the subscriptions that are <code>past_due</code>, <code>payment_failed</code> or overdue.</li>
+        <li><strong>Start dunning for a failure status</strong>A <code>past_due</code> subscription reports the failure itself. Do not compare dates: its <code>nextChargeAt</code> is the next retry, not the missed renewal.</li>
+        <li><strong>Read the charge history for an overdue one</strong>Call <code>GET /subscriptions/{id}/charges</code>. The newest item comes first.</li>
         <li><strong>Decide</strong>A charge covers the missed renewal only if it is <code>authorised</code> and its <code>createdAt</code> is on or after the missed <code>nextChargeAt</code>. An older success does not count. If no charge covers the missed renewal, start dunning.</li>
       </ol>
 
@@ -109,10 +117,17 @@ curl "https://payments.plorea.no/subscriptions/sub_test_acme_001/charges?platfor
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Facades\Plorea;
 
 // Scheduled, e.g. hourly, once per billed entity.
-// needingAttention() = payment_failed OR nextChargeAt older than graceMinutes.
+// needingAttention() = past_due OR payment_failed OR nextChargeAt older than graceMinutes.
 $flagged = Plorea::subscriptions()-&gt;needingAttention('member-1001', graceMinutes: 60);
 
 foreach ($flagged as $subscription) {
+    if ($subscription-&gt;isPastDue() || $subscription-&gt;hasPaymentFailure()) {
+        // Plorea reports the failure. nextChargeAt is the next retry, not the miss.
+        StartDunning::dispatch($subscription-&gt;id);
+        continue;
+    }
+
+    // Overdue: the cycle stalled without a failure status.
     $missedAt = $subscription-&gt;nextChargeAt;
     $latest = Plorea::subscriptions()-&gt;charges($subscription-&gt;id)-&gt;first();
 
@@ -122,8 +137,7 @@ foreach ($flagged as $subscription) {
         &amp;&amp; $latest-&gt;createdAt?-&gt;greaterThanOrEqualTo($missedAt) === true;
 
     if (! $covered) {
-        // Start dunning. Do not branch on failureReason: it is null.
-        StartDunning::dispatch($subscription-&gt;id, $missedAt);
+        StartDunning::dispatch($subscription-&gt;id);
     }
 }
 
@@ -142,14 +156,20 @@ const list = await fetch(
   { headers },
 ).then((r) =&gt; r.json());
 
-const flagged = list.items.filter((s) =&gt;
-  s.status === 'payment_failed' ||
-  (s.status !== 'canceled' &amp;&amp;
-    s.nextChargeAt &amp;&amp;
-    new Date(s.nextChargeAt).getTime() + GRACE_MS &lt; Date.now()),
-);
+const failed = (s) =&gt; s.status === 'past_due' || s.status === 'payment_failed';
+const overdue = (s) =&gt;
+  !['canceled', 'paused'].includes(s.status) &amp;&amp;
+  s.nextChargeAt &amp;&amp;
+  new Date(s.nextChargeAt).getTime() + GRACE_MS &lt; Date.now();
 
-for (const s of flagged) {
+for (const s of list.items) {
+  // Plorea reports the failure. nextChargeAt is the next retry, not the miss.
+  if (failed(s)) {
+    await startDunning(s.subscriptionId);
+    continue;
+  }
+  if (!overdue(s)) continue;
+
   const { items } = await fetch(
     `${base}/subscriptions/${s.subscriptionId}/charges?platform=acme`,
     { headers },
@@ -164,13 +184,14 @@ for (const s of flagged) {
     new Date(latest.createdAt).getTime() &gt;= missedAt;
 
   if (!covered) {
-    await startDunning(s.subscriptionId, s.nextChargeAt);
+    await startDunning(s.subscriptionId);
   }
 }</code></pre></div>
       </div>
 
       <pre data-title="Response — GET /subscriptions/{id}/charges"><code class="lang-json">{
   "subscriptionId": "sub_test_acme_001",
+  "merchantOrgNr": null,
   "items": [
     {
       "subscriptionId": "sub_test_acme_001",
@@ -194,7 +215,32 @@ for (const s of flagged) {
       <h3>Choose a grace period</h3>
       <p>The grace period absorbs scheduler lag. Observed lag between <code>nextChargeAt</code> and the charge was from seconds to about 4.5 minutes. <span class="badge verified">Verified</span> 60 minutes is a safe default. Use a shorter value for daily plans. Do not use a value shorter than your job interval.</p>
 
-      <h3>Also use the success webhook</h3>
+      <h3>Use the webhooks as fast signals</h3>
+      <p><code>subscription.charge_failed</code> lets you open a dunning case at once. <span class="badge verified">Verified</span> in test. Treat it as a ping: fetch the subscription and read the history. Deduplicate on the body's <code>eventId</code>. Keep the polling job, because a lost delivery is never redelivered and a stalled cycle sends nothing.</p>
+      <div class="tabs">
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Events\SubscriptionChargeFailed;
+use MemberFlow\Plorea\Facades\Plorea;
+
+Event::listen(SubscriptionChargeFailed::class, function (SubscriptionChargeFailed $event) {
+    $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
+
+    if ($subscription-&gt;isPastDue() || $subscription-&gt;hasPaymentFailure()) {
+        StartDunning::dispatch($subscription-&gt;id); // idempotent per subscription
+    }
+    // $event-&gt;failureReason is free text: show it, never branch on it.
+});</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// In your webhook handler, after you verify the signature.
+if (event.type === 'subscription.charge_failed') {
+  const s = await fetch(
+    `${base}/subscriptions/${event.data.subscriptionId}?platform=acme`,
+    { headers },
+  ).then((r) =&gt; r.json());
+  if (s.status === 'past_due' || s.status === 'payment_failed') {
+    await startDunning(s.subscriptionId); // idempotent per subscription
+  }
+}</code></pre></div>
+      </div>
+
       <p><code>subscription.charge_succeeded</code> arrives for each successful renewal. <span class="badge verified">Verified</span> Use it to extend access and to close an open dunning case early. Do not use the absence of this webhook as the failure signal: failed deliveries are not redelivered, so a missing webhook can also mean a lost delivery. <span class="badge stated">Stated by Plorea</span></p>
 
       <h2>The dunning sequence</h2>
@@ -217,12 +263,12 @@ gantt
   Grace access              :active, g, 2026-11-01, 7d
   Suspend access            :crit, s, 2026-11-08, 1d
         </pre>
-        <figcaption>Retry timing is stated by Plorea, not observed. Build your own clock from the first time you flagged the subscription.</figcaption>
+        <figcaption>The first retry time was seen in production: <code>nextChargeAt</code> moved one <code>retryIntervalDays</code> forward. Later retries and the end of the window are not observed. Build your own clock from the first time you flagged the subscription.</figcaption>
       </figure>
 
       <ol class="steps">
         <li><strong>Open a dunning case</strong>Store the subscription ID, the missed <code>nextChargeAt</code>, the time you first flagged it and the end of the retry window. Use the case to avoid sending the same email twice.</li>
-        <li><strong>Notify the customer at once</strong>Say that the payment failed, the amount, and how long access continues. Link to a card update page. Do not guess the reason: the API does not give one.</li>
+        <li><strong>Notify the customer at once</strong>Say that the payment failed, the amount, and how long access continues. Link to a card update page. Do not guess the reason: <code>failureReason</code> is the provider's free text, not a stable code.</li>
         <li><strong>Keep access for a grace period</strong>Most declines are temporary: low balance, a blocked card, an expired card. A grace period of 3–7 days keeps good customers.</li>
         <li><strong>Collect a new card</strong>Run <a href="subscription-workflows.html#replace-the-card">Replace the card</a>: a new setup, then <code>PATCH paymentMethodId</code>.</li>
         <li><strong>Collect the missed amount</strong>See <a href="#collect-the-missed-renewal">Collect the missed renewal</a>.</li>
@@ -236,7 +282,7 @@ gantt
           <tbody>
             <tr><td>First flag</td><td>"We could not charge 199,00 kr for your Acme Gym membership. Your access continues until 8 November."</td><td>Update card</td></tr>
             <tr><td>Day 3</td><td>"Your payment is still open. Update your card to keep your membership."</td><td>Update card</td></tr>
-            <tr><td>Grace period ends</td><td>"Your membership is paused because the payment failed. Update your card to continue."</td><td>Update card and pay</td></tr>
+            <tr><td>Grace period ends</td><td>"Your membership is on hold because the payment failed. Update your card to continue."</td><td>Update card and pay</td></tr>
             <tr><td>Payment collected</td><td>"Thank you. We received 199,00 kr. Your membership is active."</td><td>None</td></tr>
           </tbody>
         </table>
@@ -253,7 +299,7 @@ gantt
       <ol class="steps">
         <li><strong>PATCH the new card first</strong>A retry can only succeed on a working card. Whether pending retries use the card stored at retry time is not confirmed. <span class="badge open">Open question</span></li>
         <li><strong>Re-read the subscription and the charges</strong>Check whether a retry already succeeded.</li>
-        <li><strong>Wait until the retry window ends</strong>The API does not say when Plorea stops retrying. Compute the end on your own clock: the time you first flagged the case, plus <code>maxRetries</code> × <code>retryIntervalDays</code>, plus a margin. Do not charge before that time.</li>
+        <li><strong>Wait until the retry window ends</strong>While the subscription is <code>past_due</code>, Plorea still retries and <code>nextChargeAt</code> is the next attempt. The API does not say when Plorea stops retrying. Compute the end on your own clock: the time you first flagged the case, plus <code>maxRetries</code> × <code>retryIntervalDays</code>, plus a margin. Do not charge before that time.</li>
         <li><strong>Charge once</strong>Call <code>POST /subscriptions/{id}/charge</code> without an <code>amount</code>. The subscription amount is used. Use <code>reason: "dunning_recovery"</code>.</li>
         <li><strong>Save the charge reference at once</strong>Store it on the case before any other step. If the case already has a reference, do not charge again. Reconcile that charge instead.</li>
         <li><strong>Handle 402 and 400</strong><code>402</code> means the new card also declined. <code>400</code> means the subscription is canceled or the card is not active.</li>
@@ -275,7 +321,9 @@ use MemberFlow\Plorea\Data\SubscriptionCharge;
 $subscriptions = Plorea::subscriptions();
 $subscription = $subscriptions-&gt;find($case-&gt;subscription_id);
 
-if (! $subscription-&gt;isOverdue() &amp;&amp; ! $subscription-&gt;hasPaymentFailure()) {
+if (! $subscription-&gt;isPastDue()
+    &amp;&amp; ! $subscription-&gt;hasPaymentFailure()
+    &amp;&amp; ! $subscription-&gt;isOverdue()) {
     $case-&gt;close(); // The renewal completed.
     return;
 }
@@ -349,10 +397,12 @@ $endsAt = $cancellation-&gt;accessEndsAt ?? now();
 $member-&gt;update(['access_ends_at' =&gt; $endsAt-&gt;min(now())]);</code></pre>
 
       <h2>Testing your dunning code</h2>
-      <p>You cannot produce a failed renewal in the Plorea test environment. <span class="badge unobserved">Not observable in test</span> Test with stubs instead:</p>
+      <p>You cannot produce a declined renewal in the Plorea test environment. <span class="badge unobserved">Not observable in test</span> Test with stubs instead:</p>
       <ul>
-        <li>Stub a subscription read with <code>nextChargeAt</code> in the past and <code>status: "active"</code>. This is the case that will actually happen.</li>
-        <li>Stub a subscription with <code>status: "payment_failed"</code>, a non-zero <code>retryCount</code> and a <code>null</code> <code>failureReason</code>.</li>
+        <li>Stub a subscription read with <code>status: "past_due"</code>, <code>retryCount: 1</code>, a text <code>failureReason</code> and a <code>nextChargeAt</code> in the <em>future</em>. This is the shape captured in production. Check that your job still flags it.</li>
+        <li>Stub a <code>subscription.charge_failed</code> delivery. Check that a duplicate <code>eventId</code> opens only one case.</li>
+        <li>Stub a subscription read with <code>nextChargeAt</code> in the past and <code>status: "active"</code>: a stalled cycle.</li>
+        <li>Stub a subscription with <code>status: "payment_failed"</code>, a non-zero <code>retryCount</code> and no <code>failureReason</code>. Plorea's documentation names this status.</li>
         <li>Stub a charge call that returns <code>402</code> with <code>{"error": "…"}</code>. Do not assert on the message text.</li>
         <li>With the PHP SDK, use <code>Plorea::fake()</code> and pass a fixed clock to <code>isOverdue()</code>.</li>
       </ul>
@@ -364,10 +414,9 @@ $member-&gt;update(['access_ends_at' =&gt; $endsAt-&gt;min(now())]);</code></pre
         <table>
           <thead><tr><th>Proposal</th><th>Why</th></tr></thead>
           <tbody>
-            <tr><td><code>subscription.charge_failed</code> webhook, with <code>retryNumber</code> and the next retry time <span class="badge proposal">Proposal</span></td><td>Removes the need to poll. Lets you notify the customer at once.</td></tr>
-            <tr><td><code>subscription.retries_exhausted</code> webhook or a final status <span class="badge proposal">Proposal</span></td><td>Tells you when Plorea stops retrying, so you know when a manual charge is safe.</td></tr>
+            <tr><td><code>subscription.charge_failed</code> in the official catalogue, sent in production, with the next retry time <span class="badge proposal">Proposal</span></td><td>The event exists in test but is undocumented. With a contract and <code>nextChargeAt</code>, you can rely on it and notify the customer at once.</td></tr>
+            <tr><td><code>subscription.retries_exhausted</code> webhook or a final status <span class="badge proposal">Proposal</span></td><td>Tells you what follows <code>past_due</code> after the last retry, so you know when a manual charge is safe.</td></tr>
             <tr><td>A <code>refusalReason</code> on failed charges <span class="badge proposal">Proposal</span></td><td>Lets you say "your card expired" instead of "the payment failed". Plorea has said <code>refusalReason</code> is coming for payments. <span class="badge stated">Stated by Plorea</span></td></tr>
-            <tr><td>Failed attempts in <code>GET /subscriptions/{id}/charges</code> <span class="badge proposal">Proposal</span></td><td>One place to read the full history, including declines.</td></tr>
             <tr><td>A "retry now" endpoint that settles the open renewal <span class="badge proposal">Proposal</span></td><td>Collects after a card update without the risk of a double charge.</td></tr>
             <tr><td>A test card or a test flag that declines a later charge <span class="badge proposal">Proposal</span></td><td>Makes dunning testable. For example, pass <code>RequestedTestAcquirerResponseCode</code> through on <code>POST /subscriptions/{id}/charge</code> in test.</td></tr>
             <tr><td>Webhook redelivery <span class="badge proposal">Proposal</span></td><td>A lost <code>charge_succeeded</code> delivery today looks like a failure.</td></tr>

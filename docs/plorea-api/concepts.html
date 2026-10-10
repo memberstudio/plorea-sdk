@@ -183,7 +183,7 @@ const format = (ore) =&gt;
       <p>Timestamps are ISO 8601 strings. Plorea returns UTC with milliseconds, for example <code>2026-09-04T09:55:00.000Z</code>. Some fields on stored cards carry a local offset, for example <code>2026-09-05T11:51:00+02:00</code>. Parse both forms. Send dates with an explicit offset.</p>
 
       <h2>Webhooks are signals, not facts</h2>
-      <p>A webhook tells you that something changed. It does not replace a read. Delivery can fail, and Plorea does not redeliver. <span class="badge stated">Stated by Plorea</span> Some changes send no webhook at all: card setup, cancel, reactivate and a failed subscription charge. <span class="badge stated">Stated by Plorea</span></p>
+      <p>A webhook tells you that something changed. It does not replace a read. Delivery can fail, and Plorea does not redeliver. <span class="badge stated">Stated by Plorea</span> Some changes send no webhook at all: card setup, cancel and reactivate. <span class="badge stated">Stated by Plorea</span> A failed scheduled charge now sends <code>subscription.charge_failed</code>, but that event is not in the catalogue and is not redelivered. <span class="badge verified">Verified in test</span></p>
       <p>So every integration needs two paths to the same code: a webhook handler and a scheduled poll. Both re-read the object and apply the result idempotently. See <a href="webhooks.html">Webhooks</a>.</p>
 
       <h2 id="evidence">The evidence model</h2>

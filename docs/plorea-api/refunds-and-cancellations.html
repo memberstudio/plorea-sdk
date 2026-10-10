@@ -249,7 +249,7 @@ stateDiagram-v2
         <li><strong>Book on the request.</strong> When the API answers <code>refund_requested</code>, record the refund in your books and tell the customer it is on its way.</li>
         <li><strong>Never time out into "failed".</strong> A job that polls every few minutes and gives up after one hour will report a healthy refund as failed. Do not reverse a refund in your books because time passed.</li>
         <li><strong>Use the webhook, poll as a backstop.</strong> Listen for <code>payment.refunded</code>. Poll the status a few times a day as a backstop, because a lost webhook is not redelivered. See <a href="webhooks.html">Webhooks</a>.</li>
-        <li><strong>Cancels are poll-only.</strong> Plorea sends no webhook for a cancel. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Subscription cancels are poll-only.</strong> Plorea sends no webhook for a subscription cancel. <span class="badge stated">Stated by Plorea</span></li>
       </ul>
 
       <h2 id="retry-safely">Retry safely</h2>

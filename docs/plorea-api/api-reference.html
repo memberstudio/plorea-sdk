@@ -58,7 +58,7 @@
         <table>
           <thead><tr><th>Status</th><th>Meaning</th><th>PHP SDK exception</th></tr></thead>
           <tbody>
-            <tr><td><code>400</code></td><td>Validation failed, or the object is in the wrong state (not chargeable, card not active, not canceled).</td><td><code>ValidationException</code></td></tr>
+            <tr><td><code>400</code></td><td>Validation failed, or the object is in the wrong state (not chargeable, card not active, not canceled, a status change that is not allowed).</td><td><code>ValidationException</code>. A card still in use on delete: <code>PaymentMethodInUseException</code>, a subclass.</td></tr>
             <tr><td><code>401</code></td><td>Bad API key, or wrong environment credentials.</td><td><code>AuthenticationException</code></td></tr>
             <tr><td><code>402</code></td><td>The card was declined on a subscription charge. Nothing else returns 402.</td><td><code>ChargeFailedException</code></td></tr>
             <tr><td><code>403</code></td><td><code>Tenant mismatch</code>: the object belongs to another tenant.</td><td><code>AuthenticationException</code></td></tr>
@@ -75,7 +75,7 @@
         <table>
           <thead><tr><th>Safe to retry</th><th>Not safe to retry blindly</th></tr></thead>
           <tbody>
-            <tr><td>Every <code>GET</code>. Refund and cancel with the <strong>same</strong> <code>modificationReference</code>. <code>PATCH</code> with the same body.</td><td>Create payment link, create session, card setup, create subscription, charge, cancel and reactivate subscription. Read first, then decide.</td></tr>
+            <tr><td>Every <code>GET</code>. Refund and cancel with the <strong>same</strong> <code>modificationReference</code>. <code>PATCH</code> with the same body (a repeated pause or resume returns <code>400</code>, not a second change). Delete a payment method.</td><td>Create payment link, create session, card setup, create subscription, charge, cancel and reactivate subscription. Read first, then decide.</td></tr>
           </tbody>
         </table>
       </div>
@@ -664,6 +664,8 @@ const { sessionId, sessionData, clientKey, environment } = await res.json();</co
           <tr><td><code>returnUrl</code><span class="req">required</span></td><td class="type">string</td><td>Where Adyen sends the customer afterwards.</td></tr>
           <tr><td><code>customerId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your customer ID inside the tenant.</td></tr>
           <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Text on the hosted page. Hosted flow only.</td></tr>
+          <tr><td><code>merchantOrgNr</code><span class="opt">optional</span></td><td class="type">string</td><td>Organisation number of the company the card is saved for. Plorea resolves that company's store from it. The 3D Secure challenge and the hosted page then show the company's name, not the platform's. <span class="badge stated">Stated by Plorea</span></td></tr>
+          <tr><td><code>merchantName</code><span class="opt">optional</span></td><td class="type">string</td><td>Name of that company. Send it together with <code>merchantOrgNr</code>.</td></tr>
           <tr><td><code>metadata</code><span class="opt">optional</span></td><td class="type">object</td><td>Free key-value data. Returned as <code>metadata</code>.</td></tr>
         </tbody>
       </table></div>
@@ -681,7 +683,9 @@ const { sessionId, sessionData, clientKey, environment } = await res.json();</co
     "shopperReference": "acme-member-42",
     "recurringType": "Subscription",
     "returnUrl": "https://example.com/cards/return",
-    "description": "Card for your Acme membership"
+    "description": "Card for your Acme membership",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Sports AS"
   }'</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\RecurringType;
 
@@ -689,6 +693,7 @@ $method = Plorea::paymentMethods()
     -&gt;setup('acme-member-42', RecurringType::Subscription, 'https://example.com/cards/return')
     -&gt;customerId('member-42')
     -&gt;description('Card for your Acme membership')
+    -&gt;merchant('999999999', 'Acme Sports AS')
     -&gt;create();
 
 return redirect($method-&gt;adyenPaymentLinkUrl);</code></pre></div>
@@ -707,6 +712,8 @@ return redirect($method-&gt;adyenPaymentLinkUrl);</code></pre></div>
     recurringType: 'Subscription',
     returnUrl: 'https://example.com/cards/return',
     description: 'Card for your Acme membership',
+    merchantOrgNr: '999999999',
+    merchantName: 'Acme Sports AS',
   }),
 });
 const method = await res.json(); // redirect to method.adyenPaymentLinkUrl</code></pre></div>
@@ -739,7 +746,7 @@ const method = await res.json(); // redirect to method.adyenPaymentLinkUrl</code
       <p>Same as the hosted setup, but returns an Adyen session for Drop-in on your own page or in a native app. Guide: <a href="checkout.html">Embedded and native checkout</a>.</p>
 
       <h4>Body parameters</h4>
-      <p>All fields of <a href="#set-up-a-card-hosted">the hosted setup</a> except <code>description</code>, plus:</p>
+      <p>All fields of <a href="#set-up-a-card-hosted">the hosted setup</a> except <code>description</code>, plus the fields below. <code>merchantOrgNr</code> and <code>merchantName</code> work the same way here.</p>
       <div class="table-wrap"><table class="params">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
@@ -834,7 +841,7 @@ const setup = await res.json();</code></pre></div>
   -H "X-Environment: test"</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$method = Plorea::paymentMethods()-&gt;find('pm_test_golden_method');
 
-$method-&gt;status;   // pending_setup | active | failed</code></pre></div>
+$method-&gt;status;   // pending_setup | active | failed | cancelled</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
   'https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme',
   { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
@@ -871,6 +878,7 @@ const method = await res.json();</code></pre></div>
           <tr><td><code>pending_setup</code></td><td>The customer has not finished. Card fields are <code>null</code>.</td></tr>
           <tr><td><code>active</code></td><td>Stored. <code>storedPaymentMethodId</code> and card fields are set. You can use it on a subscription.</td></tr>
           <tr><td><code>failed</code></td><td>Final. The verification was refused. Start a new setup. <code>failureReason</code> is always <code>null</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>cancelled</code></td><td>Final. You <a href="#delete-a-payment-method">deleted</a> it. UK spelling. The card fields stay. The read has no <code>cancelledAt</code>, so <code>updatedAt</code> is the cancellation time. <span class="badge verified">Verified</span></td></tr>
         </tbody>
       </table></div>
       <h4>Errors</h4>
@@ -882,6 +890,96 @@ const method = await res.json();</code></pre></div>
         </tbody>
       </table></div>
       <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="delete-a-payment-method">Delete a payment method</h2>
+      <div class="endpoint"><span class="method delete">DELETE</span><code>/payment-methods/{paymentMethodId}?platform=acme</code></div>
+      <p>Cancels a stored card so it can never be charged again. Plorea keeps the record and moves it to <code>cancelled</code>. A subscription that still uses the card blocks the delete. Guide: <a href="payment-methods.html#delete-a-card">Storing cards</a>. <span class="badge verified">Verified</span></p>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X DELETE "https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
+
+try {
+    $cancellation = Plorea::paymentMethods()-&gt;delete('pm_test_golden_method');
+
+    $cancellation-&gt;isCancelled();     // true
+    $cancellation-&gt;previousStatus;    // "active"
+    $cancellation-&gt;alreadyCancelled;  // true on a repeat call
+} catch (PaymentMethodInUseException $e) {
+    $e-&gt;activeSubscriptionIds();      // move or cancel these first
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme',
+  {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' },
+  },
+);
+const body = await res.json();
+if (res.status === 400 &amp;&amp; body.activeSubscriptionIds) {
+  // Still in use: move or cancel body.activeSubscriptionIds first
+}</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <div class="tabs">
+        <div class="tab" data-label="First delete"><pre data-title="200 OK"><code class="lang-json">{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "customerId": "golden-customer-001",
+    "shopperReference": "golden-shopper-001",
+    "environment": "test",
+    "status": "cancelled",
+    "previousStatus": "active",
+    "cancelledAt": "2026-10-06T09:49:58.709Z",
+    "updatedAt": "2026-10-06T09:49:58.709Z"
+}</code></pre></div>
+        <div class="tab" data-label="Repeat delete"><pre data-title="200 OK"><code class="lang-json">{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "status": "cancelled",
+    "alreadyCancelled": true,
+    "updatedAt": "2026-10-06T09:49:58.709Z"
+}</code></pre></div>
+      </div>
+      <ul>
+        <li>The body is short. It has no card details and no <code>recurringType</code>. <span class="badge verified">Verified</span></li>
+        <li>A repeat delete has no <code>previousStatus</code> and no <code>cancelledAt</code>. <span class="badge verified">Verified</span></li>
+        <li><a href="#get-a-payment-method">A read</a> after the delete returns the full method with <code>status: "cancelled"</code>. <code>storedPaymentMethodId</code> and the card fields do not change. <span class="badge verified">Verified</span></li>
+        <li>A new subscription on a cancelled method returns <code>400</code> <code>"Payment method is not active"</code>. <span class="badge verified">Verified</span></li>
+        <li>Spelling: payment methods say <code>cancelled</code>. Subscriptions say <code>canceled</code>.</li>
+      </ul>
+      <div class="callout warning">
+        <p class="callout-title">A sibling method can still be charged</p>
+        <p>Two payment methods for the same shopper can share one stored card (the same <code>storedPaymentMethodId</code>). The delete cancels only the method you name. The sibling still reads <code>active</code>, and a charge on it was authorised after the delete. <span class="badge verified">Verified</span> in test. <span class="badge unobserved">Not observed in production</span> To remove a card completely, delete every method that shares its <code>storedPaymentMethodId</code>.</p>
+      </div>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td>The card is in use. A <code>trialing</code> subscription blocks it too. The method stays <code>active</code>. The PHP SDK throws <code>PaymentMethodInUseException</code>.
+<pre><code class="lang-json">{
+    "error": "Payment method is attached to active subscriptions",
+    "paymentMethodId": "pm_test_golden_method",
+    "activeSubscriptionIds": ["sub_test_golden_trialing"],
+    "activeSubscriptions": [
+        {
+            "subscriptionId": "sub_test_golden_trialing",
+            "status": "trialing",
+            "nextChargeAt": "2026-10-13T09:49:57+00:00",
+            "title": "Golden membership"
+        }
+    ]
+}</code></pre></td></tr>
+          <tr><td><code>404</code></td><td><code>"Payment method not found"</code> — unknown ID. A bare <code>{"message": "Not Found"}</code> means the route is missing, not the method. Plorea added the route on 2026-10-05.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe. A repeat call returns <code>200</code> with <code>alreadyCancelled: true</code>. <span class="badge verified">Verified</span></p>
 
       <!-- ============================================================ -->
       <h2 id="create-a-subscription">Create a subscription</h2>
@@ -1037,7 +1135,7 @@ const subscription = await res.json();</code></pre></div>
     "vatAmount": 4980
 }</code></pre></div>
       </div>
-      <p><code>merchantOrgNr</code> is echoed on create only. Reads do not return it. Keep your own record. <span class="badge verified">Verified</span></p>
+      <p>Create echoes <code>merchantOrgNr</code> as the last key. Reads return it too, since 2026-09-22. <code>merchantName</code> and <code>merchantEmail</code> are never returned. Keep your own record of the company. <span class="badge verified">Verified</span></p>
 
       <h4>Errors</h4>
       <div class="table-wrap"><table>
@@ -1065,7 +1163,7 @@ const subscription = await res.json();</code></pre></div>
         <tbody>
           <tr><td><code>externalId</code><span class="opt">one of</span></td><td class="type">string</td><td>Your ID from create.</td></tr>
           <tr><td><code>tenantId</code><span class="opt">one of</span></td><td class="type">string</td><td>All subscriptions of a tenant.</td></tr>
-          <tr><td><code>status</code><span class="opt">optional</span></td><td class="type">string</td><td><code>active</code> | <code>trialing</code> | <code>canceled</code>.</td></tr>
+          <tr><td><code>status</code><span class="opt">optional</span></td><td class="type">string</td><td><code>active</code> | <code>trialing</code> | <code>past_due</code> | <code>paused</code> | <code>canceled</code>. A paused subscription is listed with and without <code>status=paused</code>. <span class="badge verified">Verified</span></td></tr>
         </tbody>
       </table></div>
 
@@ -1076,7 +1174,7 @@ const subscription = await res.json();</code></pre></div>
   -H "X-Environment: test"</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$subscriptions = Plorea::subscriptions()-&gt;forExternalId('MEMBERSHIP-42');
 
-// Overdue or failing subscriptions, for a dunning job:
+// past_due, failing or overdue subscriptions, for a dunning job:
 $attention = Plorea::subscriptions()-&gt;needingAttention('MEMBERSHIP-42');</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const qs = new URLSearchParams({ externalId: 'MEMBERSHIP-42', platform: 'acme' });
 const res = await fetch(`https://payments.plorea.no/subscriptions?${qs}`, {
@@ -1121,6 +1219,7 @@ const { count, items } = await res.json();</code></pre></div>
       <ul>
         <li>The top-level key echoes your filter: <code>externalId</code> or <code>tenantId</code>. <span class="badge verified">Verified</span></li>
         <li>List items are shorter than a full read. They have no <code>retryCount</code>, <code>lastChargeAt</code> or <code>accessEndsAt</code>. Use <a href="#get-a-subscription">get a subscription</a> for those.</li>
+        <li>Since 2026-09-22, each item also has <code>merchantOrgNr</code>, after <code>description</code>. It is <code>null</code> when no merchant was set. The capture above predates the field. <span class="badge verified">Verified</span></li>
         <li>No pagination has been seen: no cursor, page or <code>hasMore</code>. Whether the list is complete at large sizes is unknown. <span class="badge open">Open question</span></li>
       </ul>
       <p><strong>Retry safety:</strong> safe. Read-only.</p>
@@ -1191,11 +1290,57 @@ const subscription = await res.json();</code></pre></div>
         <tbody>
           <tr><td><code>trialing</code></td><td>No charge yet. <code>nextChargeAt</code> = <code>trialEndsAt</code>. <span class="badge verified">Verified</span></td></tr>
           <tr><td><code>active</code></td><td>The scheduler charges at <code>nextChargeAt</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>past_due</code></td><td>A scheduled charge failed and Plorea retries it. <code>retryCount</code> and <code>failureReason</code> are set. <code>nextChargeAt</code> moves to the retry, so a <code>past_due</code> subscription is not overdue. Seen in production on 2026-10-01. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>paused</code></td><td>You <a href="#pause-and-resume">paused</a> it. <code>nextChargeAt</code> is <code>null</code> and the scheduler skips it. The card and history stay. <span class="badge verified">Verified</span></td></tr>
           <tr><td><code>canceled</code></td><td>US spelling. <code>nextChargeAt</code> is <code>null</code>. Access runs to <code>accessEndsAt</code>. <span class="badge verified">Verified</span></td></tr>
-          <tr><td><code>payment_failed</code></td><td>Modelled in the SDK. Never observed: a failing scheduler charge cannot be produced in test. Watch <code>retryCount</code> and <code>failureReason</code>. <span class="badge unobserved">Not observable in test</span></td></tr>
+          <tr><td><code>payment_failed</code></td><td>Modelled in the SDK from Plorea's documentation. Never observed. The failure status seen on the wire is <code>past_due</code>. <span class="badge unobserved">Not observed</span></td></tr>
         </tbody>
       </table></div>
-      <p>Neither the read nor the list returns <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
+      <p>What happens after the last retry is not observed: a final status, or <code>canceled</code>. <span class="badge open">Open question</span></p>
+      <p>A <code>past_due</code> read, captured in production and anonymised:</p>
+      <pre data-title="200 OK — past_due"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden_past_due",
+    "tenantId": "test-tenant",
+    "customerId": "01TESTGOLDENCUSTOMER000001",
+    "paymentMethodId": "pm_test_golden_method",
+    "shopperReference": "golden-shopper-001",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "unit": "month",
+        "count": 1
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-10-02T12:44:58.594Z",
+    "retryPolicy": {
+        "maxRetries": 3,
+        "retryIntervalDays": 1
+    },
+    "retryCount": 1,
+    "lastChargeAt": null,
+    "lastPaymentReference": "sub_test_golden_past_due-chg_test_golden_past_due",
+    "failureReason": "PaymentDetail not found",
+    "canceledAt": null,
+    "cancelReason": null,
+    "accessEndsAt": null,
+    "status": "past_due",
+    "externalId": "GOLDEN-EXT-PAST-DUE",
+    "title": "Golden fixture plan",
+    "description": null,
+    "vatRate": null,
+    "vatAmount": null,
+    "merchantOrgNr": "999999999",
+    "metadata": [],
+    "createdAt": "2026-10-01T12:44:11.560Z",
+    "updatedAt": "2026-10-01T12:44:58.594Z"
+}</code></pre>
+      <p><code>nextChargeAt</code> is the failure time plus <code>retryPolicy.retryIntervalDays</code>. <code>lastPaymentReference</code> names the failed charge. <code>failureReason</code> is the provider's free text: show it, never branch on it.</p>
+      <p>Since 2026-09-22 the read returns <code>merchantOrgNr</code>, after <code>vatAmount</code>. It is <code>null</code> when no merchant was set. The <code>active</code> capture above predates the field. <span class="badge verified">Verified</span></p>
       <h4>Errors</h4>
       <div class="table-wrap"><table>
         <thead><tr><th>Status</th><th>When</th></tr></thead>
@@ -1209,7 +1354,7 @@ const subscription = await res.json();</code></pre></div>
       <!-- ============================================================ -->
       <h2 id="update-a-subscription">Update a subscription</h2>
       <div class="endpoint"><span class="method patch">PATCH</span><code>/subscriptions/{subscriptionId}</code></div>
-      <p>Changes the price, the card or the labels. Send only the fields that change. The interval cannot change: cancel and create a new subscription. Guide: <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+      <p>Changes the price, the card or the labels, and pauses or resumes billing. Send only the fields that change. The interval cannot change: cancel and create a new subscription. Guide: <a href="subscription-workflows.html">Subscription workflows</a>.</p>
 
       <h4>Body parameters</h4>
       <div class="table-wrap"><table class="params">
@@ -1223,6 +1368,8 @@ const subscription = await res.json();</code></pre></div>
           <tr><td><code>externalId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your ID.</td></tr>
           <tr><td><code>title</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan name.</td></tr>
           <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan description.</td></tr>
+          <tr><td><code>status</code><span class="opt">optional</span></td><td class="type">string</td><td><code>paused</code> or <code>active</code> only. See <a href="#pause-and-resume">Pause and resume</a>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>nextChargeAt</code><span class="opt">optional</span></td><td class="type">ISO 8601</td><td>Moves the next scheduled charge. Not in the past. Accepted on an <code>active</code>, <code>paused</code> or <code>trialing</code> subscription. On a <code>trialing</code> one, <code>trialEndsAt</code> does not change. <span class="badge verified">Verified</span></td></tr>
         </tbody>
       </table></div>
 
@@ -1294,10 +1441,133 @@ const subscription = await res.json();</code></pre></div>
         <thead><tr><th>Status</th><th>Body</th></tr></thead>
         <tbody>
           <tr><td><code>400</code></td><td><code>{"error": "Payment method is not active", "status": "failed"}</code></td></tr>
+          <tr><td><code>400</code></td><td>A status change that is not allowed. See <a href="#pause-and-resume">Pause and resume</a>.</td></tr>
           <tr><td><code>404</code></td><td>Unknown ID.</td></tr>
         </tbody>
       </table></div>
-      <p><strong>Retry safety:</strong> safe with the same body. The result is the same.</p>
+      <p><strong>Retry safety:</strong> safe with the same body. The result is the same. A repeated pause or resume returns <code>400</code> because the status already changed. Read the subscription and treat that as success.</p>
+
+      <h3 id="pause-and-resume">Pause and resume</h3>
+      <p>Plorea recommended this on 2026-10-01. Pause with <code>{"status": "paused"}</code>. Resume with <code>{"status": "active", "nextChargeAt": "…"}</code>. Only an <code>active</code> subscription can be paused. To hold a trial, move its <code>nextChargeAt</code> instead. <span class="badge verified">Verified</span></p>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Pause
+curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_golden \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "status": "paused" }'
+
+# Resume, next charge on 1 November
+curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_golden \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "status": "active", "nextChargeAt": "2026-11-01T08:00:00.000Z" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$paused = Plorea::subscriptions()-&gt;pause('sub_test_golden');
+$paused-&gt;isPaused();  // true
+
+$resumed = Plorea::subscriptions()-&gt;resume(
+    'sub_test_golden',
+    new DateTimeImmutable('2026-11-01 09:00', new DateTimeZone('Europe/Oslo')),
+);  // sent in UTC
+
+// Move a trial's first charge without a status change:
+Plorea::subscriptions()-&gt;update('sub_test_golden_trial')
+    -&gt;nextChargeAt(new DateTimeImmutable('+14 days'))
+    -&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">async function patch(id, body) {
+  const res = await fetch(`https://payments.plorea.no/subscriptions/${id}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+      'X-Environment': 'test',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ platform: 'acme', ...body }),
+  });
+  return res.json();
+}
+
+await patch('sub_test_golden', { status: 'paused' });
+await patch('sub_test_golden', {
+  status: 'active',
+  nextChargeAt: new Date('2026-11-01T08:00:00Z').toISOString(),
+});</code></pre></div>
+      </div>
+      <div class="tabs">
+        <div class="tab" data-label="Paused"><pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "externalId": "GOLDEN-EXT-PAUSE-001",
+    "title": "Golden fixture pause plan",
+    "description": null,
+    "amount": {
+        "value": 100,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "count": 1,
+        "unit": "month"
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": null,
+    "status": "paused",
+    "vatRate": null,
+    "vatAmount": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "updatedAt": "2026-10-01T21:05:03.507Z"
+}</code></pre></div>
+        <div class="tab" data-label="Resumed"><pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "externalId": "GOLDEN-EXT-PAUSE-001",
+    "title": "Golden fixture pause plan",
+    "description": null,
+    "amount": {
+        "value": 100,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "count": 1,
+        "unit": "month"
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-10-01T21:10:40.684Z",
+    "status": "active",
+    "vatRate": null,
+    "vatAmount": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "updatedAt": "2026-10-01T21:08:40.927Z"
+}</code></pre></div>
+      </div>
+      <p>Both answers are the short update shape. A read of a paused subscription keeps <code>lastChargeAt</code>, the card and the amounts. <code>accessEndsAt</code> and <code>canceledAt</code> stay <code>null</code>. There is no <code>pausedAt</code> field. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Request</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Pause an <code>active</code> one</td><td><code>200</code>, <code>status: "paused"</code>, <code>nextChargeAt: null</code></td></tr>
+          <tr><td>Pause a <code>trialing</code> one</td><td><code>400</code> <code>{"error": "Cannot change status from trialing to paused", "subscriptionId": "…", "currentStatus": "trialing", "allowedTransitions": []}</code></td></tr>
+          <tr><td>Pause a <code>paused</code> one</td><td><code>400</code>, <code>allowedTransitions: ["active"]</code></td></tr>
+          <tr><td>Pause a <code>canceled</code> one</td><td><code>400</code>, <code>allowedTransitions: []</code></td></tr>
+          <tr><td>Any other <code>status</code> value</td><td><code>400</code> <code>"status can only be set to active or paused"</code></td></tr>
+          <tr><td><code>nextChargeAt</code> alone on a <code>paused</code> one</td><td><code>200</code>, still <code>paused</code>, date set</td></tr>
+          <tr><td>Resume without a date, none set</td><td><code>400</code> <code>"nextChargeAt is required when reactivating a paused subscription"</code></td></tr>
+          <tr><td>Resume without a date, one set while paused</td><td><code>200</code>, <code>active</code>, keeps that date</td></tr>
+          <tr><td>Resume with a past date</td><td><code>400</code> <code>{"error": "nextChargeAt cannot be in the past", "received": "…"}</code>. Stays <code>paused</code>.</td></tr>
+          <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, <code>nextChargeAt</code> exactly as sent</td></tr>
+          <tr><td>Resume an <code>active</code> one</td><td><code>400</code>, <code>allowedTransitions: ["paused"]</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout warning">
+        <p class="callout-title">No charge was seen after a resume</p>
+        <p>Three subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged, checked up to 41 minutes after the date. Each stayed <code>active</code> with the passed date. Raised with Plorea on 2026-10-01. <span class="badge open">Open question</span> After a resume, watch for an overdue <code>nextChargeAt</code>.</p>
+      </div>
+      <p>Whether a webhook fires on pause or resume is not observed. Plorea's catalogue lists none. <span class="badge unobserved">Unobserved</span> Production is not observed.</p>
 
       <!-- ============================================================ -->
       <h2 id="charge-a-subscription">Charge a subscription</h2>
@@ -1460,7 +1730,8 @@ const { items } = await res.json();</code></pre></div>
       <ul>
         <li><code>reason</code> is <code>scheduled_charge</code> or <code>manual_charge</code>. Your own <code>reason</code> text from the charge call does not show here. <span class="badge verified">Verified</span></li>
         <li>There is no <code>count</code> and no pagination. A long history may be cut without notice. <span class="badge open">Open question</span></li>
-        <li>The shape of a failed scheduled charge is unknown: test cannot produce one. <span class="badge unobserved">Not observable in test</span></li>
+        <li>A failed scheduled charge reads <code>status: "failed"</code>, <code>reason: "scheduled_charge"</code>, <code>retryNumber: 0</code> and the provider's <code>failureReason</code>. Seen in production on 2026-10-01. Test cannot produce one. <span class="badge verified">Verified</span></li>
+        <li>A subscription with a merchant adds <code>merchantOrgNr</code> once, on the envelope: <code>{"subscriptionId", "merchantOrgNr", "items"}</code>. The items do not carry it. <span class="badge verified">Verified</span></li>
       </ul>
       <p><strong>Retry safety:</strong> safe. Read-only.</p>
 
@@ -1582,7 +1853,7 @@ const subscription = await res.json();</code></pre></div>
       </table></div>
       <p><strong>Retry safety:</strong> a second call returns <code>400</code> because the subscription is already active. It cannot double-charge. <span class="badge verified">Verified</span></p>
 
-      <p class="site-foot">Community draft. Response shapes captured from the Plorea test environment between August and September 2026 and anonymised.</p>
+      <p class="site-foot">Community draft. Response shapes captured from the Plorea test environment between August and October 2026 and anonymised. The <code>past_due</code> read is from production.</p>
     </article>
   </main>
   <aside id="toc" class="toc" aria-label="On this page"></aside>

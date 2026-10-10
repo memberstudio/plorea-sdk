@@ -117,19 +117,64 @@
       <p><span class="badge verified">Verified 2026-09-09</span> A request that misses two required fields returns a message that lists all five. Never parse a validation message.</p>
       <h3>No webhook for setup</h3>
       <p><span class="badge stated">Stated 2026-09-09</span> Poll <code>GET /payment-methods/{id}</code> after the customer returns.</p>
+      <h3>Setup takes a merchant</h3>
+      <p><span class="badge stated">Stated 2026-09-29/30</span> Both setup flows accept <code>merchantOrgNr</code> and an optional <code>merchantName</code>: the Drop-in session and the hosted setup. Plorea resolves the company's store from the number. The 3-D Secure challenge then shows the company's name, not the platform's. The hosted page also shows the name.</p>
+      <h3>Delete</h3>
+      <p><span class="badge verified">Verified 2026-10-06 (test)</span> <code>DELETE /payment-methods/{id}</code> moves the method to <code>cancelled</code>. Note the UK spelling; subscriptions use <code>canceled</code>.</p>
+      <ul>
+        <li><strong>200:</strong> a slim body with <code>status: "cancelled"</code>, <code>previousStatus</code> and <code>cancelledAt</code>. No card details.</li>
+        <li><strong>Repeat:</strong> <code>200</code> with <code>alreadyCancelled: true</code>. No <code>previousStatus</code> and no <code>cancelledAt</code>.</li>
+        <li><strong>In use:</strong> <code>400</code> with <code>activeSubscriptionIds</code> and <code>activeSubscriptions</code>. A <code>trialing</code> subscription also blocks the delete. The method stays <code>active</code>.</li>
+        <li><strong>Unknown ID:</strong> <code>404</code> "Payment method not found".</li>
+        <li><strong>Read after delete:</strong> the full method with <code>status: "cancelled"</code>. The card details stay. No <code>cancelledAt</code> key.</li>
+        <li><strong>New subscription on a cancelled method:</strong> <code>400</code> "Payment method is not active".</li>
+      </ul>
+      <p><span class="badge open">Open</span> A sibling method that shares the stored card (same shopper, same <code>storedPaymentMethodId</code>) still reads <code>active</code> after the delete. A manual charge on it was <code>Authorised</code>. Production is unobserved. See <a href="wishlist.html#delete-covers-the-stored-card">Delete covers the stored card</a>.</p>
+      <p><span class="badge verified">Verified</span> Until 2026-10-05 the route did not exist. Every <code>DELETE</code> returned a bare <code>404</code> <code>{"message":"Not Found"}</code>. That body means "route missing", not "method missing".</p>
 
       <h2>Subscriptions</h2>
       <h3>Statuses use US spelling</h3>
-      <p><span class="badge verified">Verified 2026-09-07</span> <code>active</code>, <code>trialing</code>, <code>canceled</code>. <code>trialing</code> is its own state. <code>payment_failed</code> is documented but has never been observed.</p>
+      <p><span class="badge verified">Verified 2026-09-07</span> <code>active</code>, <code>trialing</code>, <code>canceled</code>. <code>trialing</code> is its own state. <span class="badge verified">Verified 2026-10-01</span> <code>past_due</code> and <code>paused</code>. <code>payment_failed</code> is documented but has never been observed.</p>
       <h3>Billing starts immediately</h3>
       <p><span class="badge verified">Verified</span> Without a trial, the scheduler charges within seconds of create.</p>
       <h3>Trials</h3>
       <p><span class="badge verified">Verified 2026-09-07</span> With <code>trialEndsAt</code> set, the status is <code>trialing</code> and <code>nextChargeAt</code> equals <code>trialEndsAt</code>. Nothing is charged until then. A cancel during a trial returns <code>accessEndsAt: null</code>. Treat null as "access ends now".</p>
       <h3><code>merchantOrgNr</code> on subscriptions</h3>
-      <p><span class="badge verified">Verified 2026-09-21</span> <code>POST /subscriptions</code> accepts <code>merchantOrgNr</code>, <code>merchantName</code> and <code>merchantEmail</code>. The create response echoes only <code>merchantOrgNr</code>. A value that is not nine digits returns <code>400</code>. No read endpoint returns the field. Keep your own record.</p>
+      <p><span class="badge verified">Verified 2026-09-21</span> <code>POST /subscriptions</code> accepts <code>merchantOrgNr</code>, <code>merchantName</code> and <code>merchantEmail</code>. The create response echoes only <code>merchantOrgNr</code>. A value that is not nine digits returns <code>400</code>.</p>
+      <p><span class="badge verified">Verified 2026-09-22</span> Reads now return <code>merchantOrgNr</code>: <code>GET /subscriptions/{id}</code> and each item of <code>GET /subscriptions</code>. <code>GET /subscriptions/{id}/charges</code> returns it once, on the envelope <code>{subscriptionId, merchantOrgNr, items}</code>, not on each charge. A subscription without a merchant returns <code>null</code>. No read returns the name or the email. Keep your own record of those.</p>
       <p><span class="badge stated">Stated 2026-09-21</span> Every charge inherits the company. KYC and settlement splits start on the first charge. A stored card belongs to the shopper, not the company, so one card can pay for several companies in one tenant. No API exists to start or read KYC. To onboard a company early, create a payment link with its organisation number and pay it yourself.</p>
       <h3>Charge shapes</h3>
       <p><span class="badge verified">Verified 2026-09-04</span> <code>POST …/charge</code> returns <code>status: "charge_created"</code> and Adyen's <code>resultCode</code>. History items show <code>status: "authorised"</code> and <code>reason</code> <code>manual_charge</code> or <code>scheduled_charge</code>. The reference is <code>{subscriptionId}-{chargeId}</code>.</p>
+      <h3>A failed scheduled charge: <code>past_due</code></h3>
+      <p><span class="badge verified">Verified 2026-10-01 (production)</span> A live monthly subscription failed its first scheduled charge because the provider could not find the stored card. It read back:</p>
+      <ul>
+        <li><code>status: "past_due"</code> and <code>retryCount: 1</code>.</li>
+        <li><code>failureReason</code> with the provider's message, <code>"PaymentDetail not found"</code>.</li>
+        <li><code>lastChargeAt</code> unchanged. <code>lastPaymentReference</code> set to the failed charge's reference.</li>
+        <li><code>nextChargeAt</code> moved to the failure time plus <code>retryPolicy.retryIntervalDays</code>.</li>
+        <li><code>customerId</code> filled, for the first time.</li>
+      </ul>
+      <p>The charge item read <code>status: "failed"</code>, <code>reason: "scheduled_charge"</code>, <code>retryNumber: 0</code> and the same <code>failureReason</code>. Because <code>nextChargeAt</code> moves forward, a <code>past_due</code> subscription does not look overdue. Check the status as well. <span class="badge unobserved">Unobserved</span> The state after the last retry.</p>
+      <h3>Pause and resume</h3>
+      <p><span class="badge verified">Verified 2026-10-01 (test)</span> <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> pauses. <code>{"status": "active", "nextChargeAt": "…"}</code> resumes.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Request</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Pause an <code>active</code> subscription</td><td><code>200</code>, <code>paused</code>, <code>nextChargeAt: null</code></td></tr>
+            <tr><td>Read it back</td><td>Card, amounts and <code>lastChargeAt</code> kept. No <code>pausedAt</code> key.</td></tr>
+            <tr><td>Pause a <code>trialing</code> one</td><td><code>400</code> "Cannot change status from trialing to paused"</td></tr>
+            <tr><td>Pause a <code>paused</code> or <code>canceled</code> one</td><td><code>400</code> with <code>allowedTransitions</code></td></tr>
+            <tr><td><code>status: "frozen"</code></td><td><code>400</code> "status can only be set to active or paused"</td></tr>
+            <tr><td><code>nextChargeAt</code> alone on a <code>paused</code> one</td><td><code>200</code>, still <code>paused</code>, date set</td></tr>
+            <tr><td>Resume with no date, none set</td><td><code>400</code> "nextChargeAt is required when reactivating a paused subscription"</td></tr>
+            <tr><td>Resume with a past date</td><td><code>400</code> "nextChargeAt cannot be in the past"</td></tr>
+            <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, date exactly as sent</td></tr>
+            <tr><td>Resume an <code>active</code> one</td><td><code>400</code>, <code>allowedTransitions: ["paused"]</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><span class="badge open">Open question</span> No charge was seen after a resume. Three subscriptions were resumed with <code>nextChargeAt</code> two minutes ahead. None was charged after 41 minutes. Each stayed <code>active</code> with the date in the past. Reported to Plorea 2026-10-01. <span class="badge unobserved">Unobserved</span> A webhook on pause or resume, and production.</p>
       <h3>Not chargeable is 400, not 402</h3>
       <p><span class="badge verified">Verified 2026-09-04</span> A subscription that cannot be charged, and a payment method that is not active, both return <code>400</code>. <code>402</code> means a card decline only.</p>
       <h3>Reactivate no longer double-bills</h3>
@@ -148,17 +193,19 @@
       <p><span class="badge verified">Verified 2026-09-04</span> A scheduled charge sends <code>subscription.charge_succeeded</code>. A manual charge sends <code>payment.authorised</code> with the normal payment shape.</p>
       <h3><code>payment.failed</code></h3>
       <p><span class="badge verified">Verified 2026-09-09</span> Arrived about two seconds after the status changed. The type is <code>payment.failed</code> in the header and the body. The body has <code>eventCode: "AUTHORISATION"</code> and <code>success: false</code>, and no reason. <code>data</code> is a strict subset of the payment object.</p>
+      <h3><code>subscription.charge_failed</code></h3>
+      <p><span class="badge verified">Verified 2026-10-01 and 2026-10-06 (test)</span> Three deliveries with the same shape: <code>data: {subscriptionId, chargeId, reference, customerId, shopperReference, externalId, amount, failureReason, retryCount, environment}</code>. No <code>pspReference</code> and no <code>nextChargeAt</code>. All three were <code>"PaymentDetail not found"</code> with <code>retryCount: 1</code>: the stored card was gone. The event is not in Plorea's catalogue. <span class="badge unobserved">Unobserved</span> One event per retry or only the first, the last retry, and a real decline.</p>
       <h3>Routing and redelivery</h3>
       <ul>
         <li><span class="badge stated">Stated 2026-09-21</span> Registration is manual and per tenant. Plorea can register one URL per environment on request. Before that, one URL received both.</li>
         <li><span class="badge stated">Stated 2026-09-21</span> The same signing secret can serve both environments. Ask; do not assume.</li>
         <li><span class="badge stated">Stated 2026-09-21</span> A failed delivery is <strong>not</strong> retried. A <code>500</code> from your endpoint loses the event.</li>
-        <li><span class="badge stated">Stated 2026-09-09</span> Four event types exist. Nothing is sent for card setup, cancel, reactivate or a failed charge.</li>
+        <li><span class="badge stated">Stated 2026-09-09</span> Four event types exist. Nothing is sent for card setup, cancel or reactivate. Plorea said the same of a failed scheduled charge, but see below.</li>
       </ul>
 
       <h2>What test cannot reproduce</h2>
       <h3>A failed subscription charge</h3>
-      <p><span class="badge unobserved">Impossible in test, 2026-09-09</span> These shapes cannot be produced: the <code>402</code> body of a declined charge, a <code>payment_failed</code> subscription, a filled <code>failureReason</code>, a non-zero <code>retryCount</code>, and any failed-charge webhook.</p>
+      <p><span class="badge unobserved">Impossible in test, 2026-09-09</span> These shapes cannot be produced: the <code>402</code> body of a declined charge, a <code>payment_failed</code> subscription and the state after the last retry. The <code>past_due</code> shape was seen in production on 2026-10-01. The <code>subscription.charge_failed</code> webhook was seen for a card that was gone, not for a decline.</p>
       <ol>
         <li>Adyen triggers declines through fields on the payment request, such as the holder name. For a stored card, that request is the setup. A decline trigger therefore fails the setup, and no card is stored.</li>
         <li>Custom test cards carry no decline behaviour.</li>

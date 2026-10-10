@@ -40,11 +40,11 @@
           <thead><tr><th>Status</th><th>Meaning</th><th>Typical causes</th><th>What to do</th></tr></thead>
           <tbody>
             <tr><td><code>200</code></td><td>Success</td><td>Also for an open, unpaid payment link.</td><td>Read the body.</td></tr>
-            <tr><td><code>400</code></td><td>Validation, or the current state does not allow the operation</td><td>Missing fields. Invalid <code>channel</code>. <code>merchantOrgNr</code> not 9 digits. Charging a cancelled subscription. A payment method that is not <code>active</code>. Reactivating an active subscription.</td><td>Fix the request or your state machine. Do not retry unchanged.</td></tr>
+            <tr><td><code>400</code></td><td>Validation, or the current state does not allow the operation</td><td>Missing fields. Invalid <code>channel</code>. <code>merchantOrgNr</code> not 9 digits. Charging a cancelled subscription. A payment method that is not <code>active</code>. Reactivating an active subscription. A status change that is not allowed, such as pausing a <code>trialing</code> subscription. Deleting a payment method that a subscription uses.</td><td>Fix the request or your state machine. Do not retry unchanged.</td></tr>
             <tr><td><code>401</code></td><td>Authentication failed</td><td>Missing or wrong API key. <strong>Missing <code>X-Environment</code> on refund.</strong></td><td>Check the key <em>and</em> the environment header.</td></tr>
             <tr><td><code>402</code></td><td>Card declined</td><td>A manual subscription charge was declined by the acquirer. Only this.</td><td>Start dunning. The subscription itself is fine.</td></tr>
             <tr><td><code>403</code></td><td>Forbidden</td><td><code>Tenant mismatch</code>: the resource belongs to another tenant. Also a scheduler-charge reference on the status endpoint.</td><td>Check which tenant owns the resource.</td></tr>
-            <tr><td><code>404</code></td><td>Not found</td><td>Unknown reference or ID.</td><td>Often normal control flow: "does it exist?"</td></tr>
+            <tr><td><code>404</code></td><td>Not found</td><td>Unknown reference or ID. A bare <code>{"message":"Not Found"}</code> means the route does not exist, not the resource.</td><td>Often normal control flow: "does it exist?"</td></tr>
             <tr><td><code>5xx</code></td><td>Plorea or provider error</td><td>—</td><td>Retry reads. For writes, re-read state first. See below.</td></tr>
           </tbody>
         </table>
@@ -80,6 +80,11 @@
             <tr><td><code>Payment method is not active</code></td><td><code>POST /subscriptions</code>, <code>PATCH /subscriptions/{id}</code></td></tr>
             <tr><td><code>Subscription is not chargeable</code></td><td><code>POST /subscriptions/{id}/charge</code></td></tr>
             <tr><td><code>Only canceled subscriptions can be reactivated</code></td><td><code>POST /subscriptions/{id}/reactivate</code></td></tr>
+            <tr><td><code>Cannot change status from trialing to paused</code></td><td><code>PATCH /subscriptions/{id}</code> (the body also has <code>allowedTransitions</code>)</td></tr>
+            <tr><td><code>status can only be set to active or paused</code></td><td><code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>nextChargeAt is required when reactivating a paused subscription</code></td><td><code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>nextChargeAt cannot be in the past</code></td><td><code>PATCH /subscriptions/{id}</code></td></tr>
+            <tr><td><code>Payment method not found</code></td><td><code>DELETE /payment-methods/{id}</code> (<code>404</code>)</td></tr>
             <tr><td><code>Payment not found</code></td><td><code>GET /payments/status/{reference}</code></td></tr>
             <tr><td><code>Tenant mismatch</code></td><td>Any endpoint that reads a tenant-scoped resource</td></tr>
           </tbody>
@@ -93,6 +98,7 @@
           <thead><tr><th>Exception</th><th>Thrown when</th></tr></thead>
           <tbody>
             <tr><td><code>ValidationException</code></td><td>400</td></tr>
+            <tr><td><code>PaymentMethodInUseException</code></td><td>400 on a payment method delete that a subscription blocks. Extends <code>ValidationException</code>. The body lists <code>activeSubscriptionIds</code>.</td></tr>
             <tr><td><code>AuthenticationException</code></td><td>401 and 403, including <code>Tenant mismatch</code></td></tr>
             <tr><td><code>ChargeFailedException</code></td><td>402</td></tr>
             <tr><td><code>NotFoundException</code></td><td>404</td></tr>

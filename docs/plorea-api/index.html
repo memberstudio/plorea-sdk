@@ -32,7 +32,7 @@
         <a class="card" href="payment-methods.html"><h3>Cards on file</h3><p>Verify and store a card once. Charge it later without the customer present.</p></a>
         <a class="card" href="subscriptions.html"><h3>Subscriptions</h3><p>Bill a stored card on a fixed interval. Plorea runs the scheduler for you.</p></a>
         <a class="card" href="subscription-workflows.html"><h3>Subscription workflows</h3><p>Recipes for trials, price increases, upgrades, pauses, card swaps and cancellation.</p></a>
-        <a class="card" href="webhooks.html"><h3>Webhooks</h3><p>Receive signed events when a payment is authorised, fails, is refunded or a subscription renews.</p></a>
+        <a class="card" href="webhooks.html"><h3>Webhooks</h3><p>Receive signed events when a payment is authorised, fails, is refunded, or a subscription charge succeeds or fails.</p></a>
       </div>
 
       <h2>How a payment moves</h2>
@@ -146,10 +146,11 @@ const payment = await res.json();</code></pre></div>
         <li><a href="api-reference.html#set-up-a-card-hosted"><span class="method post">POST</span><span><code>/payment-methods/setup</code> <span class="desc">Store a card on a hosted page</span></span></a></li>
         <li><a href="api-reference.html#set-up-a-card-session"><span class="method post">POST</span><span><code>/payment-methods/setup/session</code> <span class="desc">Store a card with Drop-in</span></span></a></li>
         <li><a href="api-reference.html#get-a-payment-method"><span class="method get">GET</span><span><code>/payment-methods/{id}</code> <span class="desc">Read a stored card</span></span></a></li>
+        <li><a href="api-reference.html#delete-a-payment-method"><span class="method delete">DELETE</span><span><code>/payment-methods/{id}</code> <span class="desc">Cancel a stored card</span></span></a></li>
         <li><a href="api-reference.html#create-a-subscription"><span class="method post">POST</span><span><code>/subscriptions</code> <span class="desc">Create a subscription</span></span></a></li>
         <li><a href="api-reference.html#list-subscriptions"><span class="method get">GET</span><span><code>/subscriptions</code> <span class="desc">List subscriptions</span></span></a></li>
         <li><a href="api-reference.html#get-a-subscription"><span class="method get">GET</span><span><code>/subscriptions/{id}</code> <span class="desc">Read a subscription</span></span></a></li>
-        <li><a href="api-reference.html#update-a-subscription"><span class="method patch">PATCH</span><span><code>/subscriptions/{id}</code> <span class="desc">Change price, card or labels</span></span></a></li>
+        <li><a href="api-reference.html#update-a-subscription"><span class="method patch">PATCH</span><span><code>/subscriptions/{id}</code> <span class="desc">Change price, card or labels; pause or resume</span></span></a></li>
         <li><a href="api-reference.html#charge-a-subscription"><span class="method post">POST</span><span><code>/subscriptions/{id}/charge</code> <span class="desc">Charge now</span></span></a></li>
         <li><a href="api-reference.html#list-subscription-charges"><span class="method get">GET</span><span><code>/subscriptions/{id}/charges</code> <span class="desc">List charges</span></span></a></li>
         <li><a href="api-reference.html#cancel-a-subscription"><span class="method post">POST</span><span><code>/subscriptions/{id}/cancel</code> <span class="desc">Cancel at period end</span></span></a></li>

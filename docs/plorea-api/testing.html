@@ -92,7 +92,7 @@
           <li>Every published test card approves and has a future expiry. No card can expire after you store it.</li>
           <li>Plorea charges the stored card on the server. It passes neither trigger through.</li>
         </ul>
-        <p>As a result, these shapes are unknown: the <code>402</code> body of a declined manual charge, a <code>payment_failed</code> subscription, a filled <code>failureReason</code>, a non-zero <code>retryCount</code>, and any <code>subscription.charge_failed</code> webhook.</p>
+        <p>As a result, these shapes cannot be produced in test: the <code>402</code> body of a declined manual charge, a <code>payment_failed</code> subscription and the state after the last retry. The <code>past_due</code> shape (a filled <code>failureReason</code>, a non-zero <code>retryCount</code>) was seen once in production. <span class="badge verified">Verified 2026-10-01</span> The <code>subscription.charge_failed</code> webhook was seen in test for a stored card that was gone, not for a decline. <span class="badge verified">Verified</span></p>
       </div>
       <p>Write dunning code that tolerates small differences. Branch on <code>status</code>. Do not require <code>failureReason</code>. See <a href="dunning.html">Failed charges and dunning</a>.</p>
       <div class="callout gap">

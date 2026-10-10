@@ -17,7 +17,7 @@
       <header class="page-head">
         <p class="eyebrow">Integration</p>
         <h1>Webhooks</h1>
-        <p class="lead">Plorea sends a signed HTTP POST to your server when a payment is authorised, fails or is refunded, and when the scheduler charges a subscription. This guide shows how to register an endpoint, verify each delivery, and process events safely.</p>
+        <p class="lead">Plorea sends a signed HTTP POST to your server when a payment is authorised, fails or is refunded, and when the scheduler charges a subscription or fails to. This guide shows how to register an endpoint, verify each delivery, and process events safely.</p>
       </header>
 
       <div class="callout tip">
@@ -98,7 +98,7 @@ sequenceDiagram
       </dl>
 
       <h2>Event catalogue</h2>
-      <p>Plorea confirmed four event types. More are planned, so accept and log types you do not know. <span class="badge stated">Stated by Plorea</span></p>
+      <p>Plorea confirmed four event types. More are planned, so accept and log types you do not know. <span class="badge stated">Stated by Plorea</span> A fifth type, <code>subscription.charge_failed</code>, is not in Plorea's catalogue but was captured in test. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Sent when</th><th>Evidence</th></tr></thead>
@@ -107,6 +107,7 @@ sequenceDiagram
             <tr><td><code>payment.failed</code></td><td>Adyen declines an authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settles.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>The <strong>scheduler</strong> charges a subscription.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td>A <strong>scheduler</strong> charge fails. Not in Plorea's catalogue.</td><td><span class="badge verified">Verified</span> Captured 2026-10-01 and 2026-10-06.</td></tr>
           </tbody>
         </table>
       </div>
@@ -217,8 +218,43 @@ sequenceDiagram
       </div>
       <p>Plorea states that charge webhooks include the subscription's <code>merchantOrgNr</code> when one is set. Our captures predate that field. <span class="badge stated">Stated by Plorea</span></p>
 
+      <h3 id="subscription-charge-failed">subscription.charge_failed</h3>
+      <p>The scheduler sends this event when a charge on a stored card fails. The subscription moves to <code>past_due</code>, and Plorea retries on its own schedule. The <code>data</code> has the fields of <code>subscription.charge_succeeded</code> plus <code>failureReason</code> and <code>retryCount</code>. It has no <code>pspReference</code> and no <code>nextChargeAt</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="subscription.charge_failed"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000004",
+  "createdAt": "2026-10-06T20:34:59.157Z",
+  "tenantId": "acme",
+  "type": "subscription.charge_failed",
+  "data": {
+    "subscriptionId": "sub_test_example",
+    "chargeId": "chg_test_example_3",
+    "reference": "sub_test_example-chg_test_example_3",
+    "customerId": "golden-customer-001",
+    "shopperReference": "acme-member-001",
+    "externalId": "membership-42",
+    "amount": {
+      "value": 29900,
+      "currency": "NOK"
+    },
+    "failureReason": "PaymentDetail not found",
+    "retryCount": 1,
+    "environment": "test"
+  }
+}</code></pre>
+      <ul>
+        <li>Plorea had said a failed scheduler charge sends nothing. Three deliveries were captured in test anyway, all with the same shape. <span class="badge verified">Verified</span></li>
+        <li>All three had <code>"PaymentDetail not found"</code> and <code>retryCount: 1</code>: the stored card behind the method was gone. A real card decline is not observed. <span class="badge unobserved">Unobserved</span></li>
+        <li>Whether each retry sends one, and whether the last retry sends one, is not observed. <span class="badge unobserved">Unobserved</span></li>
+        <li><code>failureReason</code> is the provider's free text. Show it. Never branch on it.</li>
+        <li>Read the retry date from <code>GET /subscriptions/{id}</code>. The payload does not carry it.</li>
+      </ul>
+      <div class="callout warning">
+        <p class="callout-title">Keep polling anyway</p>
+        <p>A lost delivery is not sent again, and a billing cycle that stalls without a failure sends nothing. Use this event to start dunning sooner. Keep the <a href="#reconcile-by-polling">reconciliation job</a> as the safety net.</p>
+      </div>
+
       <h2 id="what-is-not-sent">What is not sent</h2>
-      <p>Plorea sends <strong>no</strong> webhook for the transitions below. You must poll for them. <span class="badge stated">Stated by Plorea</span></p>
+      <p>Plorea sends <strong>no</strong> webhook for the transitions below. You must poll for them. <span class="badge stated">Stated by Plorea</span> Plorea also listed a failed scheduler charge here, but <a href="#subscription-charge-failed"><code>subscription.charge_failed</code></a> was captured since.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Transition</th><th>How to detect it</th></tr></thead>
@@ -226,15 +262,17 @@ sequenceDiagram
             <tr><td>Card setup succeeds or fails (<code>pending_setup</code> → <code>active</code> | <code>failed</code>)</td><td><code>GET /payment-methods/{id}</code> after the customer returns, and on a schedule until <code>expiresAt</code>.</td></tr>
             <tr><td>Subscription cancelled</td><td>The cancel call returns the new state synchronously.</td></tr>
             <tr><td>Subscription reactivated</td><td>The reactivate call returns the new state synchronously.</td></tr>
-            <tr><td><strong>A scheduler charge fails</strong></td><td>Poll <code>GET /subscriptions/{id}</code>. Compare <code>nextChargeAt</code> with now. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
+            <tr><td>Subscription paused or resumed</td><td>The <code>PATCH</code> call returns the new state synchronously. No event is known. <span class="badge unobserved">Unobserved</span></td></tr>
+            <tr><td>Payment method deleted</td><td>The <code>DELETE</code> call returns the new state synchronously.</td></tr>
+            <tr><td>A billing cycle stalls without a failure</td><td>Poll <code>GET /subscriptions/{id}</code>. Compare <code>nextChargeAt</code> with now. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
             <tr><td>A payment link expires</td><td>The status never reports <code>expired</code>. Use <code>expiresAt</code> from the create response, or <code>expired</code> on <code>GET /pay/{id}</code>.</td></tr>
             <tr><td>A cancellation settles</td><td>No <code>payment.cancelled</code> event is known. Poll the status. <span class="badge open">Open question</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout gap">
-        <p class="callout-title">Gap: a declined recurring charge is silent</p>
-        <p>The most important failure in recurring billing sends no event. A <code>subscription.charge_failed</code> event would remove the need to poll. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+        <p class="callout-title">Gap: the failure event is not documented</p>
+        <p><code>subscription.charge_failed</code> is sent but is not in Plorea's catalogue. Its behaviour on retries and on the last retry is unknown. A documented event, with a final event when retries run out, would let integrators trust it. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
       </div>
 
       <h2>Verify the signature</h2>
@@ -416,6 +454,7 @@ async function handle(event) {
             <tr><td><code>payment.failed</code></td><td><code>GET /payments/status/{reference}</code></td><td>Offer a new link on a suffixed reference. Whether the failed link stays payable is not confirmed.</td></tr>
             <tr><td><code>payment.refunded</code></td><td><code>GET /payments/status/{reference}</code></td><td>Confirm the refund you already booked. Do not book it twice.</td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Extend access to <code>nextChargeAt</code>, the end of the paid period. Do not use <code>accessEndsAt</code>: it is <code>null</code> on an active subscription. Record the charge from <code>GET /subscriptions/{id}/charges</code>.</td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Start dunning idempotently if the status is <code>past_due</code>. Your poll may have seen it first. Show <code>failureReason</code> to the customer. Do not cut access before your grace period ends.</td></tr>
             <tr><td>Unknown type</td><td>—</td><td>Store and log it. Return <code>200</code>.</td></tr>
           </tbody>
         </table>
@@ -425,7 +464,8 @@ async function handle(event) {
 curl "https://payments.plorea.no/subscriptions/sub_test_example?platform=acme" \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
   -H "X-Environment: test"</code></pre></div>
-        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Events\SubscriptionChargeFailed;
+use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 use MemberFlow\Plorea\Events\WebhookReceived;
 
 Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSucceeded $event) {
@@ -439,6 +479,16 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     // The paid period ends at nextChargeAt. accessEndsAt is null while active.
     if ($subscription-&gt;isActive() &amp;&amp; $subscription-&gt;nextChargeAt !== null) {
         // Extend access to $subscription-&gt;nextChargeAt, idempotently.
+    }
+});
+
+Event::listen(SubscriptionChargeFailed::class, function (SubscriptionChargeFailed $event) {
+    $event-&gt;failureReason; // provider free text: show it, never branch on it
+    $event-&gt;retryCount;    // attempts so far, as Plorea reported them
+
+    $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
+    if ($subscription-&gt;isPastDue()) {
+        // Start dunning idempotently. Your poll may have seen it first.
     }
 });
 
@@ -458,12 +508,25 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
   if (subscription.status === 'active' &amp;&amp; subscription.nextChargeAt) {
     await extendAccess(subscription.externalId, subscription.nextChargeAt);
   }
+}
+
+if (event.type === 'subscription.charge_failed') {
+  const { subscriptionId } = event.data;
+  const res = await fetch(
+    `https://payments.plorea.no/subscriptions/${encodeURIComponent(subscriptionId)}?platform=acme`,
+    { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+  );
+  if (!res.ok) throw new Error(`Subscription read failed: ${res.status}`);
+  const subscription = await res.json();
+  if (subscription.status === 'past_due') {
+    await startDunning(subscription.externalId, subscription.subscriptionId); // idempotent
+  }
 }</code></pre></div>
       </div>
-      <p>The SDK fires <code>SubscriptionChargeSucceeded</code> for a scheduler charge and does <strong>not</strong> also fire <code>PaymentStatusUpdated</code>. Two events for one charge would make listeners book it twice.</p>
+      <p>The SDK fires <code>SubscriptionChargeSucceeded</code> or <code>SubscriptionChargeFailed</code> for a scheduler charge and does <strong>not</strong> also fire <code>PaymentStatusUpdated</code>. Two events for one charge would make listeners book it twice.</p>
 
       <h2 id="reconcile-by-polling">Reconcile by polling</h2>
-      <p>Webhooks can be lost, and some transitions send none. Run a scheduled job that reads state directly. This is not over-engineering. It is the only way to see a failed scheduler charge.</p>
+      <p>Webhooks can be lost, and some transitions send none. Run a scheduled job that reads state directly. This is not over-engineering. A lost <code>subscription.charge_failed</code> is not sent again, and a stalled billing cycle sends nothing.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>What</th><th>Call</th><th>How often</th></tr></thead>
@@ -471,14 +534,14 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
             <tr><td>Open payment links</td><td><code>GET /payments/status/{reference}</code></td><td>Every few minutes until paid or past <code>expiresAt</code>.</td></tr>
             <tr><td>Card setups</td><td><code>GET /payment-methods/{id}</code></td><td>Every few minutes until <code>active</code> or <code>failed</code>.</td></tr>
             <tr><td>Refunds and cancels in flight</td><td><code>GET /payments/status/{reference}</code></td><td>Hourly. Settlement can take more than 11 hours.</td></tr>
-            <tr><td>Subscriptions</td><td><code>GET /subscriptions?externalId=…</code> without a <code>status</code> filter</td><td>Hourly. Flag any that is <code>payment_failed</code>. Also flag any that is not <code>canceled</code> and has <code>nextChargeAt</code> in the past. A <code>status=active</code> filter hides <code>payment_failed</code> and overdue trials.</td></tr>
+            <tr><td>Subscriptions</td><td><code>GET /subscriptions?externalId=…</code> without a <code>status</code> filter</td><td>Hourly. Flag any that is <code>past_due</code> or <code>payment_failed</code>. Also flag any that is not <code>canceled</code> or <code>paused</code> and has <code>nextChargeAt</code> in the past. A <code>status=active</code> filter hides <code>past_due</code> and overdue trials.</td></tr>
           </tbody>
         </table>
       </div>
       <pre data-title="PHP SDK — reconciliation job"><code class="lang-php">// Open links.
 Plorea::payments()-&gt;status($invoice-&gt;reference);
 
-// Subscriptions that are overdue or in payment failure.
+// Subscriptions that are past_due, in payment failure or overdue.
 Plorea::subscriptions()-&gt;needingAttention($workspace-&gt;externalId);</code></pre>
 
       <h2>Test your endpoint</h2>

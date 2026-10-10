@@ -31,7 +31,7 @@
           <thead><tr><th>#</th><th>Item</th><th>Area</th><th>Priority</th><th>Status</th></tr></thead>
           <tbody>
             <tr><td>1</td><td><a href="#idempotency-keys">Idempotency keys</a></td><td>Payments, subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>2</td><td><a href="#failed-charge-webhook-and-payment-failed">Failed charge webhook</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>2</td><td><a href="#failed-charge-webhook-and-payment-failed">Failed charge webhook</a></td><td>Subscriptions</td><td>High</td><td><span class="badge verified">Partly delivered 2026-10-01</span></td></tr>
             <tr><td>3</td><td><a href="#webhook-redelivery-and-replay">Webhook redelivery and replay</a></td><td>Webhooks</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>4</td><td><a href="#sandbox-failure-triggers">Sandbox failure triggers</a></td><td>Testing</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>5</td><td><a href="#refusal-reason">Refusal reason</a></td><td>Payments</td><td>High</td><td><span class="badge stated">Promised</span></td></tr>
@@ -39,15 +39,17 @@
             <tr><td>7</td><td><a href="#capture-api-and-captured-state">Capture API and captured state</a></td><td>Payments</td><td>Medium</td><td><span class="badge stated">On roadmap</span></td></tr>
             <tr><td>8</td><td><a href="#per-refund-status">Per-refund status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>9</td><td><a href="#expired-status">Expired status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>10</td><td><a href="#pause-and-resume">Pause and resume</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>10</td><td><a href="#pause-and-resume">Pause and resume</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge verified">Delivered 2026-10-01</span></td></tr>
             <tr><td>11</td><td><a href="#interval-change">Interval change</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>12</td><td><a href="#proration">Proration</a></td><td>Subscriptions</td><td>Low</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>13</td><td><a href="#card-setup-webhooks-and-failure-reason">Card setup webhooks and failure reason</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>14</td><td><a href="#scheduled-charges-on-the-status-endpoint">Scheduled charges on the status endpoint</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge open">Reported</span></td></tr>
             <tr><td>15</td><td><a href="#pagination">Pagination</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">Partly delivered 2026-09-22</span></td></tr>
             <tr><td>17</td><td><a href="#machine-readable-error-codes">Machine-readable error codes</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>18</td><td><a href="#changelog-and-versioning">Changelog and versioning</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge open">Reported</span></td></tr>
+            <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -114,9 +116,17 @@ Idempotent-Replayed: true</code></pre>
       <h2>Subscriptions</h2>
 
       <h3 id="failed-charge-webhook-and-payment-failed">2. Failed charge webhook and <code>payment_failed</code></h3>
-      <p><strong>Problem.</strong> A failed scheduled charge sends no webhook. <span class="badge stated">Stated by Plorea</span> The <code>payment_failed</code> status, <code>failureReason</code> and <code>retryCount</code> have never been observed.</p>
-      <p><strong>Impact.</strong> This is the most important event in recurring billing. Integrators must poll every subscription to find failures. Customers keep access they did not pay for, or lose access without a warning.</p>
-      <p><strong>Proposal.</strong> Send <code>subscription.charge_failed</code> on each failed attempt, and <code>subscription.payment_failed</code> when retries run out.</p>
+      <p><span class="badge verified">Partly delivered 2026-10-01</span> Plorea now sends <code>subscription.charge_failed</code>. It was captured three times in test (2026-10-01 and 2026-10-06), each time for a stored card that was gone. A failed scheduled charge also moves the subscription to <code>past_due</code>, with <code>failureReason</code> and <code>retryCount</code> filled. <span class="badge verified">Verified in production 2026-10-01</span></p>
+      <p><strong>What is still open.</strong></p>
+      <ul>
+        <li>The event is not in Plorea's webhook catalogue.</li>
+        <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
+        <li>The state after the last retry is unknown: a terminal status, <code>canceled</code> or <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></li>
+        <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
+        <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
+      </ul>
+      <p><strong>Impact.</strong> This is the most important event in recurring billing. Without a documented contract, integrators cannot tell a first failure from a final one. Customers keep access they did not pay for, or lose access without a warning.</p>
+      <p><strong>Proposal.</strong> Document <code>subscription.charge_failed</code> in the catalogue. Send it on each failed attempt, with the fields below. Send <code>subscription.payment_failed</code> when retries run out. Document the status after the last retry.</p>
       <pre><code class="lang-json">{
   "eventId": "evt_00000000000000000000000000000003",
   "type": "subscription.charge_failed",
@@ -137,12 +147,15 @@ Idempotent-Replayed: true</code></pre>
 }</code></pre>
 
       <h3 id="pause-and-resume">10. Pause and resume</h3>
-      <p><strong>Problem.</strong> No pause exists. To freeze a membership, integrators cancel and create a new subscription with a trial until the resume date, or cancel and later reactivate. Reactivate sets <code>nextChargeAt</code> to one interval after the last charge, which can lie in the past.</p>
-      <p><strong>Impact.</strong> Freezes are common in memberships, for example during illness or travel. The workaround changes the subscription ID, splits the charge history and needs careful date maths.</p>
-      <p><strong>Proposal.</strong></p>
-      <pre data-title="POST /subscriptions/{id}/pause"><code class="lang-json">{ "resumesAt": "2026-12-01T00:00:00Z", "reason": "medical" }</code></pre>
-      <pre data-title="Response"><code class="lang-json">{ "subscriptionId": "sub_test_example", "status": "paused", "pausedAt": "2026-10-10T09:00:00Z", "resumesAt": "2026-12-01T00:00:00Z", "nextChargeAt": "2026-12-01T00:00:00Z" }</code></pre>
-      <p>Add <code>POST /subscriptions/{id}/resume</code> to end a pause early, and events <code>subscription.paused</code> and <code>subscription.resumed</code>.</p>
+      <p><span class="badge verified">Delivered 2026-10-01</span> Plorea added a native pause. <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> pauses an <code>active</code> subscription and clears <code>nextChargeAt</code>. <code>{"status": "active", "nextChargeAt": "…"}</code> resumes it. The subscription ID and the charge history stay the same. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+      <p><strong>What is still open.</strong></p>
+      <ul>
+        <li>No charge was seen after a resume. See <a href="#charge-after-resume">item 19</a>. <span class="badge open">Open</span></li>
+        <li>A <code>trialing</code> subscription cannot be paused. Plorea answers <code>400</code>. <span class="badge verified">Verified</span></li>
+        <li>No <code>pausedAt</code> is returned, and no planned resume date is stored.</li>
+        <li>It is unknown if a webhook fires on pause or resume. <span class="badge unobserved">Unobserved</span></li>
+      </ul>
+      <p><strong>Proposal.</strong> Return <code>pausedAt</code>. Accept an optional resume date that Plorea acts on. Send <code>subscription.paused</code> and <code>subscription.resumed</code>.</p>
 
       <h3 id="interval-change">11. Interval change</h3>
       <p><strong>Problem.</strong> <code>PATCH /subscriptions/{id}</code> cannot change <code>interval</code>.</p>
@@ -163,6 +176,12 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge may not be possible.</p>
       <p><strong>Proposal.</strong> Resolve every charge reference on the status endpoint, with <code>platform: "subscription"</code>, as manual charges already do.</p>
 
+      <h3 id="charge-after-resume">19. Charge after resume</h3>
+      <p><span class="badge open">Reported to Plorea 2026-10-01</span></p>
+      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span></p>
+      <p><strong>Impact.</strong> A resumed membership may never bill again. Integrators must watch every resumed subscription for an overdue <code>nextChargeAt</code>.</p>
+      <p><strong>Proposal.</strong> Charge a resumed subscription on its <code>nextChargeAt</code>, as for any active subscription. Document the expected scheduler delay.</p>
+
       <h3 id="pagination">15. Pagination</h3>
       <p><strong>Problem.</strong> <code>GET /subscriptions</code> and <code>GET /subscriptions/{id}/charges</code> have no paging fields. The charge list has no count. <span class="badge open">Open question</span></p>
       <p><strong>Impact.</strong> A truncated list looks the same as a full list. A monthly subscription grows its history forever.</p>
@@ -170,8 +189,9 @@ Idempotent-Replayed: true</code></pre>
       <pre data-title="GET /subscriptions/{id}/charges?limit=50&amp;startingAfter=chg_…"><code class="lang-json">{ "subscriptionId": "sub_test_example", "items": [], "hasMore": true, "nextCursor": "chg_test_example_51" }</code></pre>
 
       <h3 id="merchantorgnr-on-reads">16. <code>merchantOrgNr</code> on reads</h3>
-      <p><strong>Problem.</strong> The payment link create response does not echo <code>merchantOrgNr</code>. Subscription reads never return it. Only <code>GET /pay/{id}</code> and the subscription create response show it.</p>
-      <p><strong>Impact.</strong> Integrators cannot check which company a payment or subscription pays out to. They must keep their own copy and trust it.</p>
+      <p><span class="badge verified">Partly delivered 2026-09-22</span> <code>GET /subscriptions/{id}</code> and each item of <code>GET /subscriptions</code> now return <code>merchantOrgNr</code>. <code>GET /subscriptions/{id}/charges</code> returns it once, on the envelope. A subscription without a merchant returns <code>null</code>.</p>
+      <p><strong>What is still open.</strong> The payment link create response does not echo <code>merchantOrgNr</code>. No subscription read returns <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span></p>
+      <p><strong>Impact.</strong> Integrators cannot fully check which company a payment pays out to. They must keep their own copy of the merchant name.</p>
       <p><strong>Proposal.</strong> Return <code>merchantOrgNr</code>, <code>merchantName</code> and a KYC state on every read of a payment, link, subscription and charge.</p>
       <pre><code class="lang-json">{ "merchantOrgNr": "999999999", "merchantName": "Acme Gym AS", "merchantKycStatus": "pending" }</code></pre>
 
@@ -185,6 +205,12 @@ Idempotent-Replayed: true</code></pre>
   "type": "payment_method.failed",
   "data": { "paymentMethodId": "pm_test_example", "shopperReference": "acme-member-001", "status": "failed", "failureReason": "Refused", "refusalCategory": "do_not_honor" }
 }</code></pre>
+
+      <h3 id="delete-covers-the-stored-card">20. Delete covers the stored card</h3>
+      <p><span class="badge verified">Delete delivered 2026-10-05</span> <code>DELETE /payment-methods/{id}</code> now works. It moves the method to <code>cancelled</code>. It returns <code>400</code> while an <code>active</code> or <code>trialing</code> subscription uses the method.</p>
+      <p><strong>Problem.</strong> Two payment methods can share one stored card: same shopper, same <code>storedPaymentMethodId</code>. After a delete, the sibling still reads <code>active</code>. A manual charge on a new subscription on the sibling was <code>Authorised</code>. <span class="badge verified">Verified in test 2026-10-06</span> Production is unobserved.</p>
+      <p><strong>Impact.</strong> A customer who removes a card can still be charged on it. Integrators must find and delete every sibling themselves.</p>
+      <p><strong>Proposal.</strong> Disable the stored card at Adyen on delete, and cancel every method that shares it. Or return the sibling IDs in the delete response.</p>
 
       <h2>Webhooks</h2>
 
@@ -204,7 +230,7 @@ Idempotent-Replayed: true</code></pre>
 
       <h3 id="sandbox-failure-triggers">4. Sandbox failure triggers</h3>
       <p><strong>Problem.</strong> A failed subscription charge cannot be produced in test. Adyen's decline triggers live on the payment request, and Plorea's scheduler builds that request server-side. <span class="badge unobserved">Not observable in test</span></p>
-      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body, <code>payment_failed</code>, <code>retryCount</code> and failed charge items.</p>
+      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body, <code>payment_failed</code> and the state after the last retry. The <code>past_due</code> shape was seen once, in production. It cannot be produced in test.</p>
       <p><strong>Proposal.</strong> Either of these works:</p>
       <ul>
         <li>Pass Adyen's <code>RequestedTestAcquirerResponseCode</code> through on manual charges in test.</li>

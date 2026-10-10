@@ -91,12 +91,17 @@ sequenceDiagram
             <tr><td><code>customerId</code><span class="opt">optional</span></td><td class="type">string</td><td>Both</td><td>Your own identifier for the customer.</td></tr>
             <tr><td><code>metadata</code><span class="opt">optional</span></td><td class="type">object</td><td>Both</td><td>Key-value pairs for your own use.</td></tr>
             <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Hosted</td><td>Text on the hosted Adyen page.</td></tr>
+            <tr><td><code>merchantOrgNr</code><span class="opt">optional</span></td><td class="type">string</td><td>Both</td><td>Organisation number of the company the card is saved for. See <a href="#merchant-on-setup">The company on the card form</a>. <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>merchantName</code><span class="opt">optional</span></td><td class="type">string</td><td>Both</td><td>Name of that company. Plorea asks for it together with <code>merchantOrgNr</code>.</td></tr>
             <tr><td><code>doneId</code><span class="opt">optional</span></td><td class="type">string</td><td>Session</td><td>An extra identifier that Plorea accepts on sessions.</td></tr>
             <tr><td><code>channel</code><span class="opt">optional</span></td><td class="type">enum</td><td>Session</td><td><code>Web</code>, <code>iOS</code> or <code>Android</code>. Case-sensitive. Any other value returns <code>400</code>. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>platform</code><span class="opt">optional</span></td><td class="type">string</td><td>Both</td><td>Identifies your integration. Reporting only.</td></tr>
           </tbody>
         </table>
       </div>
+
+      <h3 id="merchant-on-setup">The company on the card form</h3>
+      <p>On a platform, the card is often saved for one of your clients, not for you. Send that company's <code>merchantOrgNr</code>, and optionally its <code>merchantName</code>. Plorea resolves the company's store from the number. The 3-D Secure challenge then shows the company's name instead of the platform's. On the hosted page, the company's name also shows on the page itself. Both setup flows accept the fields. <span class="badge stated">Stated by Plorea</span> In the PHP SDK, call <code>-&gt;merchant($orgNr, $name)</code> on the setup builder. Without it, nothing extra is sent.</p>
 
       <h2 id="hosted-setup">Hosted setup</h2>
       <div class="endpoint"><span class="method post">POST</span><code>/payment-methods/setup</code></div>
@@ -120,7 +125,9 @@ sequenceDiagram
     "shopperReference": "acme-gym-member-1001",
     "recurringType": "Subscription",
     "returnUrl": "https://app.example.com/billing/card/return",
-    "description": "Acme Gym membership"
+    "description": "Acme Gym membership",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Gym AS"
   }'</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Facades\Plorea;
@@ -129,6 +136,7 @@ $method = Plorea::paymentMethods()
     -&gt;setup('acme-gym-member-1001', RecurringType::Subscription, 'https://app.example.com/billing/card/return')
     -&gt;customerId('cus_1001')
     -&gt;description('Acme Gym membership')
+    -&gt;merchant('999999999', 'Acme Gym AS') // the company the card is saved for
     -&gt;create();
 
 // Save the id before you redirect. You need it to poll.
@@ -158,6 +166,8 @@ const method = await plorea('POST', 'payment-methods/setup', {
   recurringType: 'Subscription',
   returnUrl: 'https://app.example.com/billing/card/return',
   description: 'Acme Gym membership',
+  merchantOrgNr: '999999999',
+  merchantName: 'Acme Gym AS',
 });
 
 await db.members.update(memberId, { pendingPaymentMethodId: method.paymentMethodId });
@@ -345,10 +355,11 @@ stateDiagram-v2
   [*] --> pending_setup: setup created
   pending_setup --> active: 1 NOK verification authorised
   pending_setup --> failed: verification refused
-  active --> [*]
+  active --> cancelled: DELETE (no subscription uses it)
+  cancelled --> [*]
   failed --> [*]
         </pre>
-        <figcaption><code>failed</code> is final. A new card needs a new setup.</figcaption>
+        <figcaption><code>failed</code> and <code>cancelled</code> are final. A new card needs a new setup.</figcaption>
       </figure>
       <div class="table-wrap">
         <table>
@@ -357,10 +368,11 @@ stateDiagram-v2
             <tr><td><code>pending_setup</code></td><td>The customer has not completed the flow yet.</td><td>Poll until <code>expiresAt</code>.</td></tr>
             <tr><td><code>active</code></td><td>The card is stored. <code>storedPaymentMethodId</code> and the card fields are set.</td><td>Create the subscription, or attach the card to one.</td></tr>
             <tr><td><code>failed</code></td><td>The 1 NOK verification was refused. No card is stored. <code>storedPaymentMethodId</code> stays null.</td><td>Start a new setup. This payment method can never become active.</td></tr>
+            <tr><td><code>cancelled</code></td><td>You deleted it. UK spelling. The card fields stay on the record.</td><td>Nothing. It cannot be charged or attached again. See <a href="#delete-a-card">Delete a card</a>.</td></tr>
           </tbody>
         </table>
       </div>
-      <p>All three statuses are <span class="badge verified">Verified</span>.</p>
+      <p>All four statuses are <span class="badge verified">Verified</span>.</p>
 
       <pre data-title="200 OK — failed"><code class="lang-json">{
   "paymentMethodId": "pm_test_golden_failed",
@@ -425,7 +437,7 @@ stateDiagram-v2
       <ol class="steps">
         <li><strong>Store the new card</strong>Run a setup with the same <code>shopperReference</code>. Poll until it is <code>active</code>.</li>
         <li><strong>Attach it</strong>Send <code>PATCH /subscriptions/{id}</code> with the new <code>paymentMethodId</code>.</li>
-        <li><strong>Keep the old one</strong>There is no endpoint to delete a payment method. <span class="badge open">Open question</span></li>
+        <li><strong>Delete the old one</strong>When no subscription uses it any more, <a href="#delete-a-card">delete it</a>.</li>
       </ol>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_golden \
@@ -442,6 +454,48 @@ stateDiagram-v2
 });</code></pre></div>
       </div>
       <p>See <a href="subscription-workflows.html">Subscription workflows</a> for the full card-swap recipe, including what to do when a renewal is overdue.</p>
+
+      <h2 id="delete-a-card">Delete a card</h2>
+      <div class="endpoint"><span class="method delete">DELETE</span><code>/payment-methods/{paymentMethodId}</code></div>
+      <p>A delete cancels a stored card so that it can never be charged again. Plorea keeps the record and moves it to <code>cancelled</code>. Captured in test on 2026-10-06. <span class="badge verified">Verified</span> Full shapes: <a href="api-reference.html#delete-a-payment-method">API reference</a>.</p>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X DELETE "https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
+
+try {
+    $cancellation = Plorea::paymentMethods()-&gt;delete($methodId);
+
+    $cancellation-&gt;isCancelled();     // true: status "cancelled"
+    $cancellation-&gt;previousStatus;    // "active"; null on a repeat call
+    $cancellation-&gt;alreadyCancelled;  // true on a repeat call
+} catch (PaymentMethodInUseException $e) {
+    $e-&gt;activeSubscriptionIds();      // move these to another card, or cancel them, first
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// plorea() is the helper from the hosted setup example. It throws on 4xx.
+try {
+  const cancellation = await plorea('DELETE', `payment-methods/${methodId}?platform=acme`);
+  // cancellation.status === 'cancelled'
+} catch (err) {
+  if (err.status === 400 &amp;&amp; err.body.activeSubscriptionIds) {
+    // Still in use: move or cancel err.body.activeSubscriptionIds first
+  } else {
+    throw err;
+  }
+}</code></pre></div>
+      </div>
+      <ul>
+        <li><strong>Subscriptions block it.</strong> A card that a subscription still uses returns <code>400</code> with <code>activeSubscriptionIds</code> and <code>activeSubscriptions</code>. A <code>trialing</code> subscription blocks it too. The card stays <code>active</code>.</li>
+        <li><strong>It is idempotent.</strong> A repeat delete returns <code>200</code> with <code>alreadyCancelled: true</code>, and no <code>previousStatus</code> or <code>cancelledAt</code>.</li>
+        <li><strong>The record stays.</strong> A read returns the method as <code>cancelled</code>, with the card fields unchanged. The read has no <code>cancelledAt</code>, so <code>updatedAt</code> is the cancellation time.</li>
+        <li><strong>It cannot be reused.</strong> A new subscription on it returns <code>400</code> <code>"Payment method is not active"</code>.</li>
+        <li><strong>Spelling.</strong> Payment methods say <code>cancelled</code>. Subscriptions say <code>canceled</code>.</li>
+      </ul>
+      <div class="callout warning">
+        <p class="callout-title">A sibling method can still be charged</p>
+        <p>Two payment methods for the same shopper can share one stored card (the same <code>storedPaymentMethodId</code>). A delete cancels only the method you name. In test, the sibling still read <code>active</code> after the delete, and a charge on it was authorised. <span class="badge verified">Verified</span> Production is not observed. To remove a card completely, delete every method that shares its <code>storedPaymentMethodId</code>.</p>
+      </div>
 
       <h2>Test cards</h2>
       <p>Use Adyen's public test cards. <code>4111 1111 1111 1111</code>, expiry <code>03/2030</code>, CVC <code>737</code> stores successfully. <span class="badge verified">Verified</span></p>
@@ -462,7 +516,7 @@ stateDiagram-v2
             <tr><td><code>shopperReference</code></td><td class="type">string</td><td>Adyen's cardholder identifier.</td></tr>
             <tr><td><code>recurringType</code></td><td class="type">enum</td><td><code>Subscription</code>, <code>CardOnFile</code> or <code>UnscheduledCardOnFile</code>.</td></tr>
             <tr><td><code>environment</code></td><td class="type">string</td><td><code>test</code> or <code>live</code>.</td></tr>
-            <tr><td><code>status</code></td><td class="type">enum</td><td><code>pending_setup</code>, <code>active</code> or <code>failed</code>.</td></tr>
+            <tr><td><code>status</code></td><td class="type">enum</td><td><code>pending_setup</code>, <code>active</code>, <code>failed</code> or <code>cancelled</code>.</td></tr>
             <tr><td><code>adyenReference</code></td><td class="type">string</td><td>Plorea's reference for the 1 NOK verification at Adyen.</td></tr>
             <tr><td><code>adyenPaymentLinkId</code>, <code>adyenPaymentLinkUrl</code></td><td class="type">string | null</td><td>The hosted setup page. Null for session setups and on some failed setups.</td></tr>
             <tr><td><code>storedPaymentMethodId</code></td><td class="type">string | null</td><td>Adyen's card token. Null until <code>active</code>. Null forever on <code>failed</code>.</td></tr>

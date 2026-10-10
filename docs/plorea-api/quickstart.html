@@ -369,6 +369,7 @@ const method = await res.json(); // redirect to method.adyenPaymentLinkUrl</code
   "expiresAt": "2026-10-11T12:00:00+02:00"
 }</code></pre>
       <p>After the customer returns, poll <code>GET /payment-methods/{paymentMethodId}</code> until <code>status</code> is <code>active</code> or <code>failed</code>. Plorea sends no webhook for card setup. <span class="badge stated">Stated by Plorea</span></p>
+      <p>On a platform, also send <code>merchantOrgNr</code> (and optionally <code>merchantName</code>) on the setup. The 3-D Secure challenge then shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span></p>
 
       <h3>Create a subscription</h3>
       <p>Create the subscription on the active card. Billing starts at once: without a trial, the scheduler charges the first period within seconds. <span class="badge verified">Verified</span></p>
@@ -429,7 +430,7 @@ $subscription-&gt;nextChargeAt; // the first charge, which is now</code></pre></
 });
 const subscription = await res.json();</code></pre></div>
       </div>
-      <p>Each scheduled charge sends a <code>subscription.charge_succeeded</code> webhook. A failed charge sends nothing, so you must poll for it. Read <a href="subscriptions.html">Subscriptions</a> and <a href="dunning.html">Failed charges and dunning</a> before you go live.</p>
+      <p>Each scheduled charge sends a <code>subscription.charge_succeeded</code> webhook. A failed scheduled charge moves the subscription to <code>past_due</code> and sends <code>subscription.charge_failed</code>. That event is not in Plorea's catalogue and is not redelivered, so you must also poll. Read <a href="subscriptions.html">Subscriptions</a> and <a href="dunning.html">Failed charges and dunning</a> before you go live.</p>
 
       <h2>What to read next</h2>
       <div class="cards">

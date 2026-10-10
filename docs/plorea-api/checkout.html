@@ -283,7 +283,7 @@ if (result is CheckoutSessionResult.Success) {
       </ol>
 
       <h2>Storing a card with Drop-in</h2>
-      <p>Card setup has its own session endpoint, <code>POST /payment-methods/setup/session</code>. It takes the same <code>channel</code> values and returns a <code>clientKey</code> for every channel. It differs in one important way: there is no webhook for card setup, so you must poll the payment method. See <a href="payment-methods.html">Storing cards</a>.</p>
+      <p>Card setup has its own session endpoint, <code>POST /payment-methods/setup/session</code>. It takes the same <code>channel</code> values and returns a <code>clientKey</code> for every channel. It differs in one important way: there is no webhook for card setup, so you must poll the payment method. On a platform, send <code>merchantOrgNr</code> and optionally <code>merchantName</code>. The 3-D Secure challenge then shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span> See <a href="payment-methods.html">Storing cards</a>.</p>
 
       <h2>Wallets and app store rules</h2>
       <ul>
