@@ -14,23 +14,19 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: deploy
+  # The checks run npm code (mermaid-cli), so they get no Pages or OIDC
+  # token. Deploy runs only when they pass.
+  check:
+    name: check
     runs-on: ubuntu-latest
     # A manual run can pick any branch; only main may publish.
     if: github.ref == 'refs/heads/main'
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout code
@@ -52,6 +48,24 @@ jobs:
           printf '{"args":["--no-sandbox"],"executablePath":"%s"}' "$(command -v google-chrome)" > "$RUNNER_TEMP/puppeteer.json"
           npx -y -p @mermaid-js/mermaid-cli@10.9.1 -p mermaid@10.9.1 mmdc -q -p "$RUNNER_TEMP/puppeteer.json" \
             -i "$RUNNER_TEMP/mermaid/diagrams.md" -o "$RUNNER_TEMP/mermaid/out.md"
+
+  deploy:
+    name: deploy
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
