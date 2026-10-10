@@ -433,6 +433,25 @@ Confirm the first charge in the charge history.
 trial returns `accessEndsAt: null`, because it is derived from the last charge
 and there is none. Treat null as "access ends now".
 
+### ✅ Trial end is charged, late, and the anchor follows the delay — 2026-10-11 (test)
+
+A fresh 1 NOK monthly subscription on a stored test card, with the trial
+ending 10 minutes after create. Polled every minute until 30 minutes after
+the trial end, then cancelled.
+
+| Time after trial end | Observed |
+| --- | --- |
+| +3 min | still `trialing`, no charge; `nextChargeAt` pushed +17 min, `trialEndsAt` unchanged |
+| +22 min | one charge, `authorised`, 1 NOK, `retryNumber: 0`; status `active` |
+| same read | `nextChargeAt` = the **pushed** time + 1 month, not trial end + 1 month |
+| +30 min | unchanged; `retryCount: 0`, `failureReason: null` throughout |
+
+So the scheduler does charge at trial end, but it first postponed the date
+without a charge or a `failureReason` — the same 15–20 minute push seen on
+new subscriptions without a trial on 2026-10-06 (see above). This time the
+charge did follow. The billing anchor then moves by the delay.
+Do not derive the next period from `trialEndsAt`; read `nextChargeAt` back.
+
 ### ✅ `merchantOrgNr` on subscriptions — 2026-09-21
 
 `POST subscriptions` accepts `merchantOrgNr`, `merchantName` and
@@ -863,6 +882,14 @@ retry — was observed in **production** between 2026-10-01 and 2026-10-08 (see
 above), all with `"PaymentDetail not found"` (charges sent to Adyen's test
 environment) rather than a decline. A real decline is unobserved, and it still
 cannot be produced in test.
+
+**Re-checked 2026-10-11:** the test tenant still has no `payment_failed`
+subscription of its own. The list endpoint, called with the test key, also
+returns live subscriptions — two of them `payment_failed` — because it has no
+environment filter. Their payment methods report `environment: "live"`, which
+is how to tell them apart. They were not touched. So the recovery of a
+`payment_failed` subscription (PATCH amount + `nextChargeAt`, `nextChargeAt`
+alone, `resume`) remains unobserved in test.
 
 Why it cannot be done:
 
