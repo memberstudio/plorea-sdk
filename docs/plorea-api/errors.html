@@ -45,6 +45,8 @@
             <tr><td><code>402</code></td><td>Card declined</td><td>A manual subscription charge was declined by the acquirer. Only this.</td><td>Start dunning. The subscription itself is fine.</td></tr>
             <tr><td><code>403</code></td><td>Forbidden</td><td><code>Tenant mismatch</code>: the resource belongs to another tenant. Also a scheduler-charge reference on the status endpoint.</td><td>Check which tenant owns the resource.</td></tr>
             <tr><td><code>404</code></td><td>Not found</td><td>Unknown reference or ID. A bare <code>{"message":"Not Found"}</code> means the route does not exist, not the resource.</td><td>Often normal control flow: "does it exist?"</td></tr>
+            <tr><td><code>409</code></td><td>Conflict</td><td><code>POST /payments/session</code> can answer <code>409</code>. Plorea's own pay page passes it to the customer. The cause is not documented. It is probably a link that is already paid or expired. <span class="badge open">Open question</span></td><td>Do not retry. Read <code>GET /payments/status/{reference}</code> and show the customer that state.</td></tr>
+            <tr><td><code>410</code></td><td>Gone</td><td><code>GET /pay/{paymentLinkId}</code> can answer <code>410</code>. Plorea's own pay page treats it like <code>404</code>. <span class="badge open">Open question</span></td><td>Treat the link as no longer payable.</td></tr>
             <tr><td><code>5xx</code></td><td>Plorea or provider error</td><td>—</td><td>Retry reads. For writes, re-read state first. See below.</td></tr>
           </tbody>
         </table>

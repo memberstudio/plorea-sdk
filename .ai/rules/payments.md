@@ -195,6 +195,10 @@ being built at the same time, and the SDK had to be able to ask. What exists:
   tenant, shopper reference and customer id; a consuming app's
   `response()->json($session)` must never ship those to a browser or an app.
   Do not widen `toCheckout()` without that in mind.
+- Both session DTOs read `sessionId`/`sessionData` first, then Adyen's
+  `id`/`data`. Plorea's own pay page does the same (2026-09-14, after it
+  logged the response keys to debug). No id at all throws a
+  `PloreaException`. An empty id must never reach Drop-in.
 
 **Update 2026-09-17, morning — probed against Plorea test. (Card setup is
 superseded below; the rest still holds.)** Both session endpoints

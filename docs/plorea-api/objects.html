@@ -191,6 +191,7 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
+      <p><strong>Other field names.</strong> Plorea's own pay page also reads <code>orgNr</code>, <code>shopperEmail</code>, <code>invoiceUrl</code> and <code>status: "expired"</code>. We have never seen them in a response. Read both names, and treat the link as expired when either <code>expired</code> is true or <code>status</code> is <code>"expired"</code>. The SDK does this. <span class="badge open">Open question</span></p>
       <pre data-title="Pay page with merchant"><code class="lang-json">{
   "id": "pl_test_example",
   "reference": "order-1002",

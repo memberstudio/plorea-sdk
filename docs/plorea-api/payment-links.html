@@ -171,7 +171,7 @@ const link = await res.json();</code></pre></div>
 }</code></pre>
       <dl class="fields">
         <dt>paymentLinkUrl</dt><dd>Send the customer here.</dd>
-        <dt>paymentLinkId</dt><dd>The link id, prefixed <code>pl_</code>. Use it for <code>GET /pay/{id}</code> and for checkout sessions. Store it.</dd>
+        <dt>paymentLinkId</dt><dd>The link id, prefixed <code>pl_</code>. Use it for <code>GET /pay/{id}</code> and for checkout sessions. Store it. Keep it as secret as the payment link URL, which contains it. Do not log it, and show it only to the payer.</dd>
         <dt>expiresAt</dt><dd>When the link stops being payable. Store it. It is your main expiry signal, because the status never changes to <code>expired</code>. <span class="badge verified">Verified</span></dd>
         <dt>partnerSplitsApplied</dt><dd><code>true</code> when Plorea attached the merchant's split. It was <code>true</code> on links with a <code>merchantOrgNr</code> and <code>false</code> without. <span class="badge verified">Verified</span></dd>
         <dt>store, balanceAccountId, merchantAccount</dt><dd>Plorea's routing. Informational. Do not depend on the values.</dd>

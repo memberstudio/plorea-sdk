@@ -65,7 +65,11 @@ const checkout = await AdyenCheckout({
 new Dropin(checkout).mount('#checkout');
 ```
 
-On the return page (3DS, redirect methods): re-create `AdyenCheckout` with `session: { id: sessionId }` from the query and call `checkout.submitDetails({ details: { redirectResult } })`. CSP must allow Adyen's `checkoutshopper-*` hosts (script/style/connect/frame) and issuer 3DS frames; live hosts differ from test.
+With the npm package `@adyen/adyen-web` (not the script tag), pass the methods: `new Dropin(checkout, { paymentMethodComponents: [Card] })`. Without them Drop-in is empty.
+
+`onPaymentCompleted` also fires for `Pending` and `Received`. Show "paid" only for `resultCode === 'Authorised'`; show "being processed" for the others. The server decides paid from the webhook or status, never from the browser.
+
+On the return page (3DS, redirect methods): do not create a new session. Re-create `AdyenCheckout` with `session: { id }`, taking the id from the query or from `localStorage['adyen-checkout__session'].id`, call `checkout.submitDetails({ details: { redirectResult } })`, then remove `redirectResult`, `sessionId` and `sessionResult` from the URL with `history.replaceState` so a refresh cannot submit twice. CSP must allow Adyen's `checkoutshopper-*` hosts (script/style/connect/frame) and issuer 3DS frames; live hosts differ from test.
 
 ## Native clients
 
