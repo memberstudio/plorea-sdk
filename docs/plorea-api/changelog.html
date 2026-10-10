@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's new</title>
+  <meta name="description" content="Dated changes to the Plorea Payments API as integrators observed them, and changes to these docs.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="changelog">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Start here</p>
+        <h1>What's new</h1>
+        <p class="lead">Changes to the Plorea API, in the order integrators saw them, and changes to these docs. The newest entry is first. The date is the day the change was observed or announced, not a release date from Plorea.</p>
+      </header>
+
+      <div class="legend">
+        <span><span class="badge verified">Verified</span> We saw this on the wire, in test or production.</span>
+        <span><span class="badge stated">Stated by Plorea</span> Plorea told us. We could not test it.</span>
+      </div>
+
+      <h2 id="2026-10">October 2026</h2>
+
+      <h3 id="2026-10-10">2026-10-10</h3>
+      <ul>
+        <li><strong>Docs:</strong> Visa, Mastercard and American Express test cards, each with a 3-D Secure 2 card for the challenge. See <a href="testing.html#common-cards">Testing</a>.</li>
+        <li><strong>Docs:</strong> the site is published. It covers the API as of this date.</li>
+      </ul>
+
+      <h3 id="2026-10-06">2026-10-06</h3>
+      <ul>
+        <li><strong>Delete a stored card.</strong> <code>DELETE /payment-methods/{id}</code> works in test. Production is not observed yet. The method becomes <code>cancelled</code>. A card that an active or trialing subscription uses is refused with <code>400</code>. Until 2026-10-05 the route was missing and answered a bare <code>404</code>. <span class="badge verified">Verified</span> See <a href="payment-methods.html#delete-a-card">Delete a card</a>.</li>
+      </ul>
+
+      <h3 id="2026-10-01">2026-10-01</h3>
+      <ul>
+        <li><strong>Pause and resume.</strong> <code>PATCH /subscriptions/{id}</code> accepts <code>status: "paused"</code>, and <code>status: "active"</code> with a future <code>nextChargeAt</code> to resume. A trialing subscription cannot be paused. <span class="badge verified">Verified</span> No charge was seen after a resume yet. <span class="badge open">Open question</span> See <a href="api-reference.html#pause-and-resume">Pause and resume</a>.</li>
+        <li><strong>New status <code>past_due</code>.</strong> A failed scheduled charge sets <code>past_due</code>, fills <code>failureReason</code> and moves <code>nextChargeAt</code> to the retry. Seen in production. <span class="badge verified">Verified</span> See <a href="dunning.html">Failed charges and dunning</a>.</li>
+        <li><strong>First <code>subscription.charge_failed</code> delivery.</strong> The event is not in Plorea's published catalogue. <span class="badge verified">Verified</span> See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</li>
+      </ul>
+
+      <h2 id="2026-09">September 2026</h2>
+
+      <h3 id="2026-09-30">2026-09-30</h3>
+      <ul>
+        <li><strong>Merchant on card setup.</strong> Both card setup flows accept <code>merchantOrgNr</code> and <code>merchantName</code>. 3-D Secure then shows the company's name. <span class="badge stated">Stated by Plorea</span> See <a href="payment-methods.html#merchant-on-setup">Storing cards</a>.</li>
+      </ul>
+
+      <h3 id="2026-09-22">2026-09-22</h3>
+      <ul>
+        <li><strong><code>merchantOrgNr</code> on subscription reads.</strong> <code>GET /subscriptions/{id}</code>, the list and the charges envelope return it. The merchant name and email are still not returned. <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <h3 id="2026-09-21">2026-09-21</h3>
+      <ul>
+        <li><strong>A subscription can bill for another company.</strong> Send <code>merchantOrgNr</code> on create. <span class="badge verified">Verified</span> See <a href="subscriptions.html">Subscriptions</a>.</li>
+      </ul>
+
+      <h3 id="2026-09-19">2026-09-19</h3>
+      <ul>
+        <li><strong><code>POST /payments/session</code> matches card setup</strong> for embedded and native checkout. <span class="badge verified">Verified</span> See <a href="checkout.html">Embedded and native checkout</a>.</li>
+        <li><strong>The refund and cancel <code>401</code> is gone.</strong> <span class="badge verified">Verified</span> Always send <code>X-Environment</code>: a refund without it still goes to live. See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</li>
+      </ul>
+
+      <h3 id="2026-09-17">2026-09-17</h3>
+      <ul>
+        <li><strong>Embedded and native checkout.</strong> Web Drop-in with 3-D Secure, and native Drop-in on a device, work end to end. <span class="badge verified">Verified</span> See <a href="checkout.html">Embedded and native checkout</a>.</li>
+      </ul>
+
+      <h3 id="2026-09-15">2026-09-15</h3>
+      <ul>
+        <li><strong>Capture is automatic.</strong> There is no capture endpoint. <span class="badge stated">Stated by Plorea</span></li>
+      </ul>
+
+      <h3 id="2026-09-09">2026-09-09</h3>
+      <ul>
+        <li><strong>A declined payment reports <code>failed</code>,</strong> never <code>refused</code>. <span class="badge verified">Verified</span> See <a href="payment-lifecycle.html">Payment lifecycle</a>.</li>
+        <li><strong>Reactivating a cancelled subscription is fixed.</strong> <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <p>Older behaviour, with the evidence for each claim, is in <a href="field-notes.html">Verified behaviour</a>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

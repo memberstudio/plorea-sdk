@@ -9,6 +9,7 @@ on:
     paths:
       - 'docs/plorea-api/**'
       - '.github/workflows/docs-pages.yml'
+      - 'bin/check-docs'
   workflow_dispatch:
 
 permissions:
@@ -34,6 +35,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # The same guard as the docs check workflow. Nothing is published if it
+      # fails, so a privacy finding on main cannot reach the public site.
+      - name: Privacy, HTML and links
+        env:
+          DOCS_DENYLIST: ${{ secrets.DOCS_DENYLIST }}
+        run: bin/check-docs --mermaid-out "$RUNNER_TEMP/mermaid"
+
+      # Mermaid is pinned to the version assets/docs.js loads; mermaid-cli alone
+      # would pull the newest 10.x. Puppeteer uses the runner's Chrome.
+      - name: Render Mermaid diagrams
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          printf '{"args":["--no-sandbox"],"executablePath":"%s"}' "$(command -v google-chrome)" > "$RUNNER_TEMP/puppeteer.json"
+          npx -y -p @mermaid-js/mermaid-cli@10.9.1 -p mermaid@10.9.1 mmdc -q -p "$RUNNER_TEMP/puppeteer.json" \
+            -i "$RUNNER_TEMP/mermaid/diagrams.md" -o "$RUNNER_TEMP/mermaid/out.md"
 
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5

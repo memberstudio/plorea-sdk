@@ -209,7 +209,7 @@
       <ol>
         <li>Adyen triggers declines through fields on the payment request, such as the holder name. For a stored card, that request is the setup. A decline trigger therefore fails the setup, and no card is stored.</li>
         <li>Custom test cards carry no decline behaviour.</li>
-        <li>Every published Adyen test card approves and has a future expiry.</li>
+        <li>A published Adyen test card approves or fails at once. Each has a future expiry.</li>
         <li>Amount-based triggers apply to terminals only.</li>
         <li>Plorea's scheduler charges the stored card server-side, with no way to pass a trigger.</li>
       </ol>
