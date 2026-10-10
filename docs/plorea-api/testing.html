@@ -39,13 +39,13 @@
         <p>Only the <code>X-Environment</code> header separates them. Most endpoints default to <code>test</code> when the header is missing, but <code>POST /payments/refund</code> goes to live and fails with <code>401</code>. Always send the header. <span class="badge verified">Verified</span></p>
       </div>
 
-      <h2>Test cards</h2>
-      <p>Use the cards on Adyen's <a href="https://docs.adyen.com/development-resources/testing/test-card-numbers" rel="noopener">published test card list</a>. Each card has a fixed future expiry date and a fixed CVC. All of them approve. <span class="badge verified">Verified</span></p>
+      <h2 id="test-cards">Test cards</h2>
+      <p>Use the cards on Adyen's <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">published test card list</a>. Each card has a fixed future expiry date and a fixed CVC. Most cards on the list approve. <span class="badge verified">Verified</span> A few always fail, such as the card under "Declined one-off payment" below.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Scenario</th><th>How</th><th>Evidence</th></tr></thead>
           <tbody>
-            <tr><td>Successful payment</td><td>Any card from Adyen's list, with its listed expiry and CVC. Complete the 3-D Secure challenge if one appears.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Successful payment</td><td>An approving card from Adyen's list, such as Visa <code>4111 1111 1111 1111</code>, with its listed expiry and CVC. Complete the 3-D Secure challenge if one appears.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td>Declined one-off payment</td><td>Card <code>4000 0000 0000 0259</code> on the hosted page. Adyen does not recognise it and refuses it after the 3DS2 challenge. Expect status <code>failed</code> and a <code>payment.failed</code> webhook.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td>Failed card setup</td><td>On an embedded setup, set the holder name to <code>NOT_ENOUGH_BALANCE</code>. The 1 NOK verification is refused and the method becomes <code>failed</code>.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td>Declined subscription charge</td><td>Not possible. See below.</td><td><span class="badge unobserved">Not observable in test</span></td></tr>
@@ -53,6 +53,23 @@
         </table>
       </div>
       <p>The hosted pay page shows only card number, expiry and CVC fields. You cannot set a holder name there, so Adyen's holder-name triggers do not work on payment links.</p>
+
+      <h3 id="common-cards">Visa, Mastercard and American Express</h3>
+      <p>These are the most common card brands in Norway. Each brand has one card without 3-D Secure 2 and one card that is enrolled in 3-D Secure 2. Use the enrolled card to test the 3-D Secure challenge. The numbers come from <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">Adyen's test card list</a> (checked 2026-10-10). Only the rows with a badge are tested through Plorea.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Brand</th><th>Card number</th><th>Expiry</th><th>CVC</th><th>3-D Secure 2</th></tr></thead>
+          <tbody>
+            <tr><td>Visa</td><td><code>4111 1111 1111 1111</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Not enrolled. <span class="badge verified">Verified</span></td></tr>
+            <tr><td>Visa</td><td><code>4917 6100 0000 0000</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Enrolled</td></tr>
+            <tr><td>Mastercard</td><td><code>5555 5555 5555 4444</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Not enrolled</td></tr>
+            <tr><td>Mastercard</td><td><code>5454 5454 5454 5454</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Enrolled</td></tr>
+            <tr><td>American Express</td><td><code>3700 0000 0000 002</code></td><td><code>03/2030</code></td><td><code>7373</code></td><td>Not enrolled</td></tr>
+            <tr><td>American Express</td><td><code>3714 4963 5398 431</code></td><td><code>03/2030</code></td><td><code>7373</code></td><td>Enrolled</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>American Express has a 15-digit number and a four-digit CVC. A card brand works only if the merchant account accepts it. Plorea has not confirmed American Express. <span class="badge open">Open question</span></p>
 
       <h2>Run every flow once</h2>
       <ol class="steps">
@@ -89,7 +106,7 @@
         <p>You cannot make a stored card decline on a later charge with Adyen's public test cards. <span class="badge unobserved">Not observable in test</span></p>
         <ul>
           <li>Adyen triggers refusals only through the holder name or a test acquirer response code. Both are fields of the first payment request. For a stored card, the first request is the setup. So the setup fails, and no card is stored.</li>
-          <li>Every published test card approves and has a future expiry. No card can expire after you store it.</li>
+          <li>A published test card approves or fails at once. Each has a future expiry. No card can expire after you store it.</li>
           <li>Plorea charges the stored card on the server. It passes neither trigger through.</li>
         </ul>
         <p>As a result, these shapes cannot be produced in test: the <code>402</code> body of a declined manual charge, a <code>payment_failed</code> subscription and the state after the last retry. The <code>past_due</code> shape (a filled <code>failureReason</code>, a non-zero <code>retryCount</code>) was seen once in production. <span class="badge verified">Verified 2026-10-01</span> The <code>subscription.charge_failed</code> webhook was seen in test for a stored card that was gone, not for a decline. <span class="badge verified">Verified</span></p>

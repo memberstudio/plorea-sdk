@@ -498,7 +498,24 @@ try {
       </div>
 
       <h2>Test cards</h2>
-      <p>Use Adyen's public test cards. <code>4111 1111 1111 1111</code>, expiry <code>03/2030</code>, CVC <code>737</code> stores successfully. <span class="badge verified">Verified</span></p>
+      <p>Use Adyen's public test cards. <code>4111 1111 1111 1111</code>, expiry <code>03/2030</code>, CVC <code>737</code> stores successfully. <span class="badge verified">Verified</span> For more cards and test scenarios, see <a href="testing.html#test-cards">Testing</a> and <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">Adyen's full list</a>.</p>
+
+      <h3 id="common-test-cards">Visa, Mastercard and American Express</h3>
+      <p>These are the most common card brands in Norway. Each brand has one card without 3-D Secure 2 and one card that is enrolled in 3-D Secure 2. Use the enrolled card to test the 3-D Secure challenge. The numbers come from <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">Adyen's test card list</a> (checked 2026-10-10). Only the rows with a badge are tested through Plorea.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Brand</th><th>Card number</th><th>Expiry</th><th>CVC</th><th>3-D Secure 2</th></tr></thead>
+          <tbody>
+            <tr><td>Visa</td><td><code>4111 1111 1111 1111</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Not enrolled. <span class="badge verified">Verified</span></td></tr>
+            <tr><td>Visa</td><td><code>4917 6100 0000 0000</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Enrolled</td></tr>
+            <tr><td>Mastercard</td><td><code>5555 5555 5555 4444</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Not enrolled</td></tr>
+            <tr><td>Mastercard</td><td><code>5454 5454 5454 5454</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Enrolled</td></tr>
+            <tr><td>American Express</td><td><code>3700 0000 0000 002</code></td><td><code>03/2030</code></td><td><code>7373</code></td><td>Not enrolled</td></tr>
+            <tr><td>American Express</td><td><code>3714 4963 5398 431</code></td><td><code>03/2030</code></td><td><code>7373</code></td><td>Enrolled</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>American Express has a 15-digit number and a four-digit CVC. A card brand works only if the merchant account accepts it. Plorea has not confirmed American Express. <span class="badge open">Open question</span></p>
       <p>To test a failed setup, use Adyen's test triggers, such as the holder name <code>NOT_ENOUGH_BALANCE</code>. The trigger refuses the 1 NOK verification. You get a <code>failed</code> payment method. <span class="badge verified">Verified</span></p>
       <div class="callout warning">
         <p class="callout-title">You cannot store a card that declines later</p>

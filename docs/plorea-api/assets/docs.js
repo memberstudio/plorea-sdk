@@ -8,6 +8,7 @@
   var NAV = [
     { title: 'Start here', items: [
       ['index.html', 'Overview'],
+      ['changelog.html', 'What\'s new'],
       ['quickstart.html', 'Quickstart'],
       ['concepts.html', 'Core concepts'],
     ] },

@@ -1031,7 +1031,7 @@ if (method.status === 'active') {
       <ul>
         <li><strong>The setup verification is a real 1 NOK authorisation.</strong> Some customers see it on their statement. Say so on the card update page.</li>
         <li><strong><code>failed</code> is final.</strong> A failed method never becomes active. Start a new setup. <code>failureReason</code> is always <code>null</code>, so you cannot tell the customer why. <span class="badge verified">Verified</span></li>
-        <li><strong>The old method is not removed.</strong> There is no delete endpoint for payment methods. <span class="badge open">Open question</span></li>
+        <li><strong>The old method stays active until you delete it.</strong> Move every subscription to the new method first, then delete the old one. A method in use by an active or trialing subscription is refused with <code>400</code>. <span class="badge verified">Verified</span> See <a href="payment-methods.html#delete-a-card">Delete a card</a>.</li>
       </ul>
 
       <!-- ================================================================ -->
