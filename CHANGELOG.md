@@ -6,6 +6,16 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ### Changed
 
+- Docs: unverified subscription behaviours are now marked. A moved `nextChargeAt`
+  on an `active`, already-charged subscription (plain PATCH, or pause then
+  resume) is stored but has never been charged (open question, test 4-5
+  October 2026). Leaving `payment_failed` is untested by PATCH, `resume()` and
+  `reactivate()`. Changing `amount` and `nextChargeAt` together is unverified.
+  The retry policy (three attempts about 24 hours apart, then `payment_failed`)
+  is observed in production, not confirmed by Plorea. A retry charges the amount
+  held when it runs (stated by Plorea). No-trial billing at once is seen in
+  production, not in test. Docblocks no longer say that `reactivate()` resumes
+  a `payment_failed` subscription.
 - `PaymentSession` also reads Adyen's own field names, `id` and `data`, when
   `sessionId` or `sessionData` is missing or empty. Plorea's pay page reads
   both (2026-09-14). `PaymentMethodSession` does not: a card-setup response

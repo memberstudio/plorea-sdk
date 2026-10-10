@@ -31,8 +31,8 @@
         <table>
           <thead><tr><th>Operation</th><th>Effect on billing</th><th>Evidence</th></tr></thead>
           <tbody>
-            <tr><td><code>POST /subscriptions</code></td><td>Starts billing immediately. With <code>trialEndsAt</code>, the first charge happens at the end of the trial.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Changes the amount, VAT, quantity, labels or card. Moves <code>nextChargeAt</code>. Pauses with <code>status: "paused"</code> and resumes with <code>status: "active"</code>. It does not charge. It cannot change the interval.</td><td><span class="badge verified">Verified</span> in test</td></tr>
+            <tr><td><code>POST /subscriptions</code></td><td>With <code>trialEndsAt</code>, the first charge happens at the end of the trial. <span class="badge verified">Verified</span> Without a trial, billing should start at once. A no-trial signup was charged at once in production on 2026-10-10. <span class="badge verified">Verified</span> in production. In test on 2026-10-06, new subscriptions without a trial were not charged: the scheduler kept moving <code>nextChargeAt</code> 15 to 20 minutes forward. <span class="badge open">Open question</span></td><td><span class="badge verified">Verified</span> for a trial. <span class="badge open">Open question</span> in test for no trial</td></tr>
+            <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Changes the amount, VAT, quantity, labels or card. Stores a new <code>nextChargeAt</code>. A <code>trialing</code> subscription is charged on the moved date. <span class="badge verified">Verified</span> An <code>active</code> subscription that was charged before has never been charged on a moved date. <span class="badge open">Open question</span> Changing <code>amount</code> and <code>nextChargeAt</code> in one update is not tested. <span class="badge unobserved">Unobserved</span> Pauses with <code>status: "paused"</code> and resumes with <code>status: "active"</code>. It does not charge. It cannot change the interval.</td><td><span class="badge verified">Verified</span> in test for the stored fields</td></tr>
             <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>Charges the stored card now. It does not move the schedule of later charges in a way you control.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST /subscriptions/{id}/cancel</code></td><td>Stops future charges. Returns <code>accessEndsAt</code> = last charge + one interval.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST /subscriptions/{id}/reactivate</code></td><td>Restarts a canceled subscription. Sets <code>nextChargeAt</code> to last charge + one interval. Does not charge twice.</td><td><span class="badge verified">Verified</span></td></tr>
@@ -69,7 +69,7 @@
 
       <!-- ================================================================ -->
       <h2>Sign-up with a free trial</h2>
-      <p><strong>Use this when</strong> the customer gets a free period before the first charge. The same recipe also gives you a fixed billing date, for example "always bill on the 1st": set the trial to end on that date.</p>
+      <p><strong>Use this when</strong> the customer gets a free period before the first charge. The same recipe also gives you a fixed billing date, for example "always bill on the 1st": set the trial to end on that date. A trial that ends on the date is charged on it. <span class="badge verified">Verified</span> Do not move <code>nextChargeAt</code> on an <code>active</code> subscription to reach a billing day: that has never produced a charge. <span class="badge open">Open question</span></p>
       <p>A trial needs a stored card first. The card setup makes a 1 NOK verification authorisation, so the customer proves the card works before the trial starts. <span class="badge verified">Verified</span></p>
 
       <figure class="diagram">
@@ -191,7 +191,7 @@ const subscription = await res.json(); // status: "trialing"</code></pre></div>
 
       <h3>Pitfalls</h3>
       <ul>
-        <li><strong>Without <code>trialEndsAt</code>, billing starts at once.</strong> The scheduler charges within seconds of create. There is no "start on date X" option except a trial. <span class="badge verified">Verified</span></li>
+        <li><strong>Without <code>trialEndsAt</code>, billing should start at once.</strong> A no-trial signup was charged at once in production on 2026-10-10. <span class="badge verified">Verified</span> in production. In test on 2026-10-06, new no-trial subscriptions were not charged. <span class="badge open">Open question</span> There is no "start on date X" option except a trial. Moving <code>nextChargeAt</code> on an <code>active</code> subscription does not replace it. <span class="badge open">Open question</span></li>
         <li><strong>A cancel during the trial returns <code>accessEndsAt: null</code>.</strong> The value is derived from the last charge, and a trial has none. Treat <code>null</code> as "access ends now". Do not treat it as "access never ends". <span class="badge verified">Verified</span></li>
         <li><strong>A <code>trialEndsAt</code> in the past</strong> has unknown behaviour. Always send a future date. <span class="badge open">Open question</span></li>
         <li><strong>Send <code>vatAmount</code> as the VAT part of <code>amount</code>.</strong> All recorded responses fit VAT-inclusive amounts: for 25 % VAT, <code>vatAmount = amount × 0.25 / 1.25</code>, so 19900 øre gives 3980 øre. Plorea has not documented this. <span class="badge open">Open question</span></li>
@@ -283,6 +283,7 @@ $subscription-&gt;nextChargeAt;  // unchanged</code></pre></div>
 
       <h3>What we know</h3>
       <ul>
+        <li>Send the amount without <code>nextChargeAt</code>. Changing both in one update is not tested. <span class="badge unobserved">Unobserved</span></li>
         <li>The PATCH stores the new amount and returns it. It does not charge and does not move <code>nextChargeAt</code>. <span class="badge verified">Verified</span></li>
         <li>The next scheduled charge uses the stored amount at the time it runs. This is the expected behaviour, but no renewal after a PATCH has been observed yet. Check the first renewal in production. <span class="badge open">Open question</span></li>
         <li>There is no "effective from" date on a PATCH. You control timing only by when you send it.</li>
@@ -556,7 +557,7 @@ await upgrade.save({ state: 'done' });</code></pre></div>
       <p><strong>Use this when</strong> a customer stops paying for a known period and then continues, for example a gym membership frozen during an injury or a summer break. The customer keeps the card on file. No charge happens during the pause.</p>
       <div class="callout note">
         <p class="callout-title">Native pause, with one open question</p>
-        <p>Plorea recommends <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> to pause, and <code>{"status": "active", "nextChargeAt": "…"}</code> to resume. <span class="badge stated">Stated by Plorea</span> Both calls work as described in test. <span class="badge verified">Verified</span> In test, no charge was seen after a resume. Plorea has the question. <span class="badge open">Open question</span> Production is unobserved.</p>
+        <p>Plorea recommends <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> to pause, and <code>{"status": "active", "nextChargeAt": "…"}</code> to resume. <span class="badge stated">Stated by Plorea</span> Both calls answer as described in test, and the stored date is exactly the date sent. <span class="badge verified">Verified</span> A resumed subscription has never been charged on that date. We tried a plain PATCH and a pause then resume, with two date formats, over four scheduler runs, in test on 4 and 5 October 2026. Only <code>trialing</code> subscriptions with a moved date were charged. Reported to Plorea on 5 October. It is still open. <span class="badge open">Open question</span> Do not rely on a resume to restart billing. Production is unobserved.</p>
       </div>
 
       <figure class="diagram">
@@ -594,7 +595,7 @@ stateDiagram-v2
         <li><strong>Pause</strong>Call <code>PATCH /subscriptions/{id}</code> with <code>status: "paused"</code>. Check that the response says <code>paused</code>. If it does not, stop and keep the subscription as it is.</li>
         <li><strong>Decide access during the pause</strong>The pause response has no <code>accessEndsAt</code>. If the customer keeps access until the paid period ends, calculate that date yourself: <code>lastChargeAt</code> + one interval.</li>
         <li><strong>Resume on the resume date</strong>Run a job that calls <code>PATCH /subscriptions/{id}</code> with <code>status: "active"</code> and a <code>nextChargeAt</code> in the future. To bill now, send a time a few minutes ahead. Nothing resumes on its own.</li>
-        <li><strong>Confirm the first charge</strong>After <code>nextChargeAt</code>, read <code>GET /subscriptions/{id}/charges</code>. Look for a new charge. In test none came. <span class="badge open">Open question</span> If no charge appears, the subscription is overdue. Ask Plorea before you charge by hand: a late scheduler run plus a manual charge bills the customer twice.</li>
+        <li><strong>Confirm the first charge</strong>After <code>nextChargeAt</code>, read <code>GET /subscriptions/{id}/charges</code>. Look for a new charge. In test none has ever come on an <code>active</code> subscription. <span class="badge open">Open question</span> If no charge appears, the subscription is overdue. Ask Plorea before you charge by hand: a late scheduler run plus a manual charge bills the customer twice.</li>
       </ol>
 
       <div class="tabs">
@@ -682,7 +683,7 @@ if (!resumeRes.ok) throw new Error(`Resume failed: ${resumeRes.status}`);</code>
 }</code></pre>
 
       <h3>Fallback: cancel, then a new subscription with a trial</h3>
-      <p>Use this only while the open question above blocks you, or in an environment where the resume charge has not been proven. The charge at the end of a trial is verified. The cost is a new subscription ID and a cancel that cannot be undone safely.</p>
+      <p>Use this while the open question above blocks you. No resume charge has been seen yet. The charge at the end of a trial is verified. The cost is a new subscription ID and a cancel that cannot be undone safely.</p>
       <ol class="steps">
         <li><strong>Prepare the new subscription first</strong>Read the old subscription. Build the full create request before you cancel: card, amount, interval, VAT, <code>externalId</code> and the company. A read returns <code>merchantOrgNr</code>, but not <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span> Take the name and email from your own record. Send optional fields such as <code>customerId</code> only when they have a value.</li>
         <li><strong>Cancel the current subscription</strong>Call <code>POST /subscriptions/{id}/cancel</code> with <code>reason: "paused"</code>. Check that <code>status</code> is <code>canceled</code>. If not, stop. Do not create the new subscription.</li>
@@ -799,7 +800,7 @@ const paused = await fetch(`${base}/subscriptions`, {
       <ul>
         <li><strong>A pause does not end on its own.</strong> If your resume job does not run, billing never restarts. Monitor the job.</li>
         <li><strong>Webhooks do not tell you about the pause.</strong> Plorea's catalogue has no event for pause, resume, cancel or reactivate. <span class="badge stated">Stated by Plorea</span></li>
-        <li><strong>A resume with a lapsed date looks overdue.</strong> A resumed subscription that was not charged stays <code>active</code> with a <code>nextChargeAt</code> in the past. Your overdue check flags it after the grace period. That is the open question above.</li>
+        <li><strong>A resume with a lapsed date looks overdue.</strong> A resumed subscription that was not charged stays <code>active</code> with a <code>nextChargeAt</code> in the past. Your overdue check flags it after the grace period. That is the open question above. <span class="badge open">Open question</span></li>
         <li><strong>Check the card before the resume date.</strong> A card that expires during the pause fails on the first charge. Read <code>expiryDate</code> on <code>GET /payment-methods/{id}</code> and ask for a new card early.</li>
       </ul>
 
@@ -1105,7 +1106,7 @@ stateDiagram-v2
   active --> past_due: scheduled charge fails
   past_due --> active: retry succeeds (not observed)
         </pre>
-        <figcaption>Subscription states. <code>past_due</code> was seen in production. What follows the last retry is not observed. Plorea's documentation also names <code>payment_failed</code>, which has never been observed.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. After three failed retries, production showed <code>payment_failed</code>, not <code>canceled</code>. The way out of <code>payment_failed</code> is untested: see <a href="dunning.html#after-the-last-retry">Failed charges and dunning</a>. The arrow from <code>paused</code> back to <code>active</code> is verified for the status only. No charge has followed it yet.</figcaption>
       </figure>
 
       <ol class="steps">
@@ -1210,7 +1211,7 @@ if (res.status === 400) {
         <table>
           <thead><tr><th>Workflow</th><th>Missing in the API</th><th>Workaround on this page</th></tr></thead>
           <tbody>
-            <tr><td>Pause / freeze</td><td>Proof that a resumed subscription is charged <span class="badge open">Open question</span></td><td>Native pause; cancel + new subscription with trial as a fallback</td></tr>
+            <tr><td>Pause / freeze</td><td>Proof that a resumed subscription, or any active one with a moved <code>nextChargeAt</code>, is charged. None was seen in test. <span class="badge open">Open question</span></td><td>Native pause; cancel + new subscription with trial as a fallback</td></tr>
             <tr><td>Upgrade</td><td>Proration <span class="badge proposal">Proposal</span></td><td>Self-computed manual charge + PATCH</td></tr>
             <tr><td>Downgrade with refund</td><td>Refund of a scheduler charge <span class="badge open">Open question</span></td><td>Downgrade at period end</td></tr>
             <tr><td>Interval change</td><td><code>interval</code> on PATCH <span class="badge proposal">Proposal</span></td><td>Cancel + new subscription with trial</td></tr>

@@ -121,7 +121,7 @@ Idempotent-Replayed: true</code></pre>
       <ul>
         <li>The event is not in Plorea's webhook catalogue.</li>
         <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
-        <li>The state after the last retry is unknown: a terminal status, <code>canceled</code> or <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></li>
+        <li>After three failed retries, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> How to leave <code>payment_failed</code> is untested, and the API has no call for the reset Plorea did by hand. <span class="badge unobserved">Unobserved</span></li>
         <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
         <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
       </ul>
@@ -178,7 +178,7 @@ Idempotent-Replayed: true</code></pre>
 
       <h3 id="charge-after-resume">19. Charge after resume</h3>
       <p><span class="badge open">Reported to Plorea 2026-10-01</span></p>
-      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span></p>
+      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span> A plain <code>PATCH</code> of the date on an <code>active</code> subscription that had been charged behaved the same, with two date formats over four scheduler runs (4 and 5 October). Only <code>trialing</code> subscriptions with a moved date were charged. Reported again on 2026-10-05. Still open.</p>
       <p><strong>Impact.</strong> A resumed membership may never bill again. Integrators must watch every resumed subscription for an overdue <code>nextChargeAt</code>.</p>
       <p><strong>Proposal.</strong> Charge a resumed subscription on its <code>nextChargeAt</code>, as for any active subscription. Document the expected scheduler delay.</p>
 
@@ -230,7 +230,7 @@ Idempotent-Replayed: true</code></pre>
 
       <h3 id="sandbox-failure-triggers">4. Sandbox failure triggers</h3>
       <p><strong>Problem.</strong> A failed subscription charge cannot be produced in test. Adyen's decline triggers live on the payment request, and Plorea's scheduler builds that request server-side. <span class="badge unobserved">Not observable in test</span></p>
-      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body, <code>payment_failed</code> and the state after the last retry. The <code>past_due</code> shape was seen once, in production. It cannot be produced in test.</p>
+      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body and the exit from <code>payment_failed</code>. The <code>past_due</code> and <code>payment_failed</code> shapes were seen in production. They cannot be produced in test.</p>
       <p><strong>Proposal.</strong> Either of these works:</p>
       <ul>
         <li>Pass Adyen's <code>RequestedTestAcquirerResponseCode</code> through on manual charges in test.</li>
