@@ -96,6 +96,19 @@ refund and a cancellation requested on 2026-09-19 were both still
 modifications asynchronously, and that the final statuses are `refunded` and
 `cancelled`. Book on the request; do not wait for the final status.
 
+### ✅ One scheduled subscription charge could not be refunded through the API — 2026-10-11
+
+In production, `POST payments/refund` answered `{"error":"Payment not found"}`
+for a scheduled charge, both with its `{subscriptionId}-{chargeId}` reference
+and with its `pspReference` from `GET subscriptions/{id}/charges`.
+`POST payments/cancel` on the same `authorised` charge also failed. The signup
+charge is `reason: "scheduled_charge"` too. Refund such a charge in the Plorea
+portal, then record that refund in your own system against the original
+charge, so no other path refunds it again.
+
+**❓ Open:** whether every scheduled charge behaves this way, and whether Plorea
+plans an API path. A refund of a manual charge is untested.
+
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
 The create response omits `merchantOrgNr` and `merchantName` entirely. They
@@ -364,10 +377,17 @@ means "route missing", not "method missing".
 US spelling. `trialing` is a distinct state, not a flavour of active. `past_due`
 is what a failed scheduled charge produces — see below.
 
-### ✅ Billing starts immediately
+### ❓ First charge without a trial — production charged at once, test did not (2026-10-11)
 
-The create response already carries the first `nextChargeAt`, and the scheduler
-charges within seconds unless a trial is set.
+The create response already carries the first `nextChargeAt`. In an earlier test
+run the scheduler charged within seconds unless a trial was set. A no-trial
+signup was charged at once in **production** on 2026-10-10:
+`GET /subscriptions/{id}/charges` showed `reason: "scheduled_charge"`,
+`status: "authorised"`.
+
+**❓ Open: test, 2026-10-06.** New subscriptions without a trial were not charged
+in test. The scheduler kept moving `nextChargeAt` 15 to 20 minutes forward.
+Confirm the first charge in the charge history.
 
 ### ✅ Trials — 2026-09-07
 
@@ -442,8 +462,28 @@ The `charges()` item reported `status: "failed"`, `reason: "scheduled_charge"`,
 `retryNumber: 0` and the same `failureReason`. No webhook was sent.
 
 Because `nextChargeAt` moves forward, a `past_due` subscription is **not**
-overdue — `needingAttention()` checks the status as well. What happens after the
-last retry (a terminal status, or `canceled`) is not yet observed.
+overdue — `needingAttention()` checks the status as well.
+
+**✅ After the last retry — observed in production 6–8 October 2026.** One
+subscription with the default policy was tried three times, about 24 hours
+apart. Then it read `status: "payment_failed"`, `retryCount: 3`,
+`nextChargeAt: null`. It was not `canceled`. This is **observed, not confirmed by
+Plorea** as a fixed policy (❓ open).
+
+**📋 Stated by Plorea (9 October):** a retry charges the amount the subscription
+holds when the retry runs.
+
+**❓ Unobserved: leaving `payment_failed`, by every route.**
+
+- `PATCH` with `amount` and `nextChargeAt`: not tried. Changing both in one
+  update is unverified on any status.
+- `resume()`: verified only `paused` → `active`. An `active` subscription gives
+  400 with `allowedTransitions: ["paused"]`.
+- `reactivate()`: verified only from `canceled`. An `active` subscription gives 400
+  "Only canceled subscriptions can be reactivated". Other statuses are untested.
+- Plorea's manual retry reset (9 October) gave `status: active` and
+  `retryCount: 0`, but it charged the card **at once** and moved the billing
+  anchor. The API has no call for that reset.
 
 Fixture: `subscription-past-due.json`.
 
@@ -479,6 +519,14 @@ ahead. None was charged — checked 3, 16 and 41 minutes after the date — and
 each stayed `active` with the lapsed date. Reactivate lag was 7 s to 4.5 min,
 so this is longer than any scheduler delay seen before. Raised with Plorea
 2026-10-01. `isOverdue()` reports this state after the grace period.
+
+**❓ Open, wider (4–5 October, test):** moving `nextChargeAt` on an `active`,
+already-charged subscription stores the new date, but the subscription has
+**never** been charged on it. Tried: a plain PATCH and pause → resume with a
+date, both date formats, four scheduler runs. Reported to Plorea 2026-10-05,
+still open. Only `trialing` subscriptions with a moved date were charged. Do not
+build fixed billing days or resume-with-date flows on this.
+Changing `amount` and `nextChargeAt` in one update is **unverified**.
 
 Unobserved: whether a webhook fires on pause or resume (the catalogue says
 nothing does), and production.
@@ -691,8 +739,9 @@ break verification while the payload still looks valid.
 **Verified impossible with the public Adyen test cards, 2026-09-09** — twice,
 independently. The reasoning below is why, so you do not have to repeat it.
 
-The blocked shapes are: the 402 `ChargeFailedException` body, a
-`payment_failed` subscription and the state after the last retry. The
+The blocked shapes are: the 402 `ChargeFailedException` body and a
+`payment_failed` subscription (seen once in production, 2026-10-08, but not
+producible in test). The
 `subscription.charge_failed` webhook was captured from a method whose card was
 gone (see above), not from a decline. A failed scheduled charge itself —
 `past_due`, a populated `failureReason`, a non-zero `retryCount` — was captured
@@ -726,8 +775,8 @@ successfully and declines on a later charge, or by exposing
 `RequestedTestAcquirerResponseCode` passthrough on
 `POST subscriptions/{id}/charge`. Both have been requested.
 
-Consequently: the fake's 402 stub and the `payment_failed` status are modelled
-from Plorea's documentation, not from an observation; `past_due` is observed. Write dunning code that
+Consequently: the fake's 402 stub is modelled from Plorea's documentation, not
+from an observation; `past_due` and `payment_failed` are observed in production. Write dunning code that
 tolerates a shape slightly different from what the SDK models — branch on
 `status`, and do not require `failureReason` to be present.
 

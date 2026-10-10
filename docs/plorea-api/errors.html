@@ -45,6 +45,8 @@
             <tr><td><code>402</code></td><td>Card declined</td><td>A manual subscription charge was declined by the acquirer. Only this.</td><td>Start dunning. The subscription itself is fine.</td></tr>
             <tr><td><code>403</code></td><td>Forbidden</td><td><code>Tenant mismatch</code>: the resource belongs to another tenant. Also a scheduler-charge reference on the status endpoint.</td><td>Check which tenant owns the resource.</td></tr>
             <tr><td><code>404</code></td><td>Not found</td><td>Unknown reference or ID. A bare <code>{"message":"Not Found"}</code> means the route does not exist, not the resource.</td><td>Often normal control flow: "does it exist?"</td></tr>
+            <tr><td><code>409</code></td><td>Conflict</td><td><code>POST /payments/session</code> can answer <code>409</code>. Plorea's own pay page passes it to the customer. The cause is not documented. <span class="badge open">Open question</span></td><td>Do not retry blindly. Read <code>GET /payments/status/{reference}</code> first. Show a paid or expired state. If the payment is still open, let the customer try again later.</td></tr>
+            <tr><td><code>410</code></td><td>Gone</td><td><code>GET /pay/{paymentLinkId}</code> can answer <code>410</code>. Plorea's own pay page treats it like <code>404</code>. <span class="badge open">Open question</span></td><td>Treat the link as no longer payable.</td></tr>
             <tr><td><code>5xx</code></td><td>Plorea or provider error</td><td>—</td><td>Retry reads. For writes, re-read state first. See below.</td></tr>
           </tbody>
         </table>
@@ -194,7 +196,7 @@ try {
             <tr><td><code>POST /payments/cancel</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Same as refund. Check <code>lastCancelReference</code>.</td></tr>
             <tr><td><code>POST /payments/link</code></td><td><strong>No</strong></td><td>A retry can create a second live link for the same reference.</td></tr>
             <tr><td><code>POST /subscriptions/{id}/charge</code></td><td><strong>No</strong></td><td>No idempotency key. A retry can charge twice.</td></tr>
-            <tr><td><code>POST /subscriptions</code></td><td><strong>No</strong></td><td>A retry can create two subscriptions. Billing starts immediately on each.</td></tr>
+            <tr><td><code>POST /subscriptions</code></td><td><strong>No</strong></td><td>A retry can create two subscriptions. Both can bill the card.</td></tr>
             <tr><td><code>POST /payment-methods/setup</code>, <code>…/setup/session</code></td><td>Mostly harmless</td><td>Creates an extra <code>pending_setup</code> method that nobody completes.</td></tr>
             <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Yes</td><td>Sets absolute values.</td></tr>
             <tr><td><code>POST /subscriptions/{id}/cancel</code>, <code>…/reactivate</code></td><td>Yes, but expect <code>400</code></td><td>The second reactivate answers "Only canceled subscriptions can be reactivated".</td></tr>

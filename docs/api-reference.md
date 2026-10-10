@@ -143,8 +143,8 @@ sent until the terminal method.
 | `vat(float $rate, int $amount)` | |
 | `paymentMethod(string $paymentMethodId)` | Must be an `active` method |
 | `pause()` | Set `paused`; omit any previously set resume date |
-| `resumeAt(DateTimeInterface $nextChargeAt)` | Send `active` and the explicit UTC charge date together |
-| `nextChargeAt(DateTimeInterface $nextChargeAt)` | Move the next charge (UTC) without changing the status |
+| `resumeAt(DateTimeInterface $nextChargeAt)` | Send `active` and the explicit UTC charge date together. The status change is **Verified**. No charge on that date has been seen yet (**Open question**) |
+| `nextChargeAt(DateTimeInterface $nextChargeAt)` | Store a new next-charge date (UTC) without changing the status. A trial is charged on it (**Verified**). An `active`, already-charged subscription has never been charged on a moved date (**Open question**). Combining it with `amount` is **unverified** |
 | **`save()`** | → `Data\Subscription` |
 
 Only the fields you set are sent. The billing interval cannot be changed.
@@ -290,7 +290,7 @@ Helper: `isCancelled()`.
 | `$quantity`, `$vatRate`, `$vatAmount` | |
 | `$externalId`, `$title`, `$description` | |
 | `$interval` | `?BillingInterval` |
-| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| (`payment_failed`, unobserved) |
+| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| `payment_failed` (seen in production after three failed attempts; the way out is unobserved) |
 | `$trialEndsAt`, `$nextChargeAt`, `$lastChargeAt` | `?CarbonImmutable` |
 | `$lastPaymentReference` | `{subId}-{chgId}` — resolvable as a payment for **manual** charges only |
 | `$retryPolicy`, `$retryCount`, `$failureReason` | Dunning — populated on a `past_due` subscription; see [dunning](subscriptions.md#the-dunning-gap) |

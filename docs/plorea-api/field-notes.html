@@ -59,6 +59,7 @@
       </div>
       <p><span class="badge verified">Verified 2026-09-09</span> There is no status per refund. Three captures of a refund-requested payment returned identical 29-key bodies. <code>refundPspReference</code> exists only on the refund response. Store it.</p>
       <p><span class="badge verified">Verified 2026-09-19</span> A refund and a cancel were both still pending after more than 24 hours. <span class="badge stated">Stated 2026-09-21</span> Plorea states this is expected, and that the final statuses are <code>refunded</code> and <code>cancelled</code>. Book on the request. Do not wait for the final status.</p>
+      <p><span class="badge verified">Verified 2026-10-11</span> One scheduled subscription charge could not be refunded or cancelled through the API. In production, <code>POST /payments/refund</code> answered <code>{"error":"Payment not found"}</code> for a scheduled charge, both with its <code>{subscriptionId}-{chargeId}</code> reference and with its <code>pspReference</code>. <code>POST /payments/cancel</code> on the same charge, while it was still <code>authorised</code>, also failed. The status endpoint fails the same way for that reference. The first charge of a new subscription is also a scheduled charge: <code>GET /subscriptions/{id}/charges</code> reports <code>"reason": "scheduled_charge"</code> for it. Refund it in the Plorea portal. Then record the refund in your own system against the original charge, so no other path refunds it again. <span class="badge open">Open question</span> Whether every scheduled charge behaves this way, and whether Plorea plans an API path. A refund of a manual charge is untested.</p>
 
       <h3>Capture is automatic</h3>
       <p><span class="badge stated">Stated 2026-09-15</span> Capture runs automatically through Plorea's settlement partner, usually within minutes of authorisation. No capture endpoint exists. A manual capture API is on Plorea's roadmap. For an integrator, <code>authorised</code> is the end of the success path.</p>
@@ -134,9 +135,9 @@
 
       <h2>Subscriptions</h2>
       <h3>Statuses use US spelling</h3>
-      <p><span class="badge verified">Verified 2026-09-07</span> <code>active</code>, <code>trialing</code>, <code>canceled</code>. <code>trialing</code> is its own state. <span class="badge verified">Verified 2026-10-01</span> <code>past_due</code> and <code>paused</code>. <code>payment_failed</code> is documented but has never been observed.</p>
-      <h3>Billing starts immediately</h3>
-      <p><span class="badge verified">Verified</span> Without a trial, the scheduler charges within seconds of create.</p>
+      <p><span class="badge verified">Verified 2026-09-07</span> <code>active</code>, <code>trialing</code>, <code>canceled</code>. <code>trialing</code> is its own state. <span class="badge verified">Verified 2026-10-01</span> <code>past_due</code> and <code>paused</code>. <span class="badge verified">Verified 2026-10-08 (production)</span> <code>payment_failed</code>, after three failed attempts. How to leave it is untested.</p>
+      <h3>First charge without a trial</h3>
+      <p><span class="badge verified">Verified 2026-10-10 (production)</span> One no-trial signup was charged at once. The charge history showed <code>reason: "scheduled_charge"</code> and <code>status: "authorised"</code>. <span class="badge open">Open question</span> In test on 2026-10-06, new subscriptions without a trial were not charged. The scheduler kept moving <code>nextChargeAt</code> 15 to 20 minutes forward.</p>
       <h3>Trials</h3>
       <p><span class="badge verified">Verified 2026-09-07</span> With <code>trialEndsAt</code> set, the status is <code>trialing</code> and <code>nextChargeAt</code> equals <code>trialEndsAt</code>. Nothing is charged until then. A cancel during a trial returns <code>accessEndsAt: null</code>. Treat null as "access ends now".</p>
       <h3><code>merchantOrgNr</code> on subscriptions</h3>
@@ -154,7 +155,11 @@
         <li><code>nextChargeAt</code> moved to the failure time plus <code>retryPolicy.retryIntervalDays</code>.</li>
         <li><code>customerId</code> filled, for the first time.</li>
       </ul>
-      <p>The charge item read <code>status: "failed"</code>, <code>reason: "scheduled_charge"</code>, <code>retryNumber: 0</code> and the same <code>failureReason</code>. Because <code>nextChargeAt</code> moves forward, a <code>past_due</code> subscription does not look overdue. Check the status as well. <span class="badge unobserved">Unobserved</span> The state after the last retry.</p>
+      <p>The charge item read <code>status: "failed"</code>, <code>reason: "scheduled_charge"</code>, <code>retryNumber: 0</code> and the same <code>failureReason</code>. Because <code>nextChargeAt</code> moves forward, a <code>past_due</code> subscription does not look overdue. Check the status as well. </p>
+      <h3>After the last retry: <code>payment_failed</code></h3>
+      <p><span class="badge verified">Verified 2026-10-08 (production)</span> A subscription was tried three times, about 24 hours apart. Then it read <code>payment_failed</code> with <code>retryCount: 3</code> and <code>nextChargeAt: null</code>. It was not canceled. Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span></p>
+      <p><span class="badge stated">Stated by Plorea</span> A retry charges the amount the subscription holds when the retry runs.</p>
+      <p><span class="badge unobserved">Unobserved</span> Leaving <code>payment_failed</code> by any route. Not tried: <code>PATCH</code> with <code>amount</code> and <code>nextChargeAt</code>, resume, and reactivate. Resume is verified only from <code>paused</code>, where an <code>active</code> subscription returns <code>400</code> with <code>allowedTransitions: ["paused"]</code>. Reactivate is verified only from <code>canceled</code>, and an <code>active</code> subscription returns <code>400</code> "Only canceled subscriptions can be reactivated". Other statuses are untested. Plorea reset one subscription by hand: the status became <code>active</code> and <code>retryCount</code> <code>0</code>, the card was charged at once, and the billing anchor moved. The API has no call for that reset.</p>
       <h3>Pause and resume</h3>
       <p><span class="badge verified">Verified 2026-10-01 (test)</span> <code>PATCH /subscriptions/{id}</code> with <code>{"status": "paused"}</code> pauses. <code>{"status": "active", "nextChargeAt": "…"}</code> resumes.</p>
       <div class="table-wrap">
@@ -174,7 +179,7 @@
           </tbody>
         </table>
       </div>
-      <p><span class="badge open">Open question</span> No charge was seen after a resume. Three subscriptions were resumed with <code>nextChargeAt</code> two minutes ahead. None was charged after 41 minutes. Each stayed <code>active</code> with the date in the past. Reported to Plorea 2026-10-01. <span class="badge unobserved">Unobserved</span> A webhook on pause or resume, and production.</p>
+      <p><span class="badge open">Open question</span> No charge was seen after a resume, or after a plain <code>PATCH</code> of <code>nextChargeAt</code> on an <code>active</code> subscription that had been charged. Three subscriptions were resumed with <code>nextChargeAt</code> two minutes ahead. None was charged after 41 minutes. Each stayed <code>active</code> with the date in the past. Later tests with both date formats and four scheduler runs (test, 4 and 5 October) gave the same result. Only <code>trialing</code> subscriptions with a moved date were charged. Reported to Plorea 2026-10-01 and again 2026-10-05. Still open. Changing <code>amount</code> and <code>nextChargeAt</code> in one update is not tested. <span class="badge unobserved">Unobserved</span> A webhook on pause or resume, and production.</p>
       <h3>Not chargeable is 400, not 402</h3>
       <p><span class="badge verified">Verified 2026-09-04</span> A subscription that cannot be charged, and a payment method that is not active, both return <code>400</code>. <code>402</code> means a card decline only.</p>
       <h3>Reactivate no longer double-bills</h3>
@@ -205,7 +210,7 @@
 
       <h2>What test cannot reproduce</h2>
       <h3>A failed subscription charge</h3>
-      <p><span class="badge unobserved">Impossible in test, 2026-09-09</span> These shapes cannot be produced: the <code>402</code> body of a declined charge, a <code>payment_failed</code> subscription and the state after the last retry. The <code>past_due</code> shape was seen in production on 2026-10-01. The <code>subscription.charge_failed</code> webhook was seen for a card that was gone, not for a decline.</p>
+      <p><span class="badge unobserved">Impossible in test, 2026-09-09</span> These shapes cannot be produced: the <code>402</code> body of a declined charge, and a decline that ends in <code>payment_failed</code>. The <code>past_due</code> shape was seen in production on 2026-10-01. A <code>payment_failed</code> subscription was seen in production on 2026-10-08. The <code>subscription.charge_failed</code> webhook was seen for a card that was gone, not for a decline.</p>
       <ol>
         <li>Adyen triggers declines through fields on the payment request, such as the holder name. For a stored card, that request is the setup. A decline trigger therefore fails the setup, and no card is stored.</li>
         <li>Custom test cards carry no decline behaviour.</li>

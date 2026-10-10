@@ -18,7 +18,7 @@ Keep a local record per billed entity (membership, workspace, seat plan) with
 its own status, and the Plorea `subscription id` on it. Four moving parts:
 
 1. **Card setup** — stores the card. Poll-only, no webhook.
-2. **Start** — creates the subscription. The first charge follows within seconds.
+2. **Start** — creates the subscription. The first charge should follow at once; confirm it in `charges()` (seen in production, not in test on 2026-10-06).
 3. **Settlement** — the first and every later charge, by webhook *and* by poll.
 4. **Reconciliation** — a scheduled job. It is the only way a failed charge is
    ever seen.
@@ -53,9 +53,12 @@ $membership->update(['plorea_subscription_id' => $subscription->id]);
 
 - **Always set `externalId`** to your own entity's id. It comes back on the
   charge webhook and is how you find the subscription again.
-- **Billing starts immediately.** The create response already carries the first
-  `nextChargeAt` and the card is charged within seconds. There is no start-date
-  option; a later start is a trial (below).
+- **Billing should start at once.** The create response already carries the first
+  `nextChargeAt`. A no-trial signup was charged at once in production
+  (2026-10-10), but in test on 2026-10-06 new no-trial subscriptions were not
+  charged (open question). Confirm the first charge in `charges()`. There is no
+  start-date option; a later start is a trial (below). Do not move `nextChargeAt`
+  on an `active` subscription to fake one (open question).
 - The charge is made against the stored card. The customer is not asked for
   anything at this point.
 - **Billing for several companies?** Add
@@ -129,12 +132,18 @@ foreach (Plorea::subscriptions()->needingAttention($externalId) as $subscription
 }
 ```
 
-`needingAttention()` returns a subscription that reports `past_due` (or the
-documented, never-observed `payment_failed`) **or** whose `nextChargeAt` is more
+`needingAttention()` returns a subscription that reports `past_due` or
+`payment_failed` (seen in production after three failed attempts about 24 hours
+apart; not confirmed by Plorea as a fixed policy) **or** whose `nextChargeAt` is more
 than an hour past (`graceMinutes:` to tune). A failed scheduled charge turns
 the subscription `past_due` (`isPastDue()`): `retryCount` counts the failures,
 `failureReason` holds the provider's message, and `nextChargeAt` moves to the
-retry, so it is not overdue. Do not branch on a failure reason.
+retry, so it is not overdue. Do not branch on a failure reason. Leaving
+`payment_failed` is untested by every route: PATCH `amount` + `nextChargeAt`,
+`resume()` (verified only from `paused`) and `reactivate()` (verified only from
+`canceled`). Plorea's manual reset charged at once and moved the billing anchor,
+and has no API. A retry charges the amount held when it runs (stated by
+Plorea).
 
 The same job should also settle anything the webhook missed: a pending entity
 whose latest charge is authorised gets activated here.
@@ -162,10 +171,13 @@ Plorea::subscriptions()->update($id)->paymentMethod($newMethod->id)->save(); // 
   subscription. Reconcile uncertain writes before retrying; a late replay can
   restore an old date after a charge. Track existing debt separately because
   paused subscriptions disappear from `needingAttention()`.
-  Captured in test 2026-10-01. No charge has yet been seen after a resume
-  (open with Plorea): verify the charge lands, and rely on
+  Captured in test 2026-10-01. No charge has yet been seen after a resume, or
+  after any moved `nextChargeAt` on an `active`, already-charged subscription
+  (open with Plorea since 5 October; only `trialing` ones were charged): do not
+  rely on it for a fixed billing day or a resume date, verify the charge lands, and rely on
   `needingAttention()` to flag it once overdue. Verify in-flight charges,
-  retries, future billing anchors, past_due pauses and combined updates before
+  retries, future billing anchors, past_due pauses and combined updates (such as
+  `amount` with `nextChargeAt`, unverified) before
   rollout. For recovery tests, use stateful
   stubs: the default fake does not persist subscription PATCH state to reads.
 - Proration is yours to compute. A one-off difference can be taken with a manual

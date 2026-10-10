@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
+use MemberFlow\Plorea\Exceptions\PloreaException;
 use MemberFlow\Plorea\Exceptions\ValidationException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Testing\RecordedRequest;
@@ -73,6 +74,27 @@ class PaymentMethodResourceTest extends TestCase
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup/session'
             && $request->data()['doneId'] === 'done_usr_1');
+    }
+
+    public function test_a_drop_in_session_never_takes_id_as_the_session_id(): void
+    {
+        // A card-setup response also carries a payment method id. Only the
+        // payment session accepts Adyen's own id/data names.
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'id' => 'pm_123',
+                'data' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        $this->expectException(PloreaException::class);
+        $this->expectExceptionMessage('without a session id');
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->session();
     }
 
     public function test_it_sends_the_merchant_on_a_drop_in_session(): void

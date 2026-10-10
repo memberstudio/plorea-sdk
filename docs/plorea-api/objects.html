@@ -191,6 +191,7 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
+      <p><strong>Other field names.</strong> Plorea's own pay page also reads <code>orgNr</code>, <code>shopperEmail</code>, <code>invoiceUrl</code> and <code>status: "expired"</code>. We have never seen them in a response. Read both names, and treat the link as expired when either <code>expired</code> is true or <code>status</code> is <code>"expired"</code>. The SDK does this for <code>orgNr</code>, <code>invoiceUrl</code> and <code>status</code>. It has no email field, so <code>shopperEmail</code> stays in <code>raw</code>. An empty value counts as missing. <span class="badge open">Open question</span></p>
       <pre data-title="Pay page with merchant"><code class="lang-json">{
   "id": "pl_test_example",
   "reference": "order-1002",
@@ -386,9 +387,9 @@ stateDiagram-v2
             <tr><td><code>active</code></td><td>Billing on schedule.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>trialing</code></td><td>In a trial. The first charge happens at <code>trialEndsAt</code>. A separate state, not a kind of active.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>past_due</code></td><td>A scheduled charge failed. Plorea retries it. <code>retryCount</code> and <code>failureReason</code> are set, and <code>nextChargeAt</code> is the retry. Not overdue. Seen in production on 2026-10-01.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>paused</code></td><td>Billing paused with <code>PATCH status</code>. <code>nextChargeAt</code> is null. Resume with <code>active</code> and a future <code>nextChargeAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paused</code></td><td>Billing paused with <code>PATCH status</code>. <code>nextChargeAt</code> is null. Resume with <code>active</code> and a future <code>nextChargeAt</code>. The status change is verified. A charge on the resumed date has never been seen. <span class="badge open">Open question</span></td><td><span class="badge verified">Verified</span> in test for the status</td></tr>
             <tr><td><code>canceled</code></td><td>Cancelled. US spelling. Access continues until <code>accessEndsAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>payment_failed</code></td><td>Documented by Plorea. Never observed. The failure status seen on the wire is <code>past_due</code>.</td><td><span class="badge unobserved">Not observed</span></td></tr>
+            <tr><td><code>payment_failed</code></td><td>The retries ran out: <code>retryCount</code> <code>3</code>, <code>nextChargeAt</code> <code>null</code>. Seen in production on 6 to 8 October 2026, after three attempts about 24 hours apart. Not confirmed by Plorea as a fixed policy. How to leave it is untested.</td><td><span class="badge verified">Verified</span> in production. Exit <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -404,9 +405,10 @@ stateDiagram-v2
   active --> paused: PATCH status paused
   paused --> active: PATCH status active + nextChargeAt
   active --> past_due: scheduled charge fails
-  past_due --> past_due: retry fails (unobserved)
+  past_due --> past_due: retry fails
+  past_due --> payment_failed: last attempt fails
         </pre>
-        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. What follows the last retry is an open question. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. <code>payment_failed</code> is documented but never seen, so it is not drawn.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. After three failed attempts in total, production showed <code>payment_failed</code>. Plorea has not confirmed this as a fixed policy. No arrow leaves <code>payment_failed</code>, because every way out is untested. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. Resume is verified only from <code>paused</code>.</figcaption>
       </figure>
 
       <h3>Interval units</h3>
