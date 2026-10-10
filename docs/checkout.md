@@ -145,7 +145,9 @@ const checkout = await AdyenCheckout({
     clientKey: session.clientKey,
     environment: session.environment,          // "test" or "live"
     session: { id: session.sessionId, sessionData: session.sessionData },
-    onPaymentCompleted: () => location.assign(`/invoices/${id}/paid`),
+    // Completed also covers Pending and Received: only Authorised is paid.
+    onPaymentCompleted: ({ resultCode }) =>
+        resultCode === 'Authorised' ? location.assign(`/invoices/${id}/paid`) : showProcessing(),
     onPaymentFailed: () => showRetry(),
     onError: (error) => report(error),
 });
@@ -153,21 +155,77 @@ const checkout = await AdyenCheckout({
 new Dropin(checkout).mount('#checkout');
 ```
 
+**Installed with npm?** The script tag includes every payment method. The npm
+package `@adyen/adyen-web` does not: Drop-in shows only the methods in
+`paymentMethodComponents`, so without them the box is empty. Plorea's own pay
+page passes `[Card]`:
+
+```js
+import { AdyenCheckout, Dropin, Card } from '@adyen/adyen-web';
+import '@adyen/adyen-web/styles/adyen.css';
+
+new Dropin(checkout, { paymentMethodComponents: [Card] }).mount('#checkout');
+```
+
+**What to show the customer.** Drop-in calls `onPaymentCompleted` for
+`Pending` and `Received` too, not only for `Authorised`:
+
+| `resultCode` | Callback | Show the customer |
+| --- | --- | --- |
+| `Authorised` | `onPaymentCompleted` | Paid. The server still waits for the webhook or status. |
+| `Pending`, `Received` | `onPaymentCompleted` | "Being processed." Not paid yet. |
+| `Refused` | `onPaymentFailed` | "Declined. Try another card." |
+| `Cancelled`, `Error` | `onPaymentFailed` | Let the customer try again. |
+
 Some payment methods (3-D Secure, Vipps and other redirect methods) leave the
-page. The customer comes back to your `returnUrl` with `sessionId` and
-`redirectResult` in the query. Finish the payment there:
+page. The customer comes back to your `returnUrl` with `redirectResult`, and
+usually `sessionId`, in the query. Finish the payment there, exactly once:
+
+- Do not create a new session. Ask your server only for `clientKey` and
+  `environment`.
+- Take the session id from the query, or from Drop-in's own
+  `localStorage` entry `adyen-checkout__session`.
+- Remove the redirect parameters after use. Otherwise a refresh submits
+  `redirectResult` again and the customer sees an error after paying.
 
 ```js
 const params = new URLSearchParams(location.search);
+const redirectResult = params.get('redirectResult');
 
-const checkout = await AdyenCheckout({
-    clientKey, environment,
-    session: { id: params.get('sessionId') },
-    onPaymentCompleted, onPaymentFailed,
-});
+function storedSessionId() {
+    try {
+        return JSON.parse(localStorage.getItem('adyen-checkout__session'))?.id ?? null;
+    } catch {
+        return null;
+    }
+}
 
-checkout.submitDetails({ details: { redirectResult: params.get('redirectResult') } });
+function stripRedirectParams() {
+    const url = new URL(location.href);
+    ['redirectResult', 'sessionId', 'sessionResult'].forEach((key) => url.searchParams.delete(key));
+    history.replaceState(null, '', url);
+}
+
+if (redirectResult) {
+    try {
+        const sessionId = params.get('sessionId') ?? storedSessionId();
+        if (!sessionId) throw new Error('No session to finish');
+
+        const checkout = await AdyenCheckout({
+            clientKey, environment,              // no new session
+            session: { id: sessionId },
+            onPaymentCompleted, onPaymentFailed,
+        });
+
+        checkout.submitDetails({ details: { redirectResult } });
+    } finally {
+        stripRedirectParams();
+    }
+}
 ```
+
+The result in the browser is for display only. Wait for the webhook or the
+payment status before you deliver anything.
 
 **Content Security Policy.** Drop-in loads from and connects to Adyen's
 `checkoutshopper-*.adyen.com` hosts, and 3-D Secure opens an iframe to the

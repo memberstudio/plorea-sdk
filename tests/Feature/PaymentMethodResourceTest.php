@@ -75,6 +75,25 @@ class PaymentMethodResourceTest extends TestCase
             && $request->data()['doneId'] === 'done_usr_1');
     }
 
+    public function test_a_drop_in_session_reads_adyens_own_field_names(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'id' => 'CS123',
+                'data' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        $session = Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->session();
+
+        $this->assertSame('CS123', $session->sessionId);
+        $this->assertSame('AbData', $session->sessionData);
+    }
+
     public function test_it_sends_the_merchant_on_a_drop_in_session(): void
     {
         Http::fake([
