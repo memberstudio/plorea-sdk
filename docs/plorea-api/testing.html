@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Testing Plorea</title>
+  <meta name="description" content="Test a Plorea integration: test keys, Adyen test cards, what the test environment cannot reproduce, webhook tunnelling and SDK fakes.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="testing">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Integration</p>
+        <h1>Testing</h1>
+        <p class="lead">Plorea's test environment runs against Adyen's test platform. You can pay links, store cards, run subscriptions and receive real signed webhooks without moving money. This page explains how, and lists what the test environment cannot show you.</p>
+      </header>
+
+      <h2>The test environment</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Test value</th></tr></thead>
+          <tbody>
+            <tr><td>Base URL</td><td><code>https://payments.plorea.no</code> (the same host as live)</td></tr>
+            <tr><td>API key</td><td>Starts with <code>plr_test_</code>. Plorea issues it on request.</td></tr>
+            <tr><td><code>X-Environment</code></td><td><code>test</code>. Send it on every request.</td></tr>
+            <tr><td>Hosted pay page</td><td><code>https://pay.plorea.no/{paymentLinkId}</code></td></tr>
+            <tr><td><code>environment</code> in responses</td><td><code>"test"</code></td></tr>
+            <tr><td>Adyen client key</td><td>Starts with <code>test_</code>. Needed only for embedded checkout. Works only on origins Plorea has whitelisted.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warning">
+        <p class="callout-title">Test and live share one host</p>
+        <p>Only the <code>X-Environment</code> header separates them. Most endpoints default to <code>test</code> when the header is missing, but <code>POST /payments/refund</code> goes to live and fails with <code>401</code>. Always send the header. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <h2>Test cards</h2>
+      <p>Use the cards on Adyen's <a href="https://docs.adyen.com/development-resources/testing/test-card-numbers" rel="noopener">published test card list</a>. Each card has a fixed future expiry date and a fixed CVC. All of them approve. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Scenario</th><th>How</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Successful payment</td><td>Any card from Adyen's list, with its listed expiry and CVC. Complete the 3-D Secure challenge if one appears.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Declined one-off payment</td><td>Card <code>4000 0000 0000 0259</code> on the hosted page. Adyen does not recognise it and refuses it after the 3DS2 challenge. Expect status <code>failed</code> and a <code>payment.failed</code> webhook.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Failed card setup</td><td>On an embedded setup, set the holder name to <code>NOT_ENOUGH_BALANCE</code>. The 1 NOK verification is refused and the method becomes <code>failed</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Declined subscription charge</td><td>Not possible. See below.</td><td><span class="badge unobserved">Not observable in test</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The hosted pay page shows only card number, expiry and CVC fields. You cannot set a holder name there, so Adyen's holder-name triggers do not work on payment links.</p>
+
+      <h2>Run every flow once</h2>
+      <ol class="steps">
+        <li><strong>Payment link</strong>Create a link for 10,00 kr (<code>1000</code>). Pay it. Check that <code>GET /payments/status/{reference}</code> reads <code>authorised</code> and that a <code>payment.authorised</code> webhook arrives.</li>
+        <li><strong>Declined payment</strong>Create a second link and pay it with the decline card. Check for <code>failed</code> and <code>payment.failed</code>.</li>
+        <li><strong>Refund</strong>Refund the first payment. Expect <code>refund_requested</code> at once. Expect the final state many hours later.</li>
+        <li><strong>Cancel</strong>Pay a third link and cancel it. Expect <code>cancel_requested</code>.</li>
+        <li><strong>Store a card</strong>Run a card setup. Poll <code>GET /payment-methods/{id}</code> until it reads <code>active</code>.</li>
+        <li><strong>Subscription</strong>Create a subscription with <code>interval: {unit: "day", count: 1}</code>. The first charge runs at once. The next one runs the following day and sends <code>subscription.charge_succeeded</code>.</li>
+        <li><strong>Manual charge</strong>Charge the subscription. Expect <code>charge_created</code> and a <code>payment.authorised</code> webhook.</li>
+        <li><strong>Cancel and reactivate</strong>Cancel the subscription, then reactivate it. Check that <code>nextChargeAt</code> is one interval after the last charge.</li>
+      </ol>
+
+      <h2 id="test-behaviour-that-differs">What behaves differently in test</h2>
+      <h3>Test payments settle on authorised</h3>
+      <p>A paid test link stays at <code>authorised</code>. You will not see <code>paid</code> in test. Treat <code>authorised</code> as success in both environments. See <a href="payment-lifecycle.html">Payment lifecycle and states</a>. <span class="badge verified">Verified</span></p>
+
+      <h3>Refunds and cancellations are slow</h3>
+      <p>A refund answered <code>refund_requested</code> at once and then stayed unsettled for more than 11 hours. A refund and a cancel requested on the same day both still showed <code>refund_requested</code> and <code>cancel_requested</code> more than 24 hours later. <span class="badge verified">Verified</span> Plorea says this is expected and that the final states are <code>refunded</code> and <code>cancelled</code>. <span class="badge stated">Stated by Plorea</span> We do not know if live is faster. <span class="badge open">Open question</span></p>
+      <div class="callout tip">
+        <p class="callout-title">Size your polling in hours</p>
+        <p>A test that waits a few minutes for <code>refunded</code> will fail. Assert on <code>refund_requested</code> instead, and book the refund on that state.</p>
+      </div>
+
+      <h3>Links do not expire in the status</h3>
+      <p>A link past its expiry still reports an open status. To test expiry, read <code>expired</code> from <code>GET /pay/{paymentLinkId}</code>. <span class="badge verified">Verified</span></p>
+
+      <h3>Abandoned sessions stay created</h3>
+      <p>A checkout session that nobody completes stays <code>created</code> for ever. Clean up on your side. <span class="badge verified">Verified</span></p>
+
+      <h2 id="cannot-be-reproduced">What cannot be reproduced in test</h2>
+      <div class="callout danger">
+        <p class="callout-title">A declined recurring charge</p>
+        <p>You cannot make a stored card decline on a later charge with Adyen's public test cards. <span class="badge unobserved">Not observable in test</span></p>
+        <ul>
+          <li>Adyen triggers refusals only through the holder name or a test acquirer response code. Both are fields of the first payment request. For a stored card, the first request is the setup. So the setup fails, and no card is stored.</li>
+          <li>Every published test card approves and has a future expiry. No card can expire after you store it.</li>
+          <li>Plorea charges the stored card on the server. It passes neither trigger through.</li>
+        </ul>
+        <p>As a result, these shapes are unknown: the <code>402</code> body of a declined manual charge, a <code>payment_failed</code> subscription, a filled <code>failureReason</code>, a non-zero <code>retryCount</code>, and any <code>subscription.charge_failed</code> webhook.</p>
+      </div>
+      <p>Write dunning code that tolerates small differences. Branch on <code>status</code>. Do not require <code>failureReason</code>. See <a href="dunning.html">Failed charges and dunning</a>.</p>
+      <div class="callout gap">
+        <p class="callout-title">Requested from Plorea</p>
+        <p>A test card that stores successfully and declines on a later charge, or a passthrough of Adyen's <code>RequestedTestAcquirerResponseCode</code> on <code>POST /subscriptions/{id}/charge</code>. <span class="badge proposal">Proposal</span></p>
+      </div>
+      <p>Other items we could not observe in test: a <code>live</code> value of <code>environment</code>, a live client key, an Android Drop-in on a real device, and the final state after a refund settles.</p>
+
+      <h2>Receive webhooks on your laptop</h2>
+      <p>Plorea needs a public HTTPS URL. Use a tunnel to forward it to your local server.</p>
+      <ol class="steps">
+        <li><strong>Start your app locally</strong>For example on port 8000, with the webhook route at <code>/plorea/webhook</code>.</li>
+        <li><strong>Start a tunnel</strong>Use any tunnel tool. Keep a stable hostname if the tool supports one, so you do not need to re-register.</li>
+        <li><strong>Register the tunnel URL as your test URL</strong>Send it to Plorea. Registration is manual. Ask for a separate test URL so live is not affected.</li>
+        <li><strong>Set the test signing secret</strong>Put it in your local environment. Never commit it.</li>
+        <li><strong>Pay a test link</strong>A signed <code>payment.authorised</code> arrives in a few seconds.</li>
+      </ol>
+      <pre data-title="Example"><code class="lang-bash"># Any tunnel works. Two common ones:
+cloudflared tunnel --url http://localhost:8000
+# or
+ngrok http 8000
+
+# Register: https://&lt;your-tunnel-host&gt;/plorea/webhook</code></pre>
+      <p>To replay an event without Plorea, sign a stored body yourself. See <a href="webhooks.html#verify-the-signature">Verify the signature</a>.</p>
+
+      <h2>Test without the network: SDK fakes</h2>
+      <p>The PHP SDK has a built-in fake client. <code>Plorea::fake()</code> swaps the HTTP client for an in-memory fake. No request leaves your test suite. Every endpoint has a default response, and every call is recorded.</p>
+      <div class="tabs">
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Facades\Plorea;
+
+Plorea::fake();
+
+$link = Plorea::payments()
+    -&gt;link('order-1001', 'Annual membership', Amount::nok(50000), 'https://example.com/return')
+    -&gt;merchant(orgNr: '999999999')
+    -&gt;create();
+
+Plorea::assertSent('POST payments/link');
+Plorea::assertSent(fn ($request) =&gt; $request-&gt;input('amount') === 50000);
+Plorea::assertNotSent('payments/refund');
+Plorea::assertSentCount(1);</code></pre></div>
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># No fake server exists for raw HTTP.
+# Use the JSON shapes on the API reference page as stub responses
+# in your own HTTP mocking library.</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// No official Node fake. Stub fetch with the documented shapes:
+globalThis.fetch = async (url, init) =&gt; {
+  if (url.includes('/payments/status/')) {
+    return new Response(JSON.stringify({ reference: 'order-1001', status: 'authorised', amount: 1000, currency: 'NOK' }));
+  }
+  return new Response(JSON.stringify({ error: 'Payment not found' }), { status: 404 });
+};</code></pre></div>
+      </div>
+
+      <h3>Stub responses and errors</h3>
+      <p>Pass an array of <code>pattern =&gt; response</code>. A response can be an array, a callable, or an exception to throw. Patterns use wildcards and can start with a method. The first match wins.</p>
+      <pre data-title="PHP SDK"><code class="lang-php">use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+use MemberFlow\Plorea\Exceptions\NotFoundException;
+
+Plorea::fake([
+    'payments/status/*'      =&gt; ['reference' =&gt; 'order-1001', 'status' =&gt; 'authorised'],
+    'POST payments/link'     =&gt; fn ($request) =&gt; ['paymentLinkId' =&gt; 'pl_1', 'url' =&gt; 'https://pay.example.com/1'],
+    'subscriptions/*/charge' =&gt; new ChargeFailedException('Charge failed: Refused', 402),
+    'payment-methods/*'      =&gt; new NotFoundException('Payment method not found', 404),
+]);</code></pre>
+      <p>A useful detail: the fake remembers references it created links for. A status lookup for such a reference answers an open link. Any other reference throws <code>NotFoundException</code>, like a live <code>404</code>. So <code>firstOrCreate()</code> works in tests without stubs.</p>
+      <p>Call <code>Http::preventStrayRequests()</code> in your test suite. Any Plorea call you forgot to fake then fails loudly instead of reaching the network.</p>
+
+      <h3>Test your webhook listeners</h3>
+      <p>Post a stored body to your route with a signature you compute in the test. Or set <code>PLOREA_WEBHOOK_VERIFY=false</code> in your test configuration only.</p>
+      <pre data-title="PHP SDK"><code class="lang-php">$body = json_encode([
+    'eventId' =&gt; 'evt_test_1',
+    'type'    =&gt; 'payment.authorised',
+    'data'    =&gt; ['reference' =&gt; 'order-1001', 'status' =&gt; 'authorised'],
+]);
+
+$this-&gt;call('POST', '/plorea/webhook', [], [], [], [
+    'CONTENT_TYPE'            =&gt; 'application/json',
+    'HTTP_X_PLOREA_SIGNATURE' =&gt; base64_encode(hash_hmac('sha256', $body, config('plorea.webhooks.secret'), true)),
+], $body)-&gt;assertOk();</code></pre>
+
+      <div class="callout danger">
+        <p class="callout-title">Never put real credentials in tests</p>
+        <p>No API keys, signing secrets, real signatures, client keys or real references in test code, fixtures or comments. Use obvious fakes such as <code>plr_test_FAKE…</code> and <code>test_FAKE…</code>.</p>
+      </div>
+
+      <p class="site-foot">Community draft. Facts last checked against the test environment in October 2026. Example names use reserved values: <code>example.com</code>, Acme, organisation number <code>999999999</code>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

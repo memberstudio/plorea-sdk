@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Going Live</title>
+  <meta name="description" content="A checklist for moving a Plorea integration from test to production: keys, environment, merchants and KYC, webhooks, checkout origins, monitoring and reconciliation.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="going-live">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Integration</p>
+        <h1>Going live</h1>
+        <p class="lead">A checklist for moving from test to production. Each item has either failed silently or cost real money when someone missed it. Work through it in order, then run one real transaction end to end.</p>
+      </header>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  A[Live API key] --&gt; B[X-Environment: live]
+  B --&gt; C[merchantOrgNr on every payment]
+  C --&gt; D[Live webhook URL + secret]
+  D --&gt; E[Checkout origins and client key]
+  E --&gt; F[Monitoring and reconciliation]
+  F --&gt; G[Launch test with a real card]
+        </pre>
+        <figcaption>The order of the checklist.</figcaption>
+      </figure>
+
+      <h2>1. Credentials and environment</h2>
+      <ol class="steps">
+        <li><strong>Get a live API key from Plorea</strong>Do not reuse the test key. Store the live key only in the production environment, in a secret store.</li>
+        <li><strong>Send <code>X-Environment: live</code> on every request</strong>Most endpoints default to <code>test</code> when the header is missing. An unset variable therefore sends production traffic to test. <span class="badge verified">Verified</span></li>
+        <li><strong>Set your production tenant ID</strong>If Plorea gave you a different tenant for live.</li>
+        <li><strong>Set your <code>platform</code> value</strong>Plorea uses it to attribute your traffic. It has no functional effect. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Rotate any exposed key</strong>Anyone with the key can create links and refund payments. If the key has been in a chat, a ticket or a log, ask Plorea for a new key before launch.</li>
+      </ol>
+      <pre data-title=".env (PHP SDK)"><code class="lang-bash">PLOREA_API_KEY=...                  # live key from Plorea
+PLOREA_ENVIRONMENT=live             # sent as X-Environment
+PLOREA_TENANT_ID=acme
+PLOREA_PLATFORM=acme
+PLOREA_RETRY_TIMES=0                # keep 0 — see Errors and retries
+PLOREA_WEBHOOK_SECRET=...           # live signing secret
+PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
+      <div class="callout warning">
+        <p class="callout-title">Check the environment in a response</p>
+        <p>After deploy, create one link and confirm that the response reads <code>"environment": "live"</code>. We have not observed a live value ourselves. <span class="badge open">Open question</span></p>
+      </div>
+
+      <h2>2. Merchants, KYC and payouts</h2>
+      <p>The <code>merchantOrgNr</code> decides who receives the money. Set it to the organisation number of the company that issues the invoice, not your own.</p>
+      <ul>
+        <li><strong>Send <code>merchantOrgNr</code> on every payment link and subscription.</strong> Plorea requires it by contract. <span class="badge stated">Stated by Plorea</span> The API does not enforce it on payment links: a link without it is accepted. <span class="badge verified">Verified</span> Enforce it in your own code.</li>
+        <li><strong>Use nine digits.</strong> On <code>POST /subscriptions</code>, any other value returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
+        <li><strong>Tell each merchant about KYC.</strong> The first live payment for a new organisation number starts onboarding by email. The payment succeeds. The payout waits until KYC is approved, which takes 1 to 5 business days. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Onboard a merchant ahead of time if needed.</strong> No API exists to start or read KYC. Plorea suggests a small payment link with the merchant's organisation number, paid by yourself. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Keep your own record</strong> of which company each subscription bills for. Reads of a subscription do not return <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></li>
+      </ul>
+      <div class="callout gap">
+        <p class="callout-title">Missing: KYC status</p>
+        <p>An endpoint that reports the KYC and payout status of an organisation number would let you warn a merchant before money is held. <span class="badge proposal">Proposal</span></p>
+      </div>
+
+      <h2>3. Webhooks</h2>
+      <ul>
+        <li><strong>Register your production URL with Plorea</strong>, for example <code>https://api.example.com/plorea/webhook</code>. Registration is manual. Ask for a separate URL per environment. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Get the live signing secret</strong> through a secure channel. Ask Plorea if it differs from the test secret. Both environments can share one.</li>
+        <li><strong>Verify every signature.</strong> Never disable verification in production.</li>
+        <li><strong>Exclude the path from CSRF protection.</strong> Otherwise every delivery fails with <code>419</code> and nothing reaches your listeners.</li>
+        <li><strong>Store first, then process in a queue.</strong> Plorea does not redeliver a failed delivery. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Deduplicate on <code>eventId</code></strong> from the body.</li>
+      </ul>
+      <p>See <a href="webhooks.html">Webhooks</a>.</p>
+
+      <h2>4. Embedded and native checkout</h2>
+      <p>Skip this section if you use hosted payment links only.</p>
+      <ul>
+        <li><strong>Use a live Adyen client key.</strong> A test key does not work with live sessions. The PHP SDK throws if the key prefix (<code>live_</code>) does not match the environment.</li>
+        <li><strong>Get your production origins whitelisted</strong> for the live key. The origin allow-list is per key and applies only to browsers. A wildcard covers subdomains at any depth but not always the bare domain, and <code>localhost</code> is never allowed. <span class="badge verified">Verified</span></li>
+        <li><strong>Route customer-owned domains through your own subdomain.</strong> No API exists to register single origins. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Register your production app identifiers</strong> with Plorea for native apps.</li>
+        <li><strong>Test return URLs in production builds.</strong> Universal links and App Links must verify on the production domain. A custom-scheme return URL is accepted. <span class="badge verified">Verified</span></li>
+        <li><strong>Allow Adyen's live hosts in your Content Security Policy.</strong> They differ from the test hosts.</li>
+        <li><strong>Configure wallets</strong> if you show them, for example Apple Pay domain verification on each domain.</li>
+      </ul>
+      <p>See <a href="checkout.html">Embedded and native checkout</a>.</p>
+
+      <h2>5. Money-handling code</h2>
+      <ul>
+        <li><strong>Keep automatic retries off for writes.</strong> A retried link create or charge can bill twice. See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>.</li>
+        <li><strong>Create links with a check-first pattern</strong> inside a lock per reference (<code>firstOrCreate()</code> in the PHP SDK).</li>
+        <li><strong>Book payments idempotently on the reference.</strong> The webhook, a status poll and the customer's return page race.</li>
+        <li><strong>Compare the amount</strong> on the payment with the amount you expect before you book it.</li>
+        <li><strong>Treat <code>authorised</code> as paid.</strong> Capture is automatic. No capture API exists. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Store the refund response.</strong> <code>refundPspReference</code> exists only there. You cannot read it back later. <span class="badge verified">Verified</span></li>
+        <li><strong>Size refund polling in hours.</strong> Never tell a customer that a refund failed, or reverse it in your books, because of a timeout alone.</li>
+        <li><strong>Cancel before settlement, refund after.</strong> See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</li>
+      </ul>
+
+      <h2>6. Monitoring</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Alert on</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Any response with status <code>400</code> or higher</td><td>A <code>400</code> on a charge is a bug in your state handling. A <code>401</code> can mean a wrong environment.</td></tr>
+            <tr><td>Connection errors and timeouts</td><td>The outcome of a write is unknown until you read state back.</td></tr>
+            <tr><td>Webhook signature failures</td><td>A wrong secret, a body-rewriting proxy, or an attack.</td></tr>
+            <tr><td>Links open past <code>expiresAt</code></td><td>The status never reports <code>expired</code>.</td></tr>
+            <tr><td>Card setups in <code>pending_setup</code> past <code>expiresAt</code></td><td>No webhook is sent for setup.</td></tr>
+            <tr><td>Subscriptions with <code>nextChargeAt</code> in the past</td><td>A failed scheduler charge sends no webhook. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
+            <tr><td>Refunds in <code>refund_requested</code> for more than a few days</td><td>Settlement is slow, but not that slow.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Never log request headers. The API key is in <code>Authorization</code>.</p>
+
+      <h2>7. Reconciliation</h2>
+      <p>Webhooks can be missed, and several transitions send none. Run a scheduled job that reads state directly from the API.</p>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Active subscriptions for one of your entities.
+curl "https://payments.plorea.no/subscriptions?externalId=membership-42&amp;status=active&amp;platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: live"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">// Schedule hourly.
+foreach ($openInvoices as $invoice) {
+    $status = Plorea::payments()-&gt;status($invoice-&gt;reference);
+    if ($status-&gt;isPaid()) {
+        $invoice-&gt;markPaid($status-&gt;pspReference); // idempotent
+    }
+}
+
+foreach ($workspaces as $workspace) {
+    Plorea::subscriptions()
+        -&gt;needingAttention($workspace-&gt;externalId)
+        -&gt;each(fn ($subscription) =&gt; Dunning::start($subscription));
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Schedule hourly.
+const res = await fetch(
+  'https://payments.plorea.no/subscriptions?externalId=membership-42&amp;status=active&amp;platform=acme',
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'live' } },
+);
+const { items } = await res.json();
+const overdue = items.filter((s) =&gt; s.nextChargeAt &amp;&amp; new Date(s.nextChargeAt) &lt; Date.now() - 60 * 60 * 1000);
+for (const s of overdue) await startDunning(s);</code></pre></div>
+      </div>
+      <p>Also reconcile money against Adyen payouts in your accounting. The API has no payout or settlement report endpoint. <span class="badge open">Open question</span></p>
+
+      <h2>8. The launch test</h2>
+      <div class="callout warning">
+        <p class="callout-title">Use a merchant with completed KYC</p>
+        <p>Otherwise the payout waits and you cannot confirm the full money path.</p>
+      </div>
+      <ol class="steps">
+        <li><strong>Create a low-value live link</strong>For example 10,00 kr.</li>
+        <li><strong>Pay it with a real card</strong>Do it on every surface you ship: hosted page, web Drop-in, iOS and Android.</li>
+        <li><strong>Check the webhook</strong>Confirm that it arrived, passed verification and was booked once.</li>
+        <li><strong>Refund the payment</strong>Confirm <code>refund_requested</code>. Check again after some hours.</li>
+        <li><strong>Test a subscription</strong>If you sell subscriptions, store a card and let the scheduler charge it.</li>
+        <li><strong>Check the payout</strong>Confirm the money reaches the merchant's account.</li>
+      </ol>
+
+      <p class="site-foot">Community draft. Facts last checked against the test environment in October 2026. Example names use reserved values: <code>example.com</code>, Acme, organisation number <code>999999999</code>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

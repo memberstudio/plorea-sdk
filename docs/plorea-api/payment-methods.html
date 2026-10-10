@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Storing cards</title>
+  <meta name="description" content="Verify and store a card with the Plorea API, so you can charge it later for subscriptions or card-on-file payments.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="payment-methods">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Recurring billing</p>
+        <h1>Storing cards</h1>
+        <p class="lead">A payment method is a stored card. You verify the card once while the customer is present. After that, you or Plorea's scheduler can charge it without the customer. Every subscription needs an active payment method.</p>
+      </header>
+
+      <div class="callout note">
+        <p class="callout-title">Two objects, two lifecycles</p>
+        <p>A payment method and a subscription are separate objects. The payment method holds the card token. The subscription holds the price and the schedule. You create the payment method first. You can replace the card on a subscription later without touching the price or the schedule.</p>
+      </div>
+
+      <h2>How card storage works</h2>
+      <p>Plorea stores a card through Adyen. To prove that the card is real and that the customer agrees, Plorea makes a <strong>verification authorisation of 1 NOK</strong>. Adyen then returns a token for the card. Plorea keeps the token on the payment method as <code>storedPaymentMethodId</code>. <span class="badge verified">Verified</span></p>
+      <p>The 1 NOK authorisation is not a charge. The customer is not billed. Some banks show it on the statement for a short time. Tell your customers this, so that they do not contact support.</p>
+
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App as Your server
+  participant P as Plorea API
+  participant C as Customer
+  participant A as Adyen
+  App->>P: POST /payment-methods/setup
+  P-->>App: paymentMethodId, status "pending_setup", adyenPaymentLinkUrl
+  App->>App: Save paymentMethodId
+  App->>C: Redirect to adyenPaymentLinkUrl
+  C->>A: Enters card, completes 3-D Secure
+  A->>A: Authorises 1 NOK and stores the card
+  A-->>P: Result and stored token
+  C-->>App: Returns to returnUrl
+  loop Until active or failed
+    App->>P: GET /payment-methods/{id}
+    P-->>App: status
+  end
+        </pre>
+        <figcaption>Hosted card setup. No webhook is sent. Your server polls for the result.</figcaption>
+      </figure>
+
+      <h2>Choose a recurring type</h2>
+      <p>Each stored card carries a <code>recurringType</code>. The type is Adyen's term for the agreement the customer gives when they store the card. It tells the card networks who starts later payments, and how often. Plorea passes the value to Adyen and echoes it back. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Value</th><th>Who starts later payments</th><th>Use it for</th></tr></thead>
+          <tbody>
+            <tr><td><code>Subscription</code></td><td>You or Plorea, on a fixed schedule</td><td>Every card that a Plorea subscription bills. Monthly memberships, yearly licences.</td></tr>
+            <tr><td><code>CardOnFile</code></td><td>The customer, each time</td><td>One-click checkout. The customer is present and confirms each payment.</td></tr>
+            <tr><td><code>UnscheduledCardOnFile</code></td><td>You, at irregular times</td><td>Usage top-ups, no-show fees, auto-reload when a balance runs low.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Use <code>Subscription</code> for every card that the Plorea scheduler will charge. The value is case-sensitive.</p>
+      <div class="callout warning">
+        <p class="callout-title">Pick the type that matches the agreement</p>
+        <p>The recurring type is part of the customer's consent. Do not store a card as <code>CardOnFile</code> and then bill it on a schedule. Card networks can treat such charges as unauthorised.</p>
+        <p>We do not know if Plorea rejects a subscription whose payment method has a different recurring type. <span class="badge open">Open question</span></p>
+      </div>
+
+      <h2>Choose a setup flow</h2>
+      <p>Two endpoints store a card. Both create the same payment method object and both use the 1 NOK verification. They differ in where the card form shows.</p>
+      <div class="cards">
+        <a class="card" href="#hosted-setup"><h3>Hosted page</h3><p><code>POST /payment-methods/setup</code>. Plorea returns an Adyen link. You redirect the customer to it. No front-end code.</p></a>
+        <a class="card" href="#session-setup"><h3>Drop-in session</h3><p><code>POST /payment-methods/setup/session</code>. You render Adyen Drop-in in your web page or native app.</p></a>
+      </div>
+
+      <h3>Request fields</h3>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Flow</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>tenantId</code><span class="req">required</span></td><td class="type">string</td><td>Both</td><td>Your tenant. Plorea scopes the card to this tenant. The PHP SDK fills it from config.</td></tr>
+            <tr><td><code>shopperReference</code><span class="req">required</span></td><td class="type">string</td><td>Both</td><td>Adyen's identifier for the cardholder. Keep it stable for the life of the customer. See <a href="#shopper-reference">Shopper reference</a>.</td></tr>
+            <tr><td><code>recurringType</code><span class="req">required</span></td><td class="type">enum</td><td>Both</td><td><code>Subscription</code>, <code>CardOnFile</code> or <code>UnscheduledCardOnFile</code>.</td></tr>
+            <tr><td><code>returnUrl</code><span class="req">required</span></td><td class="type">string</td><td>Both</td><td>Where Adyen sends the customer after setup or 3-D Secure.</td></tr>
+            <tr><td><code>customerId</code><span class="opt">optional</span></td><td class="type">string</td><td>Both</td><td>Your own identifier for the customer.</td></tr>
+            <tr><td><code>metadata</code><span class="opt">optional</span></td><td class="type">object</td><td>Both</td><td>Key-value pairs for your own use.</td></tr>
+            <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Hosted</td><td>Text on the hosted Adyen page.</td></tr>
+            <tr><td><code>doneId</code><span class="opt">optional</span></td><td class="type">string</td><td>Session</td><td>An extra identifier that Plorea accepts on sessions.</td></tr>
+            <tr><td><code>channel</code><span class="opt">optional</span></td><td class="type">enum</td><td>Session</td><td><code>Web</code>, <code>iOS</code> or <code>Android</code>. Case-sensitive. Any other value returns <code>400</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>platform</code><span class="opt">optional</span></td><td class="type">string</td><td>Both</td><td>Identifies your integration. Reporting only.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="hosted-setup">Hosted setup</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payment-methods/setup</code></div>
+      <p>Use the hosted flow when you do not want card fields in your own front end. Plorea creates an Adyen payment link. You send the customer there.</p>
+      <ol class="steps">
+        <li><strong>Create the setup</strong>Send the request from your server. Save <code>paymentMethodId</code> immediately, before you redirect. You need it to poll.</li>
+        <li><strong>Redirect the customer</strong>Send the customer to <code>adyenPaymentLinkUrl</code>. Adyen shows the card form and runs 3-D Secure.</li>
+        <li><strong>Handle the return</strong>Adyen sends the customer to your <code>returnUrl</code>. Do not trust the return as proof. The customer can return without finishing.</li>
+        <li><strong>Poll for the result</strong>Read the payment method until its status is <code>active</code> or <code>failed</code>. See <a href="#poll-for-the-result">Poll for the result</a>.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payment-methods/setup \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-gym",
+    "customerId": "cus_1001",
+    "shopperReference": "acme-gym-member-1001",
+    "recurringType": "Subscription",
+    "returnUrl": "https://app.example.com/billing/card/return",
+    "description": "Acme Gym membership"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\RecurringType;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$method = Plorea::paymentMethods()
+    -&gt;setup('acme-gym-member-1001', RecurringType::Subscription, 'https://app.example.com/billing/card/return')
+    -&gt;customerId('cus_1001')
+    -&gt;description('Acme Gym membership')
+    -&gt;create();
+
+// Save the id before you redirect. You need it to poll.
+$member-&gt;update(['pending_payment_method_id' =&gt; $method-&gt;id]);
+
+return redirect($method-&gt;adyenPaymentLinkUrl);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">async function plorea(method, path, body) {
+  const res = await fetch(`https://payments.plorea.no/${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+      'X-Environment': 'test',
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: body ? JSON.stringify({ platform: 'acme', ...body }) : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) throw Object.assign(new Error(json.error), { status: res.status, body: json });
+  return json;
+}
+
+const method = await plorea('POST', 'payment-methods/setup', {
+  tenantId: 'acme-gym',
+  customerId: 'cus_1001',
+  shopperReference: 'acme-gym-member-1001',
+  recurringType: 'Subscription',
+  returnUrl: 'https://app.example.com/billing/card/return',
+  description: 'Acme Gym membership',
+});
+
+await db.members.update(memberId, { pendingPaymentMethodId: method.paymentMethodId });
+res.redirect(method.adyenPaymentLinkUrl);</code></pre></div>
+      </div>
+
+      <pre data-title="200 OK"><code class="lang-json">{
+  "paymentMethodId": "pm_test_golden_method",
+  "tenantId": "test-tenant",
+  "customerId": null,
+  "shopperReference": "golden-shopper-001",
+  "recurringType": "Subscription",
+  "status": "pending_setup",
+  "environment": "test",
+  "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+  "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+  "expiresAt": "2026-09-05T11:51:00+02:00"
+}</code></pre>
+      <p>The response is short. It does not carry the card details. They appear on the full object after the customer completes the flow.</p>
+
+      <h2 id="session-setup">Drop-in session setup</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payment-methods/setup/session</code></div>
+      <p>Use a session when the card form must live inside your own page or app. Plorea opens an Adyen checkout session for the 1 NOK verification. You mount Adyen Drop-in on the session in the browser or with Adyen's iOS or Android SDK.</p>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payment-methods/setup/session \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "acme-gym",
+    "customerId": "cus_1001",
+    "shopperReference": "acme-gym-member-1001",
+    "recurringType": "Subscription",
+    "returnUrl": "https://app.example.com/billing/card/return",
+    "channel": "iOS"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\Channel;
+use MemberFlow\Plorea\Enums\RecurringType;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$session = Plorea::paymentMethods()
+    -&gt;setup('acme-gym-member-1001', RecurringType::Subscription, 'https://app.example.com/billing/card/return')
+    -&gt;customerId('cus_1001')
+    -&gt;channel(Channel::IOS) // Channel::Web is the browser Drop-in
+    -&gt;session();
+
+$member-&gt;update(['pending_payment_method_id' =&gt; $session-&gt;paymentMethodId]);
+
+// sessionId, sessionData, clientKey, environment for Drop-in.
+return response()-&gt;json($session);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// plorea() is the helper from the hosted setup example.
+const session = await plorea('POST', 'payment-methods/setup/session', {
+  tenantId: 'acme-gym',
+  customerId: 'cus_1001',
+  shopperReference: 'acme-gym-member-1001',
+  recurringType: 'Subscription',
+  returnUrl: 'https://app.example.com/billing/card/return',
+  channel: 'iOS',
+});
+
+await db.members.update(memberId, { pendingPaymentMethodId: session.paymentMethodId });
+
+// Hand only what Drop-in needs to the client.
+res.json({
+  sessionId: session.sessionId,
+  sessionData: session.sessionData,
+  clientKey: session.clientKey,
+  environment: session.environment,
+});</code></pre></div>
+      </div>
+
+      <pre data-title="200 OK — channel iOS"><code class="lang-json">{
+  "paymentMethodId": "pm_test_golden_native_session",
+  "tenantId": "test-tenant",
+  "customerId": null,
+  "shopperReference": "golden-shopper-native",
+  "recurringType": "Subscription",
+  "status": "pending_setup",
+  "environment": "test",
+  "channel": "iOS",
+  "sessionId": "CS_TEST_NATIVE_SESSION",
+  "sessionData": "test-native-session-data",
+  "clientKey": "test_GOLDENRESPONSECLIENTKEY00000000",
+  "expiresAt": "2026-09-17T09:23:45+02:00",
+  "reference": null,
+  "product": null,
+  "amount": 100,
+  "currency": "NOK",
+  "clientType": "payments_only",
+  "skipKyc": false,
+  "partnerSplitsApplied": false
+}</code></pre>
+      <p>Note <code>"amount": 100</code>. This is the 1 NOK verification, in øre. <span class="badge verified">Verified</span></p>
+
+      <dl class="fields">
+        <dt>clientKey</dt>
+        <dd>The Adyen client key for Drop-in. The setup session returns it for every channel, <code>Web</code> included. Prefer this key over a key you received another way. Adyen checks allowed web origins per key. <span class="badge verified">Verified</span></dd>
+        <dt>channel</dt>
+        <dd>Echo of the channel Plorea opened the session for. A missing <code>channel</code> means a web session.</dd>
+        <dt>sessionId, sessionData</dt>
+        <dd>Pass both to Drop-in unchanged.</dd>
+      </dl>
+
+      <pre data-title="400 Bad Request — channel &quot;ios&quot;"><code class="lang-json">{
+  "error": "channel must be one of Web, iOS, Android"
+}</code></pre>
+
+      <div class="callout warning">
+        <p class="callout-title">Web Drop-in needs a whitelisted origin</p>
+        <p>In a browser, Adyen accepts the session only from an origin that Plorea has added to the client key. Ask Plorea to add your domains before you go live. Native apps send no origin and are not affected. See <a href="checkout.html">Embedded and native checkout</a> for the origin rules and 3-D Secure in native apps.</p>
+      </div>
+      <div class="callout note">
+        <p class="callout-title">An abandoned session stays pending</p>
+        <p>If the customer closes Drop-in without submitting, nothing tells Plorea. The payment method stays <code>pending_setup</code>. Do not wait for it. Start a new setup when the customer tries again. <span class="badge verified">Verified</span> for payment sessions.</p>
+      </div>
+
+      <h2 id="poll-for-the-result">Poll for the result</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/payment-methods/{paymentMethodId}</code></div>
+      <p>Plorea sends <strong>no webhook</strong> for card setup. This applies to success and to failure. You must read the payment method to learn the outcome. <span class="badge stated">Stated by Plorea</span></p>
+      <p>Poll from your server, not from the browser. A good pattern:</p>
+      <ol class="steps">
+        <li><strong>Poll on return</strong>When the customer reaches <code>returnUrl</code>, read the payment method once. Most setups are complete by then.</li>
+        <li><strong>Poll briefly in the background</strong>If the status is still <code>pending_setup</code>, queue a job. Read again every few seconds for a minute, then less often.</li>
+        <li><strong>Stop at expiresAt</strong>The setup carries an <code>expiresAt</code>. Stop polling after that time and treat the setup as abandoned.</li>
+      </ol>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Accept: application/json"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$method = Plorea::paymentMethods()-&gt;find($member-&gt;pending_payment_method_id);
+
+if ($method-&gt;isActive()) {
+    $member-&gt;update([
+        'payment_method_id' =&gt; $method-&gt;id,
+        'card_label' =&gt; "{$method-&gt;cardBrand} •••• {$method-&gt;cardLast4}",
+        'card_expiry' =&gt; $method-&gt;expiryDate, // "03/2030"
+    ]);
+} elseif ($method-&gt;hasFailed()) {
+    // Final. No card was stored. Ask for a new card.
+} elseif ($method-&gt;isPendingSetup() &amp;&amp; $method-&gt;expiresAt?-&gt;isFuture()) {
+    // Not finished yet. Poll again later.
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// plorea() is the helper from the hosted setup example.
+async function waitForCard(id, { until }) {
+  for (let delay = 2000; Date.now() &lt; until; delay = Math.min(delay * 2, 30000)) {
+    const method = await plorea('GET', `payment-methods/${encodeURIComponent(id)}?platform=acme`);
+    if (method.status === 'active' || method.status === 'failed') return method;
+    await new Promise((r) =&gt; setTimeout(r, delay));
+  }
+  return null; // abandoned
+}</code></pre></div>
+      </div>
+
+      <pre data-title="200 OK — active"><code class="lang-json">{
+  "paymentMethodId": "pm_test_golden_method",
+  "tenantId": "test-tenant",
+  "customerId": null,
+  "shopperReference": "golden-shopper-001",
+  "recurringType": "Subscription",
+  "environment": "test",
+  "status": "active",
+  "adyenReference": "pmsetup_pm_test_golden_method",
+  "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+  "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+  "storedPaymentMethodId": "TESTSTORED000001",
+  "consentAt": "2026-09-04T09:54:00.000Z",
+  "expiresAt": "2026-09-05T11:51:00+02:00",
+  "metadata": [],
+  "createdAt": "2026-09-04T09:51:00.000Z",
+  "updatedAt": "2026-09-04T09:54:00.000Z",
+  "setupPspReference": "TESTSETUPPSP0001",
+  "cardLast4": "1111",
+  "cardBrand": "visa",
+  "expiryDate": "03/2030"
+}</code></pre>
+
+      <h3>Payment method statuses</h3>
+      <figure class="diagram">
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> pending_setup: setup created
+  pending_setup --> active: 1 NOK verification authorised
+  pending_setup --> failed: verification refused
+  active --> [*]
+  failed --> [*]
+        </pre>
+        <figcaption><code>failed</code> is final. A new card needs a new setup.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td><code>pending_setup</code></td><td>The customer has not completed the flow yet.</td><td>Poll until <code>expiresAt</code>.</td></tr>
+            <tr><td><code>active</code></td><td>The card is stored. <code>storedPaymentMethodId</code> and the card fields are set.</td><td>Create the subscription, or attach the card to one.</td></tr>
+            <tr><td><code>failed</code></td><td>The 1 NOK verification was refused. No card is stored. <code>storedPaymentMethodId</code> stays null.</td><td>Start a new setup. This payment method can never become active.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>All three statuses are <span class="badge verified">Verified</span>.</p>
+
+      <pre data-title="200 OK — failed"><code class="lang-json">{
+  "paymentMethodId": "pm_test_golden_failed",
+  "tenantId": "test-tenant",
+  "customerId": null,
+  "shopperReference": "golden-shopper-003",
+  "recurringType": "Subscription",
+  "environment": "test",
+  "status": "failed",
+  "adyenReference": "pmsetup_pm_test_golden_failed",
+  "adyenPaymentLinkId": null,
+  "adyenPaymentLinkUrl": null,
+  "storedPaymentMethodId": null,
+  "consentAt": null,
+  "expiresAt": "2026-09-04T13:00:00+02:00",
+  "metadata": [],
+  "createdAt": "2026-09-04T10:00:00.000Z",
+  "updatedAt": "2026-09-04T10:04:00.000Z",
+  "setupPspReference": null,
+  "cardLast4": null,
+  "cardBrand": null,
+  "expiryDate": null
+}</code></pre>
+
+      <div class="callout danger">
+        <p class="callout-title">There is no failure reason</p>
+        <p>A failed setup tells you only that it failed. The response has no refusal reason. A <code>failureReason</code> field, where Plorea returns one, is null even for a real Adyen refusal. Branch on <code>status</code> alone. Show the customer a general message, such as "Your bank declined the card. Try another card." <span class="badge verified">Verified</span></p>
+      </div>
+      <div class="callout gap">
+        <p class="callout-title">What would help</p>
+        <p>A <code>refusalReason</code> on failed setups, and a webhook when a setup becomes <code>active</code> or <code>failed</code>. Both would remove the polling loop. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+      </div>
+
+      <h3>What happens after expiresAt</h3>
+      <p>We have not seen a setup change status when <code>expiresAt</code> passes. We do not know if the Adyen link still accepts a card after that time. <span class="badge open">Open question</span> Treat a setup that is still pending after <code>expiresAt</code> as abandoned, and create a new one.</p>
+
+      <h2 id="shopper-reference">Shopper reference</h2>
+      <p>The <code>shopperReference</code> is how Adyen links stored cards to one person. Choose it once per customer and never change it.</p>
+      <ul>
+        <li><strong>Make it stable.</strong> Use a value from your own database, such as a prefixed member ID. Do not use an email address. Emails change.</li>
+        <li><strong>Make it unique across your tenants.</strong> Prefix it with the tenant, for example <code>acme-gym-member-1001</code>.</li>
+        <li><strong>Do not put personal data in it.</strong> The value travels to Adyen and appears in reports.</li>
+      </ul>
+      <p>A stored payment method belongs to the shopper, not to a company. One payment method can back subscriptions that bill different companies under the same tenant. <span class="badge stated">Stated by Plorea</span></p>
+
+      <h2>Tenant scoping</h2>
+      <p>Every payment method belongs to the <code>tenantId</code> you sent at setup. Use it only with subscriptions in the same tenant. A request that mixes the IDs of two tenants fails with <code>403</code> and the message <code>Tenant mismatch</code>. <span class="badge verified">Verified</span> on payment reads.</p>
+      <p>The PHP SDK sends the tenant from <code>config/plorea.php</code>. Call <code>-&gt;tenant('other-tenant')</code> on the builder to override it for one request.</p>
+
+      <h2>Use the card</h2>
+      <p>A subscription needs an <code>active</code> payment method. Create and update both reject any other status with <code>400</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="400 Bad Request — POST /subscriptions"><code class="lang-json">{
+  "error": "Payment method is not active",
+  "paymentMethodId": "pm_test_golden_failed",
+  "status": "failed"
+}</code></pre>
+      <p>The update response carries <code>error</code> and <code>status</code> only. Read the HTTP status, not the message. Messages are fixed templates. See <a href="errors.html">Errors and retries</a>.</p>
+      <p>Continue with <a href="subscriptions.html">Subscriptions</a> to bill the card.</p>
+
+      <h2>Replace a card</h2>
+      <p>You cannot change the card on an existing payment method. To replace a card, store a new one and point the subscription at it. The price, the schedule and the charge history stay on the subscription.</p>
+      <ol class="steps">
+        <li><strong>Store the new card</strong>Run a setup with the same <code>shopperReference</code>. Poll until it is <code>active</code>.</li>
+        <li><strong>Attach it</strong>Send <code>PATCH /subscriptions/{id}</code> with the new <code>paymentMethodId</code>.</li>
+        <li><strong>Keep the old one</strong>There is no endpoint to delete a payment method. <span class="badge open">Open question</span></li>
+      </ol>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_golden \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "paymentMethodId": "pm_new_card" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">Plorea::subscriptions()
+    -&gt;update($subscriptionId)
+    -&gt;paymentMethod($newMethod-&gt;id)
+    -&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">await plorea('PATCH', `subscriptions/${subscriptionId}`, {
+  paymentMethodId: newMethod.paymentMethodId,
+});</code></pre></div>
+      </div>
+      <p>See <a href="subscription-workflows.html">Subscription workflows</a> for the full card-swap recipe, including what to do when a renewal is overdue.</p>
+
+      <h2>Test cards</h2>
+      <p>Use Adyen's public test cards. <code>4111 1111 1111 1111</code>, expiry <code>03/2030</code>, CVC <code>737</code> stores successfully. <span class="badge verified">Verified</span></p>
+      <p>To test a failed setup, use Adyen's test triggers, such as the holder name <code>NOT_ENOUGH_BALANCE</code>. The trigger refuses the 1 NOK verification. You get a <code>failed</code> payment method. <span class="badge verified">Verified</span></p>
+      <div class="callout warning">
+        <p class="callout-title">You cannot store a card that declines later</p>
+        <p>Every Adyen test card that stores successfully also approves every later charge. So you cannot test a subscription renewal that fails. <span class="badge unobserved">Not observable in test</span> See <a href="testing.html">Testing</a> and <a href="dunning.html">Failed charges and dunning</a>.</p>
+      </div>
+
+      <h2>Object reference</h2>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>paymentMethodId</code></td><td class="type">string</td><td>Plorea's ID, prefixed <code>pm_</code>. Use it on subscriptions.</td></tr>
+            <tr><td><code>tenantId</code></td><td class="type">string</td><td>The tenant that owns the card.</td></tr>
+            <tr><td><code>customerId</code></td><td class="type">string | null</td><td>Your customer ID, if you sent one.</td></tr>
+            <tr><td><code>shopperReference</code></td><td class="type">string</td><td>Adyen's cardholder identifier.</td></tr>
+            <tr><td><code>recurringType</code></td><td class="type">enum</td><td><code>Subscription</code>, <code>CardOnFile</code> or <code>UnscheduledCardOnFile</code>.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td><code>test</code> or <code>live</code>.</td></tr>
+            <tr><td><code>status</code></td><td class="type">enum</td><td><code>pending_setup</code>, <code>active</code> or <code>failed</code>.</td></tr>
+            <tr><td><code>adyenReference</code></td><td class="type">string</td><td>Plorea's reference for the 1 NOK verification at Adyen.</td></tr>
+            <tr><td><code>adyenPaymentLinkId</code>, <code>adyenPaymentLinkUrl</code></td><td class="type">string | null</td><td>The hosted setup page. Null for session setups and on some failed setups.</td></tr>
+            <tr><td><code>storedPaymentMethodId</code></td><td class="type">string | null</td><td>Adyen's card token. Null until <code>active</code>. Null forever on <code>failed</code>.</td></tr>
+            <tr><td><code>setupPspReference</code></td><td class="type">string | null</td><td>Adyen's PSP reference for the verification. Quote it to Plorea support.</td></tr>
+            <tr><td><code>cardLast4</code>, <code>cardBrand</code>, <code>expiryDate</code></td><td class="type">string | null</td><td>Display data, for example <code>1111</code>, <code>visa</code>, <code>03/2030</code>. Set when <code>active</code>.</td></tr>
+            <tr><td><code>consentAt</code></td><td class="type">datetime | null</td><td>When the customer gave consent. Keep it as proof of the agreement.</td></tr>
+            <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>The end of the setup window.</td></tr>
+            <tr><td><code>metadata</code></td><td class="type">object</td><td>Your metadata. An empty object is returned as <code>[]</code>.</td></tr>
+            <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td class="type">datetime</td><td>Timestamps.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verified behaviour</title>
+  <meta name="description" content="Dated field notes on how the Plorea Payments API behaves in practice, with the evidence for each claim.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="field-notes">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Reference</p>
+        <h1>Verified behaviour</h1>
+        <p class="lead">Dated field notes from running a production integration against the Plorea test environment. Some behaviour is surprising. Some contradicts what you would assume. Knowing what is <em>not</em> verified matters as much as knowing what is.</p>
+      </header>
+
+      <div class="legend">
+        <span><span class="badge verified">Verified</span> Seen on the wire.</span>
+        <span><span class="badge stated">Stated by Plorea</span> Not observed.</span>
+        <span><span class="badge unobserved">Not observable in test</span></span>
+        <span><span class="badge open">Open question</span></span>
+      </div>
+      <p>Anonymised captures of the real responses back every shape in these docs. If Plorea changes a shape, the capture tests in the PHP SDK fail. Later entries can supersede earlier ones. Superseded entries say so.</p>
+
+      <h2>Payments</h2>
+
+      <h3>A declined payment reports <code>failed</code>, not <code>refused</code></h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> A card declined after a completed 3-D Secure challenge produced this:</p>
+      <pre><code class="lang-json">{ "status": "failed", "webhookEventCode": "AUTHORISATION", "webhookSuccess": false }</code></pre>
+      <ul>
+        <li>The status string is <code>failed</code>. The string <code>refused</code> never appears.</li>
+        <li>The decline shows in the inbound-webhook fields. They describe the Adyen event that Plorea received.</li>
+        <li>No reason field exists on the payment. <code>status</code> is the only signal.</li>
+      </ul>
+
+      <h3>No idempotency on duplicate references</h3>
+      <p><span class="badge verified">Verified</span> Two <code>POST /payments/link</code> calls with the same reference create two live, payable links. Check for an existing payment before you create one. See <a href="errors.html">Errors and retries</a>.</p>
+
+      <h3>Amounts are minor units</h3>
+      <p><span class="badge verified">Verified</span> <code>10000</code> is 100,00 kr. No major-unit form exists anywhere in the API.</p>
+
+      <h3>Status: 200 for open, 404 for unknown</h3>
+      <p><span class="badge verified">Verified</span> An open, unpaid link returns <code>200</code>. Only an unknown reference returns <code>404</code>.</p>
+
+      <h3><code>expired</code> is never reported</h3>
+      <p><span class="badge verified">Verified</span> A link past its expiry keeps its open status. Use the <code>expiresAt</code> from the create response, or the <code>expired</code> flag on <code>GET /pay/{id}</code>.</p>
+
+      <h3>Refunds and cancels settle slowly</h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> <code>refund_requested</code> and <code>cancel_requested</code> appear at once. In test, a refund stayed in <code>refund_requested</code> for more than 11 hours before <code>payment.refunded</code> arrived. Nothing was wrong.</p>
+      <div class="callout warning">
+        <p class="callout-title">Set your polling horizon in hours</p>
+        <p>A job that polls for one hour and then marks the refund as failed will be wrong. Wait for the webhook. Use polling as a backstop, on a scale of hours. Never reverse a refund in your books on a timeout.</p>
+      </div>
+      <p><span class="badge verified">Verified 2026-09-09</span> There is no status per refund. Three captures of a refund-requested payment returned identical 29-key bodies. <code>refundPspReference</code> exists only on the refund response. Store it.</p>
+      <p><span class="badge verified">Verified 2026-09-19</span> A refund and a cancel were both still pending after more than 24 hours. <span class="badge stated">Stated 2026-09-21</span> Plorea states this is expected, and that the final statuses are <code>refunded</code> and <code>cancelled</code>. Book on the request. Do not wait for the final status.</p>
+
+      <h3>Capture is automatic</h3>
+      <p><span class="badge stated">Stated 2026-09-15</span> Capture runs automatically through Plorea's settlement partner, usually within minutes of authorisation. No capture endpoint exists. A manual capture API is on Plorea's roadmap. For an integrator, <code>authorised</code> is the end of the success path.</p>
+
+      <h3><code>merchantOrgNr</code> on payment links</h3>
+      <p><span class="badge verified">Verified 2026-09-07</span> The create response omits <code>merchantOrgNr</code> and <code>merchantName</code>. Both appear on <code>GET /pay/{id}</code>, together with a populated <code>partnerSplits</code>.</p>
+      <p><span class="badge stated">Stated 2026-08-30</span> The field is contractually required. The API does not enforce it: a link without it is accepted and can open a session. KYC for a new organisation starts on its first payment.</p>
+
+      <h3>The <code>platform</code> field</h3>
+      <p><span class="badge stated">Stated 2026-09-15</span> Send <code>platform</code> on every request: in the body on <code>POST</code> and <code>PATCH</code>, in the query string on <code>GET</code>. Plorea uses it for logging and reporting only.</p>
+
+      <h3>A refund without <code>X-Environment</code> hits live</h3>
+      <p><span class="badge verified">Verified 2026-09-10</span> <code>POST /payments/refund</code> without the header uses Plorea's live Adyen credentials. With a test key it returns <code>401</code> with <code>errorType: "security"</code>. The response looks like a bad API key. Send the header on every call.</p>
+
+      <h3>The refund and cancel 401 is fixed</h3>
+      <p><span class="badge verified">Verified 2026-09-19</span> An earlier test-environment configuration issue made refund and cancel return <code>401</code>. Plorea fixed it on 2026-09-18. A re-test returned <code>refund_requested</code> and <code>cancel_requested</code> normally. In one sample, <code>lastRefundRequestPspReference</code> equalled the refund's <code>refundPspReference</code>.</p>
+
+      <h2>Embedded and native checkout</h2>
+
+      <h3>Timeline of the native rollout</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Observation</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td class="nowrap">2026-09-15</td><td>Plorea states that embedded and native checkout are supported. Plorea issues the client key and whitelists your origins on request.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr><td class="nowrap">2026-09-17 am</td><td><code>channel</code> was accepted and ignored. No session returned a client key. <em>Superseded.</em></td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td class="nowrap">2026-09-17 pm</td><td>Card setup sessions validate and echo <code>channel</code>, and return <code>clientKey</code> for every channel. Both session endpoints accept a custom-scheme <code>returnUrl</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td class="nowrap">2026-09-17 eve</td><td>Native iOS Drop-in stored a card and authorised a payment on a device. 3-D Secure arrived as a browser redirect, returning through the custom scheme.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td class="nowrap">2026-09-17 late</td><td>Web Drop-in authorised end to end from a whitelisted origin. A refused 3DS challenge reached Plorea as a normal decline.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td class="nowrap">2026-09-19</td><td><code>POST /payments/session</code> now matches card setup: validates <code>channel</code>, echoes it, and returns <code>clientKey</code> for every channel.</td><td><span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Client keys and origins</h3>
+      <ul>
+        <li><span class="badge verified">Verified</span> The origin allow-list is per client key and applies to browsers only. A request with no <code>Origin</code> header, as a native SDK sends, is accepted.</li>
+        <li><span class="badge verified">Verified</span> A wildcard origin covers subdomains at any depth. Since 2026-09-19 the bare domain is also whitelisted. <code>localhost</code> is not whitelisted at any port.</li>
+        <li><span class="badge verified">Verified</span> The hosted pay page uses its own key. That key returns <code>403</code> from any other origin. Use the key the session returns.</li>
+        <li><span class="badge stated">Stated 2026-09-18</span> Adyen does not check app bundle IDs or package names. Plorea registers them formally before go-live.</li>
+        <li><span class="badge stated">Stated 2026-09-18</span> For customers' own domains, route the payment step through your own whitelisted subdomain. No API to register single origins is planned.</li>
+      </ul>
+
+      <h3>Native 3-D Secure arrives as a redirect</h3>
+      <p><span class="badge verified">Verified 2026-09-17</span> Plorea's session does not ask for native 3DS2. The challenge opens in an in-app browser and returns through your <code>returnUrl</code>. Handle that redirect on every channel. <span class="badge stated">Stated 2026-09-18</span> Native 3DS2 for iOS and Android sessions is coming.</p>
+
+      <h3>An abandoned session never ends</h3>
+      <p><span class="badge verified">Verified 2026-09-17</span> A session that the customer never submits still reads <code>created</code> an hour later, with no webhook fields. Time the attempt out yourself. Open a new session for the next attempt.</p>
+
+      <h2>Payment methods</h2>
+      <h3>Statuses</h3>
+      <p><span class="badge verified">Verified 2026-09-04</span> <code>pending_setup</code> → <code>active</code> or <code>failed</code>. <code>failed</code> is final. It means the 1 NOK verification was refused, so no card was stored and <code>storedPaymentMethodId</code> stays null.</p>
+      <h3><code>failureReason</code> is always null</h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> Also for a real refusal. Branch on <code>status</code> only.</p>
+      <h3>Validation messages are static</h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> A request that misses two required fields returns a message that lists all five. Never parse a validation message.</p>
+      <h3>No webhook for setup</h3>
+      <p><span class="badge stated">Stated 2026-09-09</span> Poll <code>GET /payment-methods/{id}</code> after the customer returns.</p>
+
+      <h2>Subscriptions</h2>
+      <h3>Statuses use US spelling</h3>
+      <p><span class="badge verified">Verified 2026-09-07</span> <code>active</code>, <code>trialing</code>, <code>canceled</code>. <code>trialing</code> is its own state. <code>payment_failed</code> is documented but has never been observed.</p>
+      <h3>Billing starts immediately</h3>
+      <p><span class="badge verified">Verified</span> Without a trial, the scheduler charges within seconds of create.</p>
+      <h3>Trials</h3>
+      <p><span class="badge verified">Verified 2026-09-07</span> With <code>trialEndsAt</code> set, the status is <code>trialing</code> and <code>nextChargeAt</code> equals <code>trialEndsAt</code>. Nothing is charged until then. A cancel during a trial returns <code>accessEndsAt: null</code>. Treat null as "access ends now".</p>
+      <h3><code>merchantOrgNr</code> on subscriptions</h3>
+      <p><span class="badge verified">Verified 2026-09-21</span> <code>POST /subscriptions</code> accepts <code>merchantOrgNr</code>, <code>merchantName</code> and <code>merchantEmail</code>. The create response echoes only <code>merchantOrgNr</code>. A value that is not nine digits returns <code>400</code>. No read endpoint returns the field. Keep your own record.</p>
+      <p><span class="badge stated">Stated 2026-09-21</span> Every charge inherits the company. KYC and settlement splits start on the first charge. A stored card belongs to the shopper, not the company, so one card can pay for several companies in one tenant. No API exists to start or read KYC. To onboard a company early, create a payment link with its organisation number and pay it yourself.</p>
+      <h3>Charge shapes</h3>
+      <p><span class="badge verified">Verified 2026-09-04</span> <code>POST …/charge</code> returns <code>status: "charge_created"</code> and Adyen's <code>resultCode</code>. History items show <code>status: "authorised"</code> and <code>reason</code> <code>manual_charge</code> or <code>scheduled_charge</code>. The reference is <code>{subscriptionId}-{chargeId}</code>.</p>
+      <h3>Not chargeable is 400, not 402</h3>
+      <p><span class="badge verified">Verified 2026-09-04</span> A subscription that cannot be charged, and a payment method that is not active, both return <code>400</code>. <code>402</code> means a card decline only.</p>
+      <h3>Reactivate no longer double-bills</h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> Reactivate used to charge at once, billing a period the customer had already paid. Plorea fixed it. Now a cancel and reactivate leaves the charge count unchanged and sets <code>nextChargeAt</code> to one interval after the last charge. Reactivating an active subscription returns <code>400</code> "Only canceled subscriptions can be reactivated". Production is unobserved.</p>
+      <h3>Scheduled charge references do not resolve as payments</h3>
+      <p><span class="badge open">Open question</span> <code>GET /payments/status/{subId}-{chgId}</code> for a scheduled charge returned <code>403 Tenant mismatch</code> on 2026-09-04 and <code>404</code> on 2026-09-09. Manual charge references resolve normally. Read scheduled outcomes from <code>GET /subscriptions/{id}/charges</code>. Reported to Plorea.</p>
+      <h3>No pagination seen</h3>
+      <p><span class="badge open">Open question</span> Probed 2026-09-10. <code>GET /subscriptions</code> returns <code>{count, items}</code> plus the filter echo. <code>GET …/charges</code> returns <code>{subscriptionId, items}</code>. Neither has a cursor or page field. With only three items available, "all results" and "first page" look the same.</p>
+
+      <h2>Webhooks</h2>
+      <h3>Deliveries are signed</h3>
+      <p><span class="badge verified">Verified 2026-08-26</span> No <code>Authorization</code> header. Three headers instead: <code>x-plorea-signature</code> (base64 HMAC-SHA256 of the raw body), <code>x-plorea-event-id</code> and <code>x-plorea-event</code>. The signature covers the body only, so the headers can change without breaking it. Deduplicate on the body's <code>eventId</code>.</p>
+      <h3>Signature verification proven</h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> The key is the secret's characters used verbatim, not decoded bytes. A genuine replayed delivery was accepted. The same delivery with a one-byte change was rejected. Any middleware that re-encodes the body before verification breaks it.</p>
+      <h3>Subscription deliveries</h3>
+      <p><span class="badge verified">Verified 2026-09-04</span> A scheduled charge sends <code>subscription.charge_succeeded</code>. A manual charge sends <code>payment.authorised</code> with the normal payment shape.</p>
+      <h3><code>payment.failed</code></h3>
+      <p><span class="badge verified">Verified 2026-09-09</span> Arrived about two seconds after the status changed. The type is <code>payment.failed</code> in the header and the body. The body has <code>eventCode: "AUTHORISATION"</code> and <code>success: false</code>, and no reason. <code>data</code> is a strict subset of the payment object.</p>
+      <h3>Routing and redelivery</h3>
+      <ul>
+        <li><span class="badge stated">Stated 2026-09-21</span> Registration is manual and per tenant. Plorea can register one URL per environment on request. Before that, one URL received both.</li>
+        <li><span class="badge stated">Stated 2026-09-21</span> The same signing secret can serve both environments. Ask; do not assume.</li>
+        <li><span class="badge stated">Stated 2026-09-21</span> A failed delivery is <strong>not</strong> retried. A <code>500</code> from your endpoint loses the event.</li>
+        <li><span class="badge stated">Stated 2026-09-09</span> Four event types exist. Nothing is sent for card setup, cancel, reactivate or a failed charge.</li>
+      </ul>
+
+      <h2>What test cannot reproduce</h2>
+      <h3>A failed subscription charge</h3>
+      <p><span class="badge unobserved">Impossible in test, 2026-09-09</span> These shapes cannot be produced: the <code>402</code> body of a declined charge, a <code>payment_failed</code> subscription, a filled <code>failureReason</code>, a non-zero <code>retryCount</code>, and any failed-charge webhook.</p>
+      <ol>
+        <li>Adyen triggers declines through fields on the payment request, such as the holder name. For a stored card, that request is the setup. A decline trigger therefore fails the setup, and no card is stored.</li>
+        <li>Custom test cards carry no decline behaviour.</li>
+        <li>Every published Adyen test card approves and has a future expiry.</li>
+        <li>Amount-based triggers apply to terminals only.</li>
+        <li>Plorea's scheduler charges the stored card server-side, with no way to pass a trigger.</li>
+      </ol>
+      <p>Unblocking this needs Plorea. See <a href="wishlist.html#sandbox-failure-triggers">Sandbox failure triggers</a>.</p>
+      <h3>A declined one-off payment</h3>
+      <p><span class="badge verified">Reproducible</span> Pay a hosted link with card <code>4000 0000 0000 0259</code>. Adyen does not recognise it and declines after the 3-D Secure challenge.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

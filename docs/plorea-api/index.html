@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plorea API docs</title>
+  <meta name="description" content="Community documentation for the Plorea Payments API: payment links, cards on file, subscriptions and webhooks.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="index">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Plorea Payments API</p>
+        <h1>Take payments, store cards and bill subscriptions</h1>
+        <p class="lead">Plorea is a Norwegian payment gateway on top of Adyen. One REST API gives you hosted payment links, embedded checkout, cards on file, recurring subscriptions and signed webhooks. These guides explain each workflow end to end, with request and response examples you can copy.</p>
+      </header>
+
+      <div class="callout note">
+        <p class="callout-title">About these docs</p>
+        <p>An integrator wrote these docs. They are not official. Every fact comes from one of three sources: a call we made against the test environment, a statement from Plorea, or the Plorea PHP SDK. Badges show the source of each claim. Plorea is free to adopt, correct and extend this material.</p>
+      </div>
+
+      <h2>What you can build</h2>
+      <div class="cards">
+        <a class="card" href="payment-links.html"><h3>One-off payments</h3><p>Create a hosted payment link, send the customer to it, and read the result by reference.</p></a>
+        <a class="card" href="checkout.html"><h3>Embedded checkout</h3><p>Start a session and render Adyen Drop-in on the web or in a native iOS or Android app.</p></a>
+        <a class="card" href="payment-methods.html"><h3>Cards on file</h3><p>Verify and store a card once. Charge it later without the customer present.</p></a>
+        <a class="card" href="subscriptions.html"><h3>Subscriptions</h3><p>Bill a stored card on a fixed interval. Plorea runs the scheduler for you.</p></a>
+        <a class="card" href="subscription-workflows.html"><h3>Subscription workflows</h3><p>Recipes for trials, price increases, upgrades, pauses, card swaps and cancellation.</p></a>
+        <a class="card" href="webhooks.html"><h3>Webhooks</h3><p>Receive signed events when a payment is authorised, fails, is refunded or a subscription renews.</p></a>
+      </div>
+
+      <h2>How a payment moves</h2>
+      <p>Every payment has a <strong>reference</strong> that you choose. Plorea stores the payment under this reference. You use the same reference to read the status, refund or cancel. The diagram shows the normal path for a hosted payment link.</p>
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App as Your server
+  participant P as Plorea API
+  participant C as Customer
+  participant A as Adyen
+  App->>P: POST /payments/link (reference, amount)
+  P-->>App: paymentLinkUrl, status "created"
+  App->>C: Redirect to paymentLinkUrl
+  C->>A: Pays on the hosted page
+  A-->>P: AUTHORISATION result
+  P-->>App: Webhook payment.authorised
+  C-->>App: Returns to your returnUrl
+  App->>P: GET /payments/status/{reference}
+  P-->>App: status "authorised"
+        </pre>
+        <figcaption>Hosted payment link. Treat the webhook or the status call as the truth, never the browser redirect.</figcaption>
+      </figure>
+      <p>Read <a href="payment-lifecycle.html">Payment lifecycle and states</a> before you go live. It explains why <code>authorised</code> is the final success state you can see, and when to cancel instead of refund.</p>
+
+      <h2>Base URL and authentication</h2>
+      <p>All endpoints live under one host. Test and live use the same host. A header selects the environment.</p>
+      <pre data-title="Base URL"><code class="lang-plaintext">https://payments.plorea.no</code></pre>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Header</th><th>Value</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer &lt;API key&gt;</code></td><td>Test keys start with <code>plr_test_</code>. Plorea issues keys per integrator. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> or <code>live</code></td><td>Selects the Adyen account. The default is <code>test</code> on most endpoints. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>On every <code>POST</code> and <code>PATCH</code>.</td></tr>
+            <tr><td><code>Accept</code></td><td><code>application/json</code></td><td>Recommended.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout danger">
+        <p class="callout-title">Always send X-Environment</p>
+        <p>A <code>POST /payments/refund</code> without <code>X-Environment</code> uses the live credentials. With a test key, the call fails with <code>401</code> and <code>"errorType": "security"</code>. Send the header on every request, also on reads. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/payments/status/order-1001?platform=acme \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Accept: application/json"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Facades\Plorea;
+
+// config/plorea.php reads PLOREA_API_KEY and PLOREA_ENVIRONMENT.
+$payment = Plorea::payments()-&gt;status('order-1001');
+
+$payment-&gt;status;   // PaymentStatus::Authorised
+$payment-&gt;isPaid(); // true</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/payments/status/order-1001?platform=acme',
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+      'X-Environment': 'test',
+      Accept: 'application/json',
+    },
+  },
+);
+const payment = await res.json();</code></pre></div>
+      </div>
+
+      <h2>Conventions</h2>
+      <h3>Amounts are in minor units</h3>
+      <p>Send every amount as an integer in øre. <code>10000</code> means 100,00 kr. The currency is <code>NOK</code>. Payment links take a flat <code>amount</code> and <code>currency</code>. Subscriptions and charges take an object: <code>{"value": 10000, "currency": "NOK"}</code>.</p>
+
+      <h3>The platform field</h3>
+      <p>Plorea asks each integrator to identify itself with a <code>platform</code> value. Send it in the JSON body on <code>POST</code> and <code>PATCH</code>, and in the query string on <code>GET</code>. Plorea uses it for reporting only. It changes no behaviour. <span class="badge stated">Stated by Plorea</span></p>
+
+      <h3>References are yours</h3>
+      <p>You choose the <code>reference</code> of a payment. Make it unique per payment attempt. The API does not deduplicate: two calls with the same reference create two payable links. See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>. <span class="badge verified">Verified</span></p>
+
+      <h3>Tenants and customers</h3>
+      <p>A <code>tenantId</code> groups data for one of your own customers, for example one club or one shop. A <code>customerId</code> identifies the paying person inside that tenant. Plorea scopes stored cards and subscriptions by both. A call that mixes the IDs of two tenants fails with <code>403 Tenant mismatch</code>.</p>
+
+      <h3>Dates</h3>
+      <p>Timestamps use ISO 8601 with an offset, for example <code>2026-11-01T00:00:00+00:00</code>. Send dates in the same format.</p>
+
+      <h3>Errors</h3>
+      <p>An error response has a JSON body with one <code>error</code> string. Read the HTTP status, not the message. Messages are fixed templates and can change. See <a href="errors.html">Errors and retries</a>.</p>
+      <pre data-title="400 Bad Request"><code class="lang-json">{ "error": "channel must be one of Web, iOS, Android" }</code></pre>
+
+      <h2 id="evidence">How to read the badges</h2>
+      <p>The Plorea API has no published contract yet. These docs mark where each statement comes from, so you know what to trust.</p>
+      <div class="legend">
+        <span><span class="badge verified">Verified</span> We called the test API and saw this.</span>
+        <span><span class="badge stated">Stated by Plorea</span> Plorea told us. We could not test it.</span>
+        <span><span class="badge unobserved">Not observable in test</span> The test environment cannot produce it.</span>
+        <span><span class="badge open">Open question</span> Unknown. We have asked Plorea.</span>
+        <span><span class="badge proposal">Proposal</span> A change we ask Plorea to make.</span>
+      </div>
+
+      <h2>All endpoints</h2>
+      <ul class="endpoint-list">
+        <li><a href="api-reference.html#create-a-payment-link"><span class="method post">POST</span><span><code>/payments/link</code> <span class="desc">Create a hosted payment link</span></span></a></li>
+        <li><a href="api-reference.html#get-payment-status"><span class="method get">GET</span><span><code>/payments/status/{reference}</code> <span class="desc">Read a payment</span></span></a></li>
+        <li><a href="api-reference.html#refund-a-payment"><span class="method post">POST</span><span><code>/payments/refund</code> <span class="desc">Refund a settled payment</span></span></a></li>
+        <li><a href="api-reference.html#cancel-a-payment"><span class="method post">POST</span><span><code>/payments/cancel</code> <span class="desc">Cancel an unsettled authorisation</span></span></a></li>
+        <li><a href="api-reference.html#get-a-payment-link"><span class="method get">GET</span><span><code>/pay/{paymentLinkId}</code> <span class="desc">Read the public pay page data</span></span></a></li>
+        <li><a href="api-reference.html#create-a-checkout-session"><span class="method post">POST</span><span><code>/payments/session</code> <span class="desc">Start an embedded checkout session</span></span></a></li>
+        <li><a href="api-reference.html#set-up-a-card-hosted"><span class="method post">POST</span><span><code>/payment-methods/setup</code> <span class="desc">Store a card on a hosted page</span></span></a></li>
+        <li><a href="api-reference.html#set-up-a-card-session"><span class="method post">POST</span><span><code>/payment-methods/setup/session</code> <span class="desc">Store a card with Drop-in</span></span></a></li>
+        <li><a href="api-reference.html#get-a-payment-method"><span class="method get">GET</span><span><code>/payment-methods/{id}</code> <span class="desc">Read a stored card</span></span></a></li>
+        <li><a href="api-reference.html#create-a-subscription"><span class="method post">POST</span><span><code>/subscriptions</code> <span class="desc">Create a subscription</span></span></a></li>
+        <li><a href="api-reference.html#list-subscriptions"><span class="method get">GET</span><span><code>/subscriptions</code> <span class="desc">List subscriptions</span></span></a></li>
+        <li><a href="api-reference.html#get-a-subscription"><span class="method get">GET</span><span><code>/subscriptions/{id}</code> <span class="desc">Read a subscription</span></span></a></li>
+        <li><a href="api-reference.html#update-a-subscription"><span class="method patch">PATCH</span><span><code>/subscriptions/{id}</code> <span class="desc">Change price, card or labels</span></span></a></li>
+        <li><a href="api-reference.html#charge-a-subscription"><span class="method post">POST</span><span><code>/subscriptions/{id}/charge</code> <span class="desc">Charge now</span></span></a></li>
+        <li><a href="api-reference.html#list-subscription-charges"><span class="method get">GET</span><span><code>/subscriptions/{id}/charges</code> <span class="desc">List charges</span></span></a></li>
+        <li><a href="api-reference.html#cancel-a-subscription"><span class="method post">POST</span><span><code>/subscriptions/{id}/cancel</code> <span class="desc">Cancel at period end</span></span></a></li>
+        <li><a href="api-reference.html#reactivate-a-subscription"><span class="method post">POST</span><span><code>/subscriptions/{id}/reactivate</code> <span class="desc">Undo a cancellation</span></span></a></li>
+      </ul>
+
+      <h2>Where to go next</h2>
+      <ol class="steps">
+        <li><strong>Make your first test payment</strong>Follow the <a href="quickstart.html">Quickstart</a>. It takes about ten minutes.</li>
+        <li><strong>Learn the states</strong>Read <a href="payment-lifecycle.html">Payment lifecycle and states</a> and <a href="concepts.html">Core concepts</a>.</li>
+        <li><strong>Pick your flow</strong>Use <a href="payment-links.html">payment links</a> for one-off payments, or <a href="subscriptions.html">subscriptions</a> for recurring billing.</li>
+        <li><strong>Prepare for production</strong>Work through <a href="going-live.html">Going live</a>.</li>
+      </ol>
+
+      <p class="site-foot">Community draft. Facts last checked against the test environment in October 2026. Example names use reserved values: <code>example.com</code>, Acme, organisation number <code>999999999</code>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

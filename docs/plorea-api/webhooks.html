@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plorea Webhooks</title>
+  <meta name="description" content="Receive, verify and process signed Plorea webhook events: headers, envelope, event catalogue, signature verification and reconciliation.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="webhooks">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Integration</p>
+        <h1>Webhooks</h1>
+        <p class="lead">Plorea sends a signed HTTP POST to your server when a payment is authorised, fails or is refunded, and when the scheduler charges a subscription. This guide shows how to register an endpoint, verify each delivery, and process events safely.</p>
+      </header>
+
+      <div class="callout tip">
+        <p class="callout-title">The one rule: a webhook is a ping, not a fact</p>
+        <p>Use a webhook to learn <em>that</em> something changed. Then read the current state from the API before you move money or grant access. Delivery is best-effort, the same event can arrive twice, and some state changes send no webhook at all.</p>
+      </div>
+
+      <h2>How delivery works</h2>
+      <figure class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant A as Adyen
+  participant P as Plorea
+  participant W as Your webhook endpoint
+  participant Q as Your job queue
+  A-->>P: AUTHORISATION result
+  P->>W: POST signed event (x-plorea-signature)
+  W->>W: Verify HMAC over the raw body
+  W->>W: Store the event, keyed on body.eventId
+  W-->>P: 200 OK (fast)
+  W->>Q: Dispatch job
+  Q->>P: GET /payments/status/{reference}
+  P-->>Q: Authoritative state
+  Q->>Q: Book idempotently
+        </pre>
+        <figcaption>Answer fast. Do the real work in a job that re-reads state from the API.</figcaption>
+      </figure>
+
+      <h2>Register an endpoint</h2>
+      <p>Registration is manual. No API exists for it. <span class="badge verified">Verified</span></p>
+      <ol class="steps">
+        <li><strong>Expose an HTTPS endpoint</strong>For example <code>https://api.example.com/plorea/webhook</code>. It must accept <code>POST</code> with a JSON body.</li>
+        <li><strong>Send the URL to Plorea through a secure channel</strong>Name the environment the URL is for: test or live.</li>
+        <li><strong>Receive the signing secret</strong>Store the secret in your environment configuration. Never commit it. The secret is not your API key and not your tenant ID.</li>
+        <li><strong>Ask for one URL per environment</strong>By default a tenant has one registered URL. Plorea sets up a separate URL for each environment on request. <span class="badge stated">Stated by Plorea</span></li>
+      </ol>
+
+      <div class="callout warning">
+        <p class="callout-title">Missing deliveries? Check the registered URL first</p>
+        <p>A tenant registered against one environment sends nothing to the other. If test deliveries do not arrive, confirm which URL Plorea has on file before you debug your code. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <p>Test and live may share one signing secret. Confirm this with Plorea for your account. <span class="badge stated">Stated by Plorea</span></p>
+
+      <h2>Request headers</h2>
+      <p>Each delivery carries three Plorea headers. A real delivery has <strong>no</strong> <code>Authorization</code> header. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Header</th><th>Content</th></tr></thead>
+          <tbody>
+            <tr><td><code>x-plorea-signature</code></td><td>Base64-encoded HMAC-SHA256 of the raw request body, keyed with your signing secret. 44 characters.</td></tr>
+            <tr><td><code>x-plorea-event-id</code></td><td><code>evt_</code> followed by 32 hex characters. The same value as <code>eventId</code> in the body.</td></tr>
+            <tr><td><code>x-plorea-event</code></td><td>The event type, for example <code>payment.authorised</code>. The same value as <code>type</code> in the body.</td></tr>
+            <tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout danger">
+        <p class="callout-title">The signature covers the body only</p>
+        <p>The headers are outside the signature. An attacker who replays a genuine body with its genuine signature can put any value in <code>x-plorea-event-id</code>. Read <code>eventId</code> and <code>type</code> from the verified body. Never deduplicate on the header. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <h2>The event envelope</h2>
+      <p>Every event has the same outer shape. The <code>data</code> object depends on <code>type</code>.</p>
+      <dl class="fields">
+        <dt>eventId <span class="type">string</span></dt>
+        <dd>Unique ID of this event. <code>evt_</code> plus 32 hex characters. Use it as your idempotency key.</dd>
+        <dt>createdAt <span class="type">string, ISO 8601</span></dt>
+        <dd>When Plorea created the <em>event</em>. It is not the creation time of the payment.</dd>
+        <dt>tenantId <span class="type">string</span></dt>
+        <dd>The tenant the event belongs to.</dd>
+        <dt>type <span class="type">string</span></dt>
+        <dd>The event type. See the catalogue below.</dd>
+        <dt>data <span class="type">object</span></dt>
+        <dd>The event payload.</dd>
+      </dl>
+
+      <h2>Event catalogue</h2>
+      <p>Plorea confirmed four event types. More are planned, so accept and log types you do not know. <span class="badge stated">Stated by Plorea</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Sent when</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>payment.authorised</code></td><td>A payment link, a session payment or a <strong>manual</strong> subscription charge is authorised.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.failed</code></td><td>Adyen declines an authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.refunded</code></td><td>A refund settles.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
+            <tr><td><code>subscription.charge_succeeded</code></td><td>The <strong>scheduler</strong> charges a subscription.</td><td><span class="badge verified">Verified</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A decline is <code>payment.failed</code>. The string <code>payment.refused</code> never appears. No <code>payment.captured</code> event exists, because capture is automatic and invisible to the API. See <a href="payment-lifecycle.html">Payment lifecycle and states</a>. <span class="badge verified">Verified</span></p>
+
+      <h3>payment.authorised</h3>
+      <p>The <code>data</code> object is a strict subset of the <a href="api-reference.html#get-payment-status">payment status</a> body. It has no <code>merchantAccount</code>, <code>balanceAccountId</code>, <code>store</code> or <code>splitsEnabled</code>, no <code>lastRefund*</code> or <code>lastCancel*</code> fields, and no payment timestamps. <code>amount</code> is a flat integer in øre. <span class="badge verified">Verified</span></p>
+      <pre data-title="payment.authorised — payment link"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000001",
+  "createdAt": "2026-08-26T12:05:00.000Z",
+  "tenantId": "acme",
+  "type": "payment.authorised",
+  "data": {
+    "reference": "order-1001",
+    "orderId": null,
+    "status": "authorised",
+    "provider": "adyen",
+    "pspReference": "TESTPSPREF000001",
+    "paymentLinkId": "pl_test_example",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_example",
+    "amount": 1000,
+    "currency": "NOK",
+    "environment": "test",
+    "eventCode": "AUTHORISATION",
+    "success": true
+  }
+}</code></pre>
+
+      <p>A <strong>manual</strong> subscription charge (<code>POST /subscriptions/{id}/charge</code>) also sends <code>payment.authorised</code>. The reference has the form <code>{subscriptionId}-{chargeId}</code>, <code>orderId</code> holds the subscription's <code>externalId</code>, and the link fields are null. <span class="badge verified">Verified</span></p>
+      <pre data-title="payment.authorised — manual subscription charge"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000003",
+  "createdAt": "2026-09-04T09:55:31.000Z",
+  "tenantId": "acme",
+  "type": "payment.authorised",
+  "data": {
+    "reference": "sub_test_example-chg_test_example_1",
+    "orderId": "membership-42",
+    "status": "authorised",
+    "provider": "adyen",
+    "pspReference": "TESTCHARGEPSP001",
+    "paymentLinkId": null,
+    "paymentLinkUrl": null,
+    "amount": 29900,
+    "currency": "NOK",
+    "environment": "test",
+    "eventCode": "AUTHORISATION",
+    "success": true
+  }
+}</code></pre>
+
+      <h3>payment.failed</h3>
+      <p>Plorea sends this about two seconds after the payment status changes to <code>failed</code>. The decline shows only as <code>eventCode: "AUTHORISATION"</code> with <code>success: false</code>. The payload has no refusal reason. <span class="badge verified">Verified</span> Plorea plans to add <code>refusalReason</code> to the status endpoint. <span class="badge stated">Stated by Plorea</span></p>
+      <pre data-title="payment.failed"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000009",
+  "createdAt": "2026-09-09T08:56:40.922Z",
+  "tenantId": "acme",
+  "type": "payment.failed",
+  "data": {
+    "reference": "order-1002",
+    "orderId": null,
+    "status": "failed",
+    "provider": "adyen",
+    "pspReference": "TESTPSPREF000009",
+    "paymentLinkId": "pl_test_example_declined",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_example_declined",
+    "amount": 10000,
+    "currency": "NOK",
+    "environment": "test",
+    "eventCode": "AUTHORISATION",
+    "success": false
+  }
+}</code></pre>
+      <div class="callout note">
+        <p class="callout-title">A failed payment link stays payable</p>
+        <p>A decline does not close the hosted page. The customer can try again with another card on the same link. A later <code>payment.authorised</code> for the same reference is normal.</p>
+      </div>
+
+      <h3>payment.refunded</h3>
+      <p>Plorea sends this event when a refund settles. Settlement can take more than 11 hours in test. <span class="badge verified">Verified</span> We have not captured the payload. Expect the same <code>data</code> shape as the other payment events, with the payment's own reference. <span class="badge open">Open question</span></p>
+      <p>Do not wait for this event to update your books. Book the refund when <code>POST /payments/refund</code> answers <code>refund_requested</code>. See <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+
+      <h3>subscription.charge_succeeded</h3>
+      <p>The subscription scheduler sends this event after it charges a stored card. <code>amount</code> is an object here, unlike the payment events. <code>customerId</code> can be null. <span class="badge verified">Verified</span></p>
+      <pre data-title="subscription.charge_succeeded"><code class="lang-json">{
+  "eventId": "evt_00000000000000000000000000000002",
+  "createdAt": "2026-09-04T10:04:58.000Z",
+  "tenantId": "acme",
+  "type": "subscription.charge_succeeded",
+  "data": {
+    "subscriptionId": "sub_test_example",
+    "chargeId": "chg_test_example_2",
+    "reference": "sub_test_example-chg_test_example_2",
+    "customerId": null,
+    "shopperReference": "acme-member-001",
+    "externalId": "membership-42",
+    "amount": {
+      "value": 29900,
+      "currency": "NOK"
+    },
+    "pspReference": "TESTCHARGEPSP002",
+    "nextChargeAt": "2026-10-04T10:04:51.000Z",
+    "environment": "test"
+  }
+}</code></pre>
+      <div class="callout warning">
+        <p class="callout-title">Do not look up a scheduler charge as a payment</p>
+        <p>The <code>reference</code> of a scheduler charge does not resolve on <code>GET /payments/status/{reference}</code>. The call answers <code>403</code>, later <code>404</code>. Read the charge from <code>GET /subscriptions/{id}/charges</code> instead. A manual charge reference does resolve. <span class="badge verified">Verified</span></p>
+      </div>
+      <p>Plorea states that charge webhooks include the subscription's <code>merchantOrgNr</code> when one is set. Our captures predate that field. <span class="badge stated">Stated by Plorea</span></p>
+
+      <h2 id="what-is-not-sent">What is not sent</h2>
+      <p>Plorea sends <strong>no</strong> webhook for the transitions below. You must poll for them. <span class="badge stated">Stated by Plorea</span> <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Transition</th><th>How to detect it</th></tr></thead>
+          <tbody>
+            <tr><td>Card setup succeeds or fails (<code>pending_setup</code> → <code>active</code> | <code>failed</code>)</td><td><code>GET /payment-methods/{id}</code> after the customer returns, and on a schedule until <code>expiresAt</code>.</td></tr>
+            <tr><td>Subscription cancelled</td><td>The cancel call returns the new state synchronously.</td></tr>
+            <tr><td>Subscription reactivated</td><td>The reactivate call returns the new state synchronously.</td></tr>
+            <tr><td><strong>A scheduler charge fails</strong></td><td>Poll <code>GET /subscriptions/{id}</code>. Compare <code>nextChargeAt</code> with now. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
+            <tr><td>A payment link expires</td><td>The status never reports <code>expired</code>. Use <code>expiresAt</code> from the create response, or <code>expired</code> on <code>GET /pay/{id}</code>.</td></tr>
+            <tr><td>A cancellation settles</td><td>No <code>payment.cancelled</code> event is known. Poll the status. <span class="badge open">Open question</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout gap">
+        <p class="callout-title">Gap: a declined recurring charge is silent</p>
+        <p>The most important failure in recurring billing sends no event. A <code>subscription.charge_failed</code> event would remove the need to poll. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+      </div>
+
+      <h2>Verify the signature</h2>
+      <p>Verify every delivery before you trust it. The algorithm is: <code>base64(HMAC-SHA256(key = secret, message = raw body bytes))</code>. Compare the result with <code>x-plorea-signature</code> in constant time. <span class="badge verified">Verified</span></p>
+      <ol class="steps">
+        <li><strong>Read the raw body</strong>Read the bytes exactly as they arrived. Do not parse and re-serialise the JSON first.</li>
+        <li><strong>Use the secret verbatim as the key</strong>Use the characters of the secret as Plorea gave it to you. Do not hex-decode or base64-decode it. The decoded-key variant does not match.</li>
+        <li><strong>Compute the HMAC</strong>HMAC-SHA256 over the raw body. Encode the binary digest as standard base64.</li>
+        <li><strong>Compare in constant time</strong>Use <code>hash_equals</code> in PHP or <code>crypto.timingSafeEqual</code> in Node. A normal string compare leaks timing.</li>
+        <li><strong>Fail closed</strong>Reject the request with <code>401</code> or <code>403</code> if the header is missing, the secret is not configured, or the values differ.</li>
+      </ol>
+
+      <div class="callout warning">
+        <p class="callout-title">Re-encoded bodies break the signature</p>
+        <p>A JSON body parser, a proxy that rewrites the body, or an added trailing newline changes the bytes. The HMAC then fails while the payload still looks valid. If a delivery you believe is genuine fails, check the secret and the raw body before you suspect the algorithm. A replay test proved that a genuine delivery passes and a one-byte edit fails. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Send a signed test event to your own endpoint.
+# Use a TEST secret only. Never put a live secret in a shell history.
+SECRET='whsec_FAKE_example_secret'
+BODY='{"eventId":"evt_00000000000000000000000000000001","createdAt":"2026-08-26T12:05:00.000Z","tenantId":"acme","type":"payment.authorised","data":{"reference":"order-1001","status":"authorised","amount":1000,"currency":"NOK","environment":"test","eventCode":"AUTHORISATION","success":true}}'
+
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -binary | openssl base64 -A)
+
+curl -X POST https://localhost:8000/plorea/webhook \
+  -H "Content-Type: application/json" \
+  -H "x-plorea-signature: $SIG" \
+  -H "x-plorea-event-id: evt_00000000000000000000000000000001" \
+  -H "x-plorea-event: payment.authorised" \
+  --data-raw "$BODY"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">// The Laravel SDK registers POST /plorea/webhook and verifies the
+// signature for you (AuthenticateWebhook middleware). Configure it:
+//
+//   PLOREA_WEBHOOKS_ENABLED=true
+//   PLOREA_WEBHOOK_PATH=plorea/webhook
+//   PLOREA_WEBHOOK_SECRET=...        // from Plorea, used verbatim
+//
+// Exclude the path from CSRF protection (bootstrap/app.php):
+-&gt;withMiddleware(function (Middleware $middleware) {
+    $middleware-&gt;validateCsrfTokens(except: ['plorea/webhook']);
+})
+
+// Plain PHP, without the SDK:
+$raw       = file_get_contents('php://input');
+$given     = $_SERVER['HTTP_X_PLOREA_SIGNATURE'] ?? '';
+$secret    = getenv('PLOREA_WEBHOOK_SECRET');
+$expected  = base64_encode(hash_hmac('sha256', $raw, $secret, true));
+
+if ($secret === false || $secret === '' || ! hash_equals($expected, $given)) {
+    http_response_code(403);
+    exit;
+}
+
+$event = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">import express from 'express';
+import crypto from 'node:crypto';
+
+const app = express();
+
+// Keep the raw bytes. express.json() would re-encode them.
+app.post('/plorea/webhook', express.raw({ type: 'application/json' }), (req, res) =&gt; {
+  const secret = process.env.PLOREA_WEBHOOK_SECRET;
+  const given = Buffer.from(req.get('x-plorea-signature') ?? '', 'utf8');
+  if (!secret) return res.sendStatus(403); // fail closed
+
+  const expected = Buffer.from(
+    crypto.createHmac('sha256', secret).update(req.body).digest('base64'),
+    'utf8',
+  );
+
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
+    return res.sendStatus(403);
+  }
+
+  const event = JSON.parse(req.body.toString('utf8'));
+  // Store, then answer. Process in a job.
+  queue.add('plorea-event', event);
+  res.sendStatus(200);
+});</code></pre></div>
+      </div>
+
+      <h2>Respond fast with 2xx</h2>
+      <p>Return <code>200</code> as soon as you have verified and stored the delivery. Do slow work in a background job.</p>
+      <div class="callout danger">
+        <p class="callout-title">Failed deliveries are not redelivered</p>
+        <p>Plorea does not retry a delivery that fails or times out. <span class="badge stated">Stated by Plorea</span> An error response does not buy you a second attempt. It loses the event. So:</p>
+        <ul>
+          <li>Accept every verified delivery with <code>200</code>, also when your own processing fails.</li>
+          <li>Store the raw event first. Retry your own processing from what you stored.</li>
+          <li>Run the reconciliation job below.</li>
+        </ul>
+      </div>
+      <p>The Laravel SDK answers <code>200 [accepted]</code> to every verified delivery, also to bodies it cannot parse. <span class="badge verified">Verified</span></p>
+
+      <h2>Deduplicate on eventId</h2>
+      <p>The same event can arrive more than once. A webhook, a status poll and the customer's return page can also race on the same payment. Make every handler idempotent.</p>
+      <ul>
+        <li>Store <code>eventId</code> from the <strong>body</strong> with a unique constraint. Skip events you have seen.</li>
+        <li>Book money idempotently on the payment <code>reference</code>, not on the event.</li>
+      </ul>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Deduplication happens in your code. A database example:
+#   CREATE TABLE plorea_events (
+#     event_id   text PRIMARY KEY,
+#     type       text NOT NULL,
+#     payload    jsonb NOT NULL,
+#     received_at timestamptz NOT NULL DEFAULT now(),
+#     processed_at timestamptz
+#   );
+# INSERT ... ON CONFLICT (event_id) DO NOTHING;</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
+use MemberFlow\Plorea\Events\PaymentStatusUpdated;
+use MemberFlow\Plorea\Facades\Plorea;
+
+Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) {
+    // eventId is read from the signed body, never from the header.
+    if (! Cache::add("plorea:webhook:{$event-&gt;eventId}", true, now()-&gt;addDay())) {
+        return; // already handled
+    }
+
+    // The webhook is a ping. Read the authoritative state.
+    $status = Plorea::payments()-&gt;status($event-&gt;reference);
+
+    if ($status-&gt;isPaid()) {
+        // Compare $status-&gt;amount with what you expect, then book
+        // idempotently on the reference.
+    }
+});</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">async function handle(event) {
+  const inserted = await db.query(
+    `INSERT INTO plorea_events (event_id, type, payload)
+     VALUES ($1, $2, $3) ON CONFLICT (event_id) DO NOTHING`,
+    [event.eventId, event.type, event],
+  );
+  if (inserted.rowCount === 0) return; // duplicate
+
+  if (event.type.startsWith('payment.')) {
+    const res = await fetch(
+      `https://payments.plorea.no/payments/status/${encodeURIComponent(event.data.reference)}?platform=acme`,
+      { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+    );
+    const payment = await res.json();
+    if (payment.status === 'authorised' || payment.status === 'paid') {
+      await bookPayment(payment.reference, payment.amount); // idempotent
+    }
+  }
+}</code></pre></div>
+      </div>
+
+      <h2>Process each event type</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>Re-read</th><th>Then</th></tr></thead>
+          <tbody>
+            <tr><td><code>payment.authorised</code></td><td><code>GET /payments/status/{reference}</code></td><td>Mark the order paid if the status is <code>authorised</code> or <code>paid</code> and the amount matches.</td></tr>
+            <tr><td><code>payment.failed</code></td><td><code>GET /payments/status/{reference}</code></td><td>Show the customer a retry option. The link is still payable.</td></tr>
+            <tr><td><code>payment.refunded</code></td><td><code>GET /payments/status/{reference}</code></td><td>Confirm the refund you already booked. Do not book it twice.</td></tr>
+            <tr><td><code>subscription.charge_succeeded</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Extend access to <code>accessEndsAt</code>. Record the charge from <code>GET /subscriptions/{id}/charges</code>.</td></tr>
+            <tr><td>Unknown type</td><td>—</td><td>Store and log it. Return <code>200</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># After subscription.charge_succeeded, re-read the subscription:
+curl "https://payments.plorea.no/subscriptions/sub_test_example?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
+use MemberFlow\Plorea\Events\WebhookReceived;
+
+Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSucceeded $event) {
+    $event-&gt;subscriptionId;
+    $event-&gt;chargeId;
+    $event-&gt;reference;   // "{subId}-{chgId}"
+    $event-&gt;externalId;  // your own entity id
+    $event-&gt;eventId;     // deduplicate on this
+
+    $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
+    // Extend access to $subscription-&gt;accessEndsAt, idempotently.
+});
+
+// Every delivery also fires WebhookReceived, including unknown types.
+Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
+    logger()-&gt;info('Plorea webhook', ['type' =&gt; $event-&gt;type, 'id' =&gt; $event-&gt;eventId]);
+});</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">if (event.type === 'subscription.charge_succeeded') {
+  const { subscriptionId } = event.data;
+  const res = await fetch(
+    `https://payments.plorea.no/subscriptions/${encodeURIComponent(subscriptionId)}?platform=acme`,
+    { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+  );
+  const subscription = await res.json();
+  await extendAccess(subscription.externalId, subscription.accessEndsAt);
+}</code></pre></div>
+      </div>
+      <p>The SDK fires <code>SubscriptionChargeSucceeded</code> for a scheduler charge and does <strong>not</strong> also fire <code>PaymentStatusUpdated</code>. Two events for one charge would make listeners book it twice.</p>
+
+      <h2 id="reconcile-by-polling">Reconcile by polling</h2>
+      <p>Webhooks can be lost, and some transitions send none. Run a scheduled job that reads state directly. This is not over-engineering. It is the only way to see a failed scheduler charge.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What</th><th>Call</th><th>How often</th></tr></thead>
+          <tbody>
+            <tr><td>Open payment links</td><td><code>GET /payments/status/{reference}</code></td><td>Every few minutes until paid or past <code>expiresAt</code>.</td></tr>
+            <tr><td>Card setups</td><td><code>GET /payment-methods/{id}</code></td><td>Every few minutes until <code>active</code> or <code>failed</code>.</td></tr>
+            <tr><td>Refunds and cancels in flight</td><td><code>GET /payments/status/{reference}</code></td><td>Hourly. Settlement can take more than 11 hours.</td></tr>
+            <tr><td>Active subscriptions</td><td><code>GET /subscriptions?externalId=…&amp;status=active</code></td><td>Hourly. Flag any with <code>nextChargeAt</code> in the past.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre data-title="PHP SDK — reconciliation job"><code class="lang-php">// Open links.
+Plorea::payments()-&gt;status($invoice-&gt;reference);
+
+// Subscriptions that are overdue or in payment failure.
+Plorea::subscriptions()-&gt;needingAttention($workspace-&gt;externalId);</code></pre>
+
+      <h2>Test your endpoint</h2>
+      <ul>
+        <li>Pay a test payment link. Plorea sends a real signed <code>payment.authorised</code> to your test URL.</li>
+        <li>Pay with a card Adyen declines to receive <code>payment.failed</code>. See <a href="testing.html">Testing</a>.</li>
+        <li>Create a subscription with a one-day interval to receive <code>subscription.charge_succeeded</code> the next day.</li>
+        <li>Expose a local server through a tunnel and register the tunnel URL as your test URL with Plorea.</li>
+      </ul>
+      <pre data-title="PHP SDK — feature test"><code class="lang-php">$body = file_get_contents(base_path('tests/Fixtures/webhook-payment-authorised.json'));
+$sig  = base64_encode(hash_hmac('sha256', $body, config('plorea.webhooks.secret'), true));
+
+$this-&gt;call('POST', '/plorea/webhook', [], [], [], [
+    'CONTENT_TYPE'            =&gt; 'application/json',
+    'HTTP_X_PLOREA_SIGNATURE' =&gt; $sig,
+], $body)-&gt;assertOk();</code></pre>
+      <div class="callout warning">
+        <p class="callout-title">Turning off verification</p>
+        <p>The SDK has <code>PLOREA_WEBHOOK_VERIFY=false</code> for a staging system that waits for its secret. Never use it in production. Without verification, anyone who knows the URL can post fake events.</p>
+      </div>
+
+      <h2>Security checklist</h2>
+      <ul>
+        <li>Verify the signature on the raw body, in constant time. Fail closed.</li>
+        <li>Deduplicate on <code>eventId</code> from the body.</li>
+        <li>Re-read state from the API before you act.</li>
+        <li>Compare the amount with what you expect before you book money.</li>
+        <li>Rate-limit the endpoint. The SDK accepts extra middleware in <code>plorea.webhooks.middleware</code>, for example <code>throttle:60,1</code>.</li>
+        <li>Keep the signing secret out of source control and logs.</li>
+      </ul>
+
+      <p class="site-foot">Community draft. Facts last checked against the test environment in October 2026. Example names use reserved values: <code>example.com</code>, Acme, organisation number <code>999999999</code>.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>

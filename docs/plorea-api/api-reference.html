@@ -1,0 +1,1589 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API reference</title>
+  <meta name="description" content="Every Plorea Payments API endpoint: parameters, request examples, response shapes, errors and retry safety.">
+  <link rel="stylesheet" href="assets/docs.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/docs.js" defer></script>
+</head>
+<body data-page="api-reference">
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Documentation"></aside>
+  <main class="content">
+    <article class="doc">
+      <header class="page-head">
+        <p class="eyebrow">Reference</p>
+        <h1>API reference</h1>
+        <p class="lead">Every endpoint of the Plorea Payments API, with its parameters, a request in three languages, the real response shape, the errors it returns and whether you can retry it safely. The guides explain the workflows. This page is the contract.</p>
+      </header>
+
+      <div class="callout note">
+        <p class="callout-title">Where the shapes come from</p>
+        <p>Every response example is a real capture from the Plorea test environment, anonymised. Identifiers such as <code>sub_test_golden</code> and <code>TESTPSPREF000001</code> replace the real values. Field names, nesting, key order and <code>null</code> values are as Plorea returned them. Badges mark where behaviour was verified, stated by Plorea or is still open. See <a href="index.html#evidence">How to read the badges</a>.</p>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="basics">Basics</h2>
+
+      <h3 id="base-url">Base URL</h3>
+      <pre data-title="Base URL"><code class="lang-plaintext">https://payments.plorea.no</code></pre>
+      <p>Test and live share the host. The <code>X-Environment</code> header selects the Adyen account.</p>
+
+      <h3 id="request-headers">Request headers</h3>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Header</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer plr_test_FAKE…</code></td><td>Your API key. Plorea issues it. Test keys start with <code>plr_test_</code>.</td></tr>
+            <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> | <code>live</code></td><td>Selects the Adyen credentials. A refund without this header goes to <strong>live</strong> credentials and fails with <code>401</code> <code>"errorType": "security"</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>On <code>POST</code> and <code>PATCH</code>.</td></tr>
+            <tr><td><code>Accept</code></td><td><code>application/json</code></td><td>Recommended on every request.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="the-platform-field">The platform field</h3>
+      <p>Send <code>platform</code> on every request: in the JSON body on <code>POST</code> and <code>PATCH</code>, in the query string on <code>GET</code>. The value names your integration, for example <code>acme</code>. Plorea uses it for logging and reporting. It has no functional effect. <span class="badge stated">Stated by Plorea</span> The parameter tables below do not repeat it.</p>
+
+      <h3 id="amounts">Amounts</h3>
+      <p>All amounts are integers in minor units (øre). <code>10000</code> is 100,00 kr. Payment links and refunds take a flat integer <code>amount</code> plus a <code>currency</code> string. Subscriptions and charges take an <code>Amount</code> object:</p>
+      <pre><code class="lang-json">{ "value": 29900, "currency": "NOK" }</code></pre>
+
+      <h3 id="errors">Errors</h3>
+      <p>A failed request returns a JSON body with an <code>error</code> string. Some errors add context keys, for example <code>status</code> or <code>paymentMethodId</code>. Branch on the HTTP status. The messages are fixed templates: a request that misses two required fields lists all of them. Never parse a message. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>PHP SDK exception</th></tr></thead>
+          <tbody>
+            <tr><td><code>400</code></td><td>Validation failed, or the object is in the wrong state (not chargeable, card not active, not canceled).</td><td><code>ValidationException</code></td></tr>
+            <tr><td><code>401</code></td><td>Bad API key, or wrong environment credentials.</td><td><code>AuthenticationException</code></td></tr>
+            <tr><td><code>402</code></td><td>The card was declined on a subscription charge. Nothing else returns 402.</td><td><code>ChargeFailedException</code></td></tr>
+            <tr><td><code>403</code></td><td><code>Tenant mismatch</code>: the object belongs to another tenant.</td><td><code>AuthenticationException</code></td></tr>
+            <tr><td><code>404</code></td><td>Unknown reference or ID.</td><td><code>NotFoundException</code></td></tr>
+            <tr><td><code>5xx</code></td><td>Plorea or Adyen failed.</td><td><code>ServerException</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>See <a href="errors.html">Errors and retries</a> for handling patterns.</p>
+
+      <h3 id="retry-safety">Retry safety at a glance</h3>
+      <p>The API has no idempotency keys. Two identical <code>POST</code>s create two objects. <span class="badge verified">Verified</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Safe to retry</th><th>Not safe to retry blindly</th></tr></thead>
+          <tbody>
+            <tr><td>Every <code>GET</code>. Refund and cancel with the <strong>same</strong> <code>modificationReference</code>. <code>PATCH</code> with the same body.</td><td>Create payment link, create session, card setup, create subscription, charge, cancel and reactivate subscription. Read first, then decide.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="create-a-payment-link">Create a payment link</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/link</code></div>
+      <p>Creates a hosted payment page for one payment. Send the customer to <code>paymentLinkUrl</code>. The payment is stored under your <code>reference</code>. Guide: <a href="payment-links.html">Payment links</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>tenantId</code><span class="req">required</span></td><td class="type">string</td><td>Your tenant, for example one club or shop.</td></tr>
+            <tr><td><code>reference</code><span class="req">required</span></td><td class="type">string</td><td>Your unique payment reference. Not deduplicated: a repeated reference creates a second payable link. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>product</code><span class="req">required</span></td><td class="type">string</td><td>Text the customer sees on the pay page.</td></tr>
+            <tr><td><code>amount</code><span class="req">required</span></td><td class="type">integer</td><td>Minor units. <code>19900</code> = 199,00 kr.</td></tr>
+            <tr><td><code>currency</code><span class="req">required</span></td><td class="type">string</td><td><code>NOK</code>.</td></tr>
+            <tr><td><code>returnUrl</code><span class="req">required</span></td><td class="type">string</td><td>Where the pay page sends the customer afterwards. Do not treat the return as proof of payment.</td></tr>
+            <tr><td><code>merchantOrgNr</code><span class="req">contract</span></td><td class="type">string</td><td>Organisation number of the invoice issuer (your client, not you). Required by contract, not enforced by the API. Without it, Plorea cannot route the payout. <span class="badge stated">Stated by Plorea</span> KYC starts on the first payment. Payout takes 1–5 business days.</td></tr>
+            <tr><td><code>merchantName</code><span class="opt">optional</span></td><td class="type">string</td><td>Legal name of the invoice issuer.</td></tr>
+            <tr><td><code>merchantEmail</code><span class="opt">optional</span></td><td class="type">string</td><td>Contact email of the invoice issuer.</td></tr>
+            <tr><td><code>merchantPhone</code><span class="opt">optional</span></td><td class="type">string</td><td>Contact phone of the invoice issuer.</td></tr>
+            <tr><td><code>merchantCountry</code><span class="opt">optional</span></td><td class="type">string</td><td>Country of the invoice issuer.</td></tr>
+            <tr><td><code>orderId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your order ID. Echoed as <code>orderId</code> on status and webhooks.</td></tr>
+            <tr><td><code>doneId</code><span class="opt">optional</span></td><td class="type">string</td><td>The universal Done user identifier for the payer, when you have one.</td></tr>
+            <tr><td><code>email</code><span class="opt">optional</span></td><td class="type">string</td><td>Payer email. Shown as <code>email</code> on the pay page.</td></tr>
+            <tr><td><code>invoice_url</code><span class="opt">optional</span></td><td class="type">string</td><td>Link to the invoice. Note the snake_case name.</td></tr>
+            <tr><td><code>enableSplits</code><span class="opt">optional</span></td><td class="type">boolean</td><td>Turns on settlement splits. Echoed as <code>splitsEnabled</code>.</td></tr>
+            <tr><td><code>store</code><span class="opt">optional</span></td><td class="type">string</td><td><strong>Deprecated.</strong> Plorea resolves the store from <code>merchantOrgNr</code>. Echoed as <code>store</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payments/link \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "test-tenant",
+    "reference": "INV-2026-1001",
+    "orderId": "ORDER-1001",
+    "product": "Annual membership",
+    "amount": 19900,
+    "currency": "NOK",
+    "email": "member@example.com",
+    "returnUrl": "https://example.com/return",
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Sports AS"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\Amount;
+use MemberFlow\Plorea\Facades\Plorea;
+
+$link = Plorea::payments()
+    -&gt;link('INV-2026-1001', 'Annual membership', Amount::nok(19900), 'https://example.com/return')
+    -&gt;orderId('ORDER-1001')
+    -&gt;payerEmail('member@example.com')
+    -&gt;merchant(orgNr: '999999999', name: 'Acme Sports AS')
+    -&gt;create();          // or -&gt;firstOrCreate() to reuse an open link safely
+
+$link-&gt;url;              // https://pay.plorea.no/…</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payments/link', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'test-tenant',
+    reference: 'INV-2026-1001',
+    orderId: 'ORDER-1001',
+    product: 'Annual membership',
+    amount: 19900,
+    currency: 'NOK',
+    email: 'member@example.com',
+    returnUrl: 'https://example.com/return',
+    merchantOrgNr: '999999999',
+    merchantName: 'Acme Sports AS',
+  }),
+});
+const link = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "status": "created",
+    "environment": "test",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_golden_orgnr_link",
+    "paymentLinkId": "pl_test_golden_orgnr_link",
+    "reference": "GOLDEN-2026-002",
+    "tenantId": "test-tenant",
+    "merchantAccount": "TestMerchantAccount",
+    "amount": 19900,
+    "currency": "NOK",
+    "store": "Test Store AS",
+    "themeId": null,
+    "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+    "splitsEnabled": false,
+    "clientType": "payments_only",
+    "skipKyc": false,
+    "partnerSplitsApplied": true,
+    "provider": "plorea",
+    "expiresAt": "2026-11-16T19:58:00.000Z"
+}</code></pre>
+      <ul>
+        <li><code>merchantOrgNr</code> and <code>merchantName</code> are <strong>not</strong> echoed. <code>partnerSplitsApplied: true</code> shows that a merchant was attached. Read the merchant back with <a href="#get-a-payment-link"><code>GET /pay/{id}</code></a>. <span class="badge verified">Verified</span></li>
+        <li>Store <code>expiresAt</code>. The status endpoint never reports <code>expired</code>. <span class="badge verified">Verified</span></li>
+      </ul>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td>A required field is missing or invalid.</td></tr>
+          <tr><td><code>401</code></td><td>Bad key or wrong environment.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="callout warning">
+        <p class="callout-title">Not safe to retry</p>
+        <p>A timeout does not tell you if the link exists. A blind retry can give the customer two payable links. Before you retry, call <a href="#get-payment-status"><code>GET /payments/status/{reference}</code></a>. A <code>404</code> means you can create. A paid status means stop. The PHP SDK does this walk in <code>firstOrCreate()</code>.</p>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="get-payment-status">Get payment status</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/payments/status/{reference}?platform=acme</code></div>
+      <p>Reads one payment by your reference. Works for payment links, embedded sessions and <strong>manual</strong> subscription charges. Guide: <a href="payment-lifecycle.html">Payment lifecycle and states</a>.</p>
+
+      <h4>Path parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>reference</code><span class="req">required</span></td><td class="type">string</td><td>The reference you sent on create. URL-encode it. For a subscription charge: <code>{subscriptionId}-{chargeId}</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/payments/status/INV-2026-1001?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Accept: application/json"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$payment = Plorea::payments()-&gt;status('INV-2026-1001');
+
+$payment-&gt;isPaid();   // authorised or paid
+$payment-&gt;isOpen();   // created, pending or active</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const ref = encodeURIComponent('INV-2026-1001');
+const res = await fetch(
+  `https://payments.plorea.no/payments/status/${ref}?platform=acme`,
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+);
+if (res.status === 404) { /* unknown reference */ }
+const payment = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <p>The body always has the same 29 keys. Fields that do not apply are <code>null</code>. <span class="badge verified">Verified</span></p>
+      <pre data-title="200 OK — authorised"><code class="lang-json">{
+    "reference": "GOLDEN-2026-001",
+    "tenantId": "test-tenant",
+    "platform": "unknown",
+    "orderId": null,
+    "status": "authorised",
+    "provider": "adyen",
+    "pspReference": "TESTPSPREF000001",
+    "paymentLinkId": "pl_test_golden_link",
+    "paymentLinkUrl": "https://pay.plorea.no/pl_test_golden_link",
+    "amount": 1000,
+    "currency": "NOK",
+    "environment": "test",
+    "merchantAccount": "TestMerchantAccount",
+    "balanceAccountId": "BA_TEST_BALANCE_ACCOUNT",
+    "store": "Test Store AS",
+    "splitsEnabled": false,
+    "createdAt": "2026-08-26T12:00:00.000Z",
+    "updatedAt": "2026-08-26T12:05:00.000Z",
+    "webhookEventCode": "AUTHORISATION",
+    "webhookSuccess": true,
+    "lastWebhookAt": "2026-08-26T12:05:00.000Z",
+    "lastRefundReference": null,
+    "lastRefundRequestPspReference": null,
+    "lastRefundAmount": null,
+    "lastRefundReason": null,
+    "lastRefundRequestedAt": null,
+    "lastCancelReference": null,
+    "lastCancelRequestPspReference": null,
+    "lastCancelRequestedAt": null
+}</code></pre>
+
+      <h4>Status values</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Group</th><th>status</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Open</td><td><code>created</code>, <code>pending</code>, <code>active</code></td><td>Not paid yet. An expired link stays open forever. Check <code>expiresAt</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td>Paid</td><td><code>authorised</code>, <code>paid</code></td><td><code>authorised</code> is the final success state you can see. Capture is automatic. <span class="badge stated">Stated by Plorea</span></td></tr>
+          <tr><td>Declined</td><td><code>failed</code></td><td>Never <code>refused</code>. <code>webhookSuccess</code> is <code>false</code>. No reason field yet. <span class="badge verified">Verified</span></td></tr>
+          <tr><td>Modification pending</td><td><code>refund_requested</code>, <code>cancel_requested</code></td><td>Accepted, settling. Can last more than 11 hours. <span class="badge verified">Verified</span></td></tr>
+          <tr><td>Final</td><td><code>refunded</code>, <code>cancelled</code></td><td>Not yet observed. <span class="badge stated">Stated by Plorea</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Other examples</h4>
+      <div class="tabs">
+        <div class="tab" data-label="Open"><pre data-title="200 OK — open link (excerpt)"><code class="lang-json">{
+    "reference": "GOLDEN-2026-001",
+    "status": "created",
+    "pspReference": null,
+    "webhookEventCode": null,
+    "webhookSuccess": null,
+    "lastWebhookAt": null
+}</code></pre></div>
+        <div class="tab" data-label="Declined"><pre data-title="200 OK — declined (excerpt)"><code class="lang-json">{
+    "reference": "GOLDEN-2026-REFUSED-001",
+    "status": "failed",
+    "pspReference": "TESTPSPREF000009",
+    "amount": 10000,
+    "webhookEventCode": "AUTHORISATION",
+    "webhookSuccess": false,
+    "lastWebhookAt": "2026-09-09T08:56:40.892Z"
+}</code></pre></div>
+        <div class="tab" data-label="Refund requested"><pre data-title="200 OK — refund requested (excerpt)"><code class="lang-json">{
+    "reference": "GOLDEN-2026-001",
+    "status": "refund_requested",
+    "webhookEventCode": "AUTHORISATION",
+    "webhookSuccess": true,
+    "lastRefundReference": "GOLDEN-2026-001-REFUND-1",
+    "lastRefundRequestPspReference": "TESTREFUNDPSP001",
+    "lastRefundAmount": 1000,
+    "lastRefundReason": "Customer requested refund",
+    "lastRefundRequestedAt": "2026-08-26T12:10:00.000Z"
+}</code></pre></div>
+        <div class="tab" data-label="Cancel requested"><pre data-title="200 OK — cancel requested (excerpt)"><code class="lang-json">{
+    "reference": "GOLDEN-2026-002",
+    "status": "cancel_requested",
+    "lastCancelReference": "GOLDEN-2026-002-CANCEL-1",
+    "lastCancelRequestPspReference": "TESTCANCELPSP001",
+    "lastCancelRequestedAt": "2026-08-26T12:10:00.000Z"
+}</code></pre></div>
+        <div class="tab" data-label="Manual charge"><pre data-title="200 OK — manual subscription charge (excerpt)"><code class="lang-json">{
+    "reference": "sub_test_golden-chg_test_golden_1",
+    "platform": "subscription",
+    "orderId": "GOLDEN-EXT-001",
+    "status": "authorised",
+    "pspReference": "TESTCHARGEPSP001",
+    "paymentLinkId": null,
+    "paymentLinkUrl": null,
+    "amount": 29900
+}</code></pre></div>
+      </div>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>404</code></td><td><code>{"error": "Payment not found", "reference": "…"}</code></td><td>Unknown reference. An open link returns <code>200</code>, not 404. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>403</code></td><td><code>{"error": "Tenant mismatch"}</code></td><td>The payment belongs to another tenant.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout warning">
+        <p class="callout-title">Scheduled charges do not resolve here</p>
+        <p>A reference from a <strong>scheduler</strong> charge answered <code>403</code>, and later <code>404</code>, on this endpoint. Manual charges resolve normally. Read scheduled charges with <a href="#list-subscription-charges"><code>GET /subscriptions/{id}/charges</code></a>. <span class="badge open">Open question</span></p>
+      </div>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="refund-a-payment">Refund a payment</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/refund</code></div>
+      <p>Returns money for a payment that has settled. For a payment that has not settled yet, <a href="#cancel-a-payment">cancel</a> it. Guide: <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+
+      <div class="callout danger">
+        <p class="callout-title">Send X-Environment: test</p>
+        <p>Without the header, this endpoint uses the live Adyen credentials. A test key then fails with <code>401</code> and <code>"errorType": "security"</code>. The error looks like a bad key. <span class="badge verified">Verified</span></p>
+      </div>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>reference</code><span class="req">required</span></td><td class="type">string</td><td>The payment reference.</td></tr>
+          <tr><td><code>modificationReference</code><span class="req">required</span></td><td class="type">string</td><td>Your unique ID for this refund attempt, for example <code>INV-2026-1001-refund-1</code>. Reuse it on a retry of the same attempt.</td></tr>
+          <tr><td><code>amount</code><span class="opt">optional</span></td><td class="type">integer</td><td>Minor units. Leave out for a full refund. Send less for a partial refund.</td></tr>
+          <tr><td><code>reason</code><span class="opt">optional</span></td><td class="type">string</td><td>Free text. Shown as <code>lastRefundReason</code> on status.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payments/refund \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reference": "INV-2026-1001",
+    "modificationReference": "INV-2026-1001-refund-1",
+    "amount": 1000,
+    "reason": "Customer requested refund"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$refund = Plorea::payments()-&gt;refund(
+    reference: 'INV-2026-1001',
+    modificationReference: 'INV-2026-1001-refund-1',
+    amount: Amount::nok(1000),   // omit for a full refund
+    reason: 'Customer requested refund',
+);
+
+// Persist this now. It never appears on the status endpoint.
+$refund-&gt;refundPspReference;</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payments/refund', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    reference: 'INV-2026-1001',
+    modificationReference: 'INV-2026-1001-refund-1',
+    amount: 1000,
+    reason: 'Customer requested refund',
+  }),
+});
+const refund = await res.json(); // save refund.refundPspReference</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "status": "refund_requested",
+    "reference": "GOLDEN-2026-001",
+    "modificationReference": "GOLDEN-2026-001-REFUND-1",
+    "refundPspReference": "TESTREFUNDPSP001",
+    "paymentPspReference": "TESTPSPREF000001",
+    "amount": 1000,
+    "currency": "NOK",
+    "environment": "test"
+}</code></pre>
+      <ul>
+        <li><code>refund_requested</code> means Adyen accepted the refund. Settlement took more than 11 hours in test. Never report a refund as failed because of a timeout. <span class="badge verified">Verified</span></li>
+        <li><code>refundPspReference</code> exists only here. Status carries <code>lastRefundRequestPspReference</code>, which identifies the request. There is no per-refund status. <span class="badge verified">Verified</span></li>
+        <li>The <code>payment.refunded</code> webhook marks settlement.</li>
+      </ul>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td>Missing field, or the payment cannot be refunded.</td></tr>
+          <tr><td><code>401</code></td><td>Bad key, or <code>X-Environment</code> missing (live credentials used).</td></tr>
+          <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe with the same <code>modificationReference</code>. A new <code>modificationReference</code> is a new refund.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="cancel-a-payment">Cancel a payment</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/cancel</code></div>
+      <p>Voids an authorisation that has not settled yet. No money moves. Capture runs automatically within minutes, so the window is short. After settlement, <a href="#refund-a-payment">refund</a> instead. Guide: <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>reference</code><span class="req">required</span></td><td class="type">string</td><td>The payment reference.</td></tr>
+          <tr><td><code>modificationReference</code><span class="req">required</span></td><td class="type">string</td><td>Your unique ID for this cancel attempt.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payments/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reference": "INV-2026-1002",
+    "modificationReference": "INV-2026-1002-cancel-1"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$cancellation = Plorea::payments()-&gt;cancel('INV-2026-1002', 'INV-2026-1002-cancel-1');</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">await fetch('https://payments.plorea.no/payments/cancel', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    reference: 'INV-2026-1002',
+    modificationReference: 'INV-2026-1002-cancel-1',
+  }),
+});</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "status": "cancel_requested",
+    "reference": "GOLDEN-2026-002",
+    "modificationReference": "GOLDEN-2026-002-CANCEL-1",
+    "cancelPspReference": "TESTCANCELPSP001",
+    "paymentPspReference": "TESTPSPREF000002",
+    "environment": "test"
+}</code></pre>
+      <p>The payment reads <code>cancel_requested</code> until Adyen settles. The final state <code>cancelled</code> is not yet observed. <span class="badge stated">Stated by Plorea</span> No webhook is sent for a cancel. <span class="badge stated">Stated by Plorea</span></p>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td>Missing field, or the payment cannot be cancelled.</td></tr>
+          <tr><td><code>401</code></td><td>Bad key or wrong environment.</td></tr>
+          <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe with the same <code>modificationReference</code>.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="get-a-payment-link">Get a payment link</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/pay/{paymentLinkId}?platform=acme</code></div>
+      <p>Reads the data the hosted pay page renders. Use it to check expiry and to confirm the merchant on a link. This is the only place where <code>merchantOrgNr</code> and <code>partnerSplits</code> show. Guide: <a href="payment-links.html">Payment links</a>.</p>
+
+      <h4>Path parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>paymentLinkId</code><span class="req">required</span></td><td class="type">string</td><td>The <code>paymentLinkId</code> from create, for example <code>pl_test_…</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/pay/pl_test_golden_orgnr_link?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$page = Plorea::payByLink()-&gt;find('pl_test_golden_orgnr_link');
+
+$page-&gt;expired;        // computed by Plorea
+$page-&gt;merchantOrgNr;  // "999999999"</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/pay/pl_test_golden_orgnr_link?platform=acme',
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+);
+const page = await res.json();
+const usable = !page.expired &amp;&amp; new Date(page.expiresAt) &gt; new Date();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK — with a merchant attached"><code class="lang-json">{
+    "environment": "test",
+    "product": "Golden fixture product",
+    "currency": "NOK",
+    "partnerSplits": {
+        "totalAmount": 19900,
+        "splits": [
+            {
+                "type": "Default",
+                "account": "BA_TEST_SPLIT_ACCOUNT",
+                "amount": {
+                    "value": 19900,
+                    "currency": "NOK"
+                }
+            }
+        ]
+    },
+    "tenantId": "test-tenant",
+    "merchantAccount": "TestMerchantAccount",
+    "createdAt": "2026-09-07T19:58:00.000Z",
+    "merchantName": "Golden Fixture Gym AS",
+    "email": null,
+    "themeId": null,
+    "reference": "GOLDEN-2026-002",
+    "returnUrl": "https://example.com/return",
+    "expiresAt": "2026-11-16T19:58:00.000Z",
+    "merchantOrgNr": "999999999",
+    "amount": 19900,
+    "splits": null,
+    "id": "pl_test_golden_orgnr_link",
+    "store": null,
+    "expired": false
+}</code></pre>
+      <p>Without a merchant, <code>partnerSplits</code>, <code>merchantName</code> and <code>merchantOrgNr</code> are <code>null</code>. <span class="badge verified">Verified</span></p>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody><tr><td><code>404</code></td><td>Unknown link. Treat it as dead and create a new link.</td></tr></tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="create-a-checkout-session">Create a checkout session</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payments/session</code></div>
+      <p>Opens an Adyen Checkout session for an existing payment link. Mount Adyen Drop-in with the result on your own web page or in a native app. Guide: <a href="checkout.html">Embedded and native checkout</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>paymentLinkId</code><span class="req">required</span></td><td class="type">string</td><td>From <a href="#create-a-payment-link">create a payment link</a>. The session pays that link.</td></tr>
+          <tr><td><code>returnUrl</code><span class="opt">optional</span></td><td class="type">string</td><td>Where 3-D Secure returns. https or a custom app scheme (<code>acme://checkout</code>). <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>channel</code><span class="opt">optional</span></td><td class="type">string</td><td><code>Web</code> | <code>iOS</code> | <code>Android</code>. Case-sensitive. Default <code>Web</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payments/session \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "paymentLinkId": "pl_test_golden_link",
+    "returnUrl": "acme://checkout/return",
+    "channel": "iOS"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\Channel;
+
+$session = Plorea::payByLink()-&gt;session(
+    $link-&gt;id,
+    returnUrl: 'acme://checkout/return',
+    channel: Channel::IOS,
+);
+
+return response()-&gt;json($session); // sessionId, sessionData, clientKey, environment</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payments/session', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    paymentLinkId: 'pl_test_golden_link',
+    returnUrl: 'acme://checkout/return',
+    channel: 'iOS',
+  }),
+});
+const { sessionId, sessionData, clientKey, environment } = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "sessionId": "CS_TEST_NATIVE_SESSION",
+    "sessionData": "test-native-session-data",
+    "environment": "test",
+    "channel": "iOS",
+    "clientKey": "test_GOLDENRESPONSECLIENTKEY00000000"
+}</code></pre>
+      <ul>
+        <li><code>clientKey</code> is returned for every channel since 2026-09-19. Use it to mount Drop-in. <span class="badge verified">Verified</span></li>
+        <li>Browser origins must be whitelisted on that key. A wildcard covers subdomains. <code>localhost</code> is not allowed. Native apps send no origin and are not checked. <span class="badge verified">Verified</span></li>
+        <li>3-D Secure arrives as a browser redirect, also in native apps. Handle the <code>returnUrl</code>. Native 3DS2 is announced. <span class="badge stated">Stated by Plorea</span></li>
+        <li>An abandoned session stays <code>created</code> forever. Time out the attempt yourself. <span class="badge verified">Verified</span></li>
+        <li>Pass only <code>sessionId</code>, <code>sessionData</code>, <code>clientKey</code> and <code>environment</code> to the client.</li>
+      </ul>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td><code>{"error": "channel must be one of Web, iOS, Android"}</code> — any other value, also lowercase <code>ios</code>.</td></tr>
+          <tr><td><code>404</code></td><td>Unknown <code>paymentLinkId</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> a retry creates a new session. That is harmless: the payment is still keyed by the link reference. Open a new session for each attempt.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="set-up-a-card-hosted">Set up a card (hosted)</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payment-methods/setup</code></div>
+      <p>Creates a payment method in <code>pending_setup</code> and returns an Adyen hosted page. The customer enters the card there. Adyen verifies it with a 1 NOK authorisation and stores it. Guide: <a href="payment-methods.html">Storing cards</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>tenantId</code><span class="req">required</span></td><td class="type">string</td><td>Your tenant.</td></tr>
+          <tr><td><code>shopperReference</code><span class="req">required</span></td><td class="type">string</td><td>Your stable ID for the card holder. Adyen ties the stored card to it.</td></tr>
+          <tr><td><code>recurringType</code><span class="req">required</span></td><td class="type">string</td><td><code>Subscription</code> (fixed schedule), <code>CardOnFile</code> (customer-initiated later), or <code>UnscheduledCardOnFile</code> (merchant-initiated, irregular).</td></tr>
+          <tr><td><code>returnUrl</code><span class="req">required</span></td><td class="type">string</td><td>Where Adyen sends the customer afterwards.</td></tr>
+          <tr><td><code>customerId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your customer ID inside the tenant.</td></tr>
+          <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Text on the hosted page. Hosted flow only.</td></tr>
+          <tr><td><code>metadata</code><span class="opt">optional</span></td><td class="type">object</td><td>Free key-value data. Returned as <code>metadata</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payment-methods/setup \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "test-tenant",
+    "customerId": "member-42",
+    "shopperReference": "acme-member-42",
+    "recurringType": "Subscription",
+    "returnUrl": "https://example.com/cards/return",
+    "description": "Card for your Acme membership"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Enums\RecurringType;
+
+$method = Plorea::paymentMethods()
+    -&gt;setup('acme-member-42', RecurringType::Subscription, 'https://example.com/cards/return')
+    -&gt;customerId('member-42')
+    -&gt;description('Card for your Acme membership')
+    -&gt;create();
+
+redirect($method-&gt;setupUrl);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payment-methods/setup', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'test-tenant',
+    customerId: 'member-42',
+    shopperReference: 'acme-member-42',
+    recurringType: 'Subscription',
+    returnUrl: 'https://example.com/cards/return',
+    description: 'Card for your Acme membership',
+  }),
+});
+const method = await res.json(); // redirect to method.adyenPaymentLinkUrl</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-001",
+    "recurringType": "Subscription",
+    "status": "pending_setup",
+    "environment": "test",
+    "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+    "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+    "expiresAt": "2026-09-05T11:51:00+02:00"
+}</code></pre>
+      <p>Store <code>paymentMethodId</code>. No webhook is sent for card setup. Poll <a href="#get-a-payment-method"><code>GET /payment-methods/{id}</code></a> after the customer returns. <span class="badge stated">Stated by Plorea</span></p>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody><tr><td><code>400</code></td><td>A required field is missing, or <code>recurringType</code> is unknown.</td></tr></tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> a retry creates a second pending method. Harmless, but keep only the one the customer completes.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="set-up-a-card-session">Set up a card (session)</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/payment-methods/setup/session</code></div>
+      <p>Same as the hosted setup, but returns an Adyen session for Drop-in on your own page or in a native app. Guide: <a href="checkout.html">Embedded and native checkout</a>.</p>
+
+      <h4>Body parameters</h4>
+      <p>All fields of <a href="#set-up-a-card-hosted">the hosted setup</a> except <code>description</code>, plus:</p>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>channel</code><span class="opt">optional</span></td><td class="type">string</td><td><code>Web</code> | <code>iOS</code> | <code>Android</code>. Case-sensitive. Default <code>Web</code>.</td></tr>
+          <tr><td><code>doneId</code><span class="opt">optional</span></td><td class="type">string</td><td>The universal Done user identifier for the payer, when you have one. Used by the Drop-in session flow only.</td></tr>
+        </tbody>
+      </table></div>
+      <p><code>returnUrl</code> accepts a custom app scheme. <span class="badge verified">Verified</span></p>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/payment-methods/setup/session \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "test-tenant",
+    "shopperReference": "acme-member-42",
+    "recurringType": "Subscription",
+    "returnUrl": "acme://cards/return",
+    "channel": "iOS"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$session = Plorea::paymentMethods()
+    -&gt;setup('acme-member-42', RecurringType::Subscription, 'acme://cards/return')
+    -&gt;channel(Channel::IOS)
+    -&gt;session();
+
+$session-&gt;paymentMethodId;  // store it, then poll
+return response()-&gt;json($session);</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payment-methods/setup/session', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'test-tenant',
+    shopperReference: 'acme-member-42',
+    recurringType: 'Subscription',
+    returnUrl: 'acme://cards/return',
+    channel: 'iOS',
+  }),
+});
+const setup = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "paymentMethodId": "pm_test_golden_native_session",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-native",
+    "recurringType": "Subscription",
+    "status": "pending_setup",
+    "environment": "test",
+    "channel": "iOS",
+    "sessionId": "CS_TEST_NATIVE_SESSION",
+    "sessionData": "test-native-session-data",
+    "clientKey": "test_GOLDENRESPONSECLIENTKEY00000000",
+    "expiresAt": "2026-09-17T09:23:45+02:00",
+    "reference": null,
+    "product": null,
+    "amount": 100,
+    "currency": "NOK",
+    "clientType": "payments_only",
+    "skipKyc": false,
+    "partnerSplitsApplied": false
+}</code></pre>
+      <p><code>amount: 100</code> is the 1 NOK verification authorisation. <span class="badge verified">Verified</span></p>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td><code>{"error": "channel must be one of Web, iOS, Android"}</code></td></tr>
+          <tr><td><code>400</code></td><td>A required field is missing.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> a retry creates a second pending method. Mount only the latest session.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="get-a-payment-method">Get a payment method</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/payment-methods/{paymentMethodId}?platform=acme</code></div>
+      <p>Reads a stored card. Poll this after setup until <code>status</code> is <code>active</code> or <code>failed</code>. Guide: <a href="payment-methods.html">Storing cards</a>.</p>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$method = Plorea::paymentMethods()-&gt;find('pm_test_golden_method');
+
+$method-&gt;status;   // pending_setup | active | failed</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/payment-methods/pm_test_golden_method?platform=acme',
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+);
+const method = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK — active"><code class="lang-json">{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "shopperReference": "golden-shopper-001",
+    "recurringType": "Subscription",
+    "environment": "test",
+    "status": "active",
+    "adyenReference": "pmsetup_pm_test_golden_method",
+    "adyenPaymentLinkId": "PL_TEST_SETUP_LINK",
+    "adyenPaymentLinkUrl": "https://test.adyen.link/PL_TEST_SETUP_LINK",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "consentAt": "2026-09-04T09:54:00.000Z",
+    "expiresAt": "2026-09-05T11:51:00+02:00",
+    "metadata": [],
+    "createdAt": "2026-09-04T09:51:00.000Z",
+    "updatedAt": "2026-09-04T09:54:00.000Z",
+    "setupPspReference": "TESTSETUPPSP0001",
+    "cardLast4": "1111",
+    "cardBrand": "visa",
+    "expiryDate": "03/2030"
+}</code></pre>
+      <div class="table-wrap"><table>
+        <thead><tr><th>status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>pending_setup</code></td><td>The customer has not finished. Card fields are <code>null</code>.</td></tr>
+          <tr><td><code>active</code></td><td>Stored. <code>storedPaymentMethodId</code> and card fields are set. You can use it on a subscription.</td></tr>
+          <tr><td><code>failed</code></td><td>Final. The verification was refused. Start a new setup. <code>failureReason</code> is always <code>null</code>. <span class="badge verified">Verified</span></td></tr>
+        </tbody>
+      </table></div>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>404</code></td><td>Unknown ID.</td></tr>
+          <tr><td><code>403</code></td><td><code>Tenant mismatch</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="create-a-subscription">Create a subscription</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/subscriptions</code></div>
+      <p>Bills an active stored card on a fixed interval. Plorea's scheduler runs the charges. Without a trial, the first charge runs <strong>within seconds</strong>. Guide: <a href="subscriptions.html">Subscriptions</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>tenantId</code><span class="req">required</span></td><td class="type">string</td><td>Must match the payment method's tenant.</td></tr>
+          <tr><td><code>paymentMethodId</code><span class="req">required</span></td><td class="type">string</td><td>An <code>active</code> payment method.</td></tr>
+          <tr><td><code>recurringType</code><span class="req">required</span></td><td class="type">string</td><td>Normally <code>Subscription</code>.</td></tr>
+          <tr><td><code>amount</code><span class="req">required</span></td><td class="type">Amount</td><td><code>{"value": 24900, "currency": "NOK"}</code>. The price of one period.</td></tr>
+          <tr><td><code>interval</code><span class="req">required</span></td><td class="type">object</td><td><code>{"unit": "month", "count": 1}</code>. <code>unit</code>: <code>day</code> | <code>week</code> | <code>month</code> | <code>year</code>. Cannot change later.</td></tr>
+          <tr><td><code>trialEndsAt</code><span class="opt">optional</span></td><td class="type">ISO 8601</td><td>First charge date. Status becomes <code>trialing</code>, and <code>nextChargeAt</code> equals this value. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>retryPolicy</code><span class="opt">optional</span></td><td class="type">object</td><td><code>{"maxRetries": 3, "retryIntervalDays": 1}</code>. How the scheduler retries a failed charge.</td></tr>
+          <tr><td><code>customerId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your customer ID.</td></tr>
+          <tr><td><code>doneId</code><span class="opt">optional</span></td><td class="type">string</td><td>The universal Done user identifier for the payer, when you have one.</td></tr>
+          <tr><td><code>externalId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your own ID, for example a membership ID. You can list by it. Echoed as <code>orderId</code> on charge payments.</td></tr>
+          <tr><td><code>title</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan name.</td></tr>
+          <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan description.</td></tr>
+          <tr><td><code>quantity</code><span class="opt">optional</span></td><td class="type">integer</td><td>Stored and returned. <code>amount</code> is not multiplied by it. Send the total in <code>amount</code>. <span class="badge open">Open question</span></td></tr>
+          <tr><td><code>vatRate</code><span class="opt">optional</span></td><td class="type">number</td><td>Decimal: <code>0.25</code> = 25 %.</td></tr>
+          <tr><td><code>vatAmount</code><span class="opt">optional</span></td><td class="type">integer</td><td>VAT part of <code>amount</code>, in minor units. You calculate it.</td></tr>
+          <tr><td><code>merchantOrgNr</code><span class="opt">optional</span></td><td class="type">string</td><td>Company that issues the invoice. Exactly 9 digits. Every charge inherits it. <span class="badge stated">Stated by Plorea</span></td></tr>
+          <tr><td><code>merchantName</code><span class="opt">optional</span></td><td class="type">string</td><td>Name of that company.</td></tr>
+          <tr><td><code>merchantEmail</code><span class="opt">optional</span></td><td class="type">string</td><td>Email of that company.</td></tr>
+          <tr><td><code>metadata</code><span class="opt">optional</span></td><td class="type">object</td><td>Free key-value data.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "tenantId": "test-tenant",
+    "paymentMethodId": "pm_test_golden_method",
+    "recurringType": "Subscription",
+    "amount": { "value": 24900, "currency": "NOK" },
+    "interval": { "unit": "month", "count": 1 },
+    "trialEndsAt": "2026-11-01T00:00:00+00:00",
+    "retryPolicy": { "maxRetries": 3, "retryIntervalDays": 1 },
+    "externalId": "MEMBERSHIP-42",
+    "title": "Monthly membership",
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "merchantOrgNr": "999999999",
+    "merchantName": "Acme Sports AS"
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Data\BillingInterval;
+
+$subscription = Plorea::subscriptions()
+    -&gt;create('pm_test_golden_method', Amount::nok(24900), BillingInterval::monthly())
+    -&gt;trialUntil(new DateTimeImmutable('2026-11-01'))
+    -&gt;retryPolicy(3, retryIntervalDays: 1)
+    -&gt;externalId('MEMBERSHIP-42')
+    -&gt;title('Monthly membership')
+    -&gt;vat(0.25, 4980)
+    -&gt;merchant(orgNr: '999999999', name: 'Acme Sports AS')
+    -&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    tenantId: 'test-tenant',
+    paymentMethodId: 'pm_test_golden_method',
+    recurringType: 'Subscription',
+    amount: { value: 24900, currency: 'NOK' },
+    interval: { unit: 'month', count: 1 },
+    trialEndsAt: '2026-11-01T00:00:00+00:00',
+    retryPolicy: { maxRetries: 3, retryIntervalDays: 1 },
+    externalId: 'MEMBERSHIP-42',
+    title: 'Monthly membership',
+    vatRate: 0.25,
+    vatAmount: 4980,
+    merchantOrgNr: '999999999',
+    merchantName: 'Acme Sports AS',
+  }),
+});
+const subscription = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <div class="tabs">
+        <div class="tab" data-label="With trial and merchant"><pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden_merchant",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 1000,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "unit": "month",
+        "count": 1
+    },
+    "trialEndsAt": "2026-10-11T15:11:19+00:00",
+    "nextChargeAt": "2026-10-11T15:11:19+00:00",
+    "retryPolicy": {
+        "maxRetries": 3,
+        "retryIntervalDays": 1
+    },
+    "status": "trialing",
+    "externalId": "GOLDEN-EXT-MERCHANT-001",
+    "title": "Golden fixture merchant plan",
+    "description": null,
+    "metadata": [],
+    "vatRate": null,
+    "vatAmount": null,
+    "merchantOrgNr": "999999999"
+}</code></pre></div>
+        <div class="tab" data-label="No trial"><pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 24900,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "unit": "day",
+        "count": 1
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-09-04T09:55:00.000Z",
+    "retryPolicy": {
+        "maxRetries": 2,
+        "retryIntervalDays": 1
+    },
+    "status": "active",
+    "externalId": "GOLDEN-EXT-001",
+    "title": "Golden fixture plan",
+    "description": "Golden fixture subscription",
+    "metadata": [],
+    "vatRate": 0.25,
+    "vatAmount": 4980
+}</code></pre></div>
+      </div>
+      <p><code>merchantOrgNr</code> is echoed on create only. Reads do not return it. Keep your own record. <span class="badge verified">Verified</span></p>
+
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td><code>{"error": "tenantId, paymentMethodId, recurringType, amount and interval are required"}</code> — one fixed message for any missing field.</td></tr>
+          <tr><td><code>400</code></td><td><code>{"error": "Payment method is not active", "paymentMethodId": "…", "status": "failed"}</code></td></tr>
+          <tr><td><code>400</code></td><td><code>{"error": "Invalid merchantOrgNr — must be 9 digits"}</code></td></tr>
+          <tr><td><code>403</code></td><td><code>Tenant mismatch</code> — the payment method belongs to another tenant.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout warning">
+        <p class="callout-title">Not safe to retry</p>
+        <p>A second create is a second subscription, and the card is billed twice. After a timeout, <a href="#list-subscriptions">list by <code>externalId</code></a> before you try again.</p>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="list-subscriptions">List subscriptions</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/subscriptions?externalId=…&amp;tenantId=…&amp;status=…&amp;platform=acme</code></div>
+      <p>Finds subscriptions by your <code>externalId</code> or by tenant. Guide: <a href="dunning.html">Failed charges and dunning</a>.</p>
+
+      <h4>Query parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>externalId</code><span class="opt">one of</span></td><td class="type">string</td><td>Your ID from create.</td></tr>
+          <tr><td><code>tenantId</code><span class="opt">one of</span></td><td class="type">string</td><td>All subscriptions of a tenant.</td></tr>
+          <tr><td><code>status</code><span class="opt">optional</span></td><td class="type">string</td><td><code>active</code> | <code>trialing</code> | <code>canceled</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/subscriptions?externalId=MEMBERSHIP-42&amp;platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$subscriptions = Plorea::subscriptions()-&gt;forExternalId('MEMBERSHIP-42');
+
+// Overdue or failing subscriptions, for a dunning job:
+$attention = Plorea::subscriptions()-&gt;needingAttention('MEMBERSHIP-42');</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const qs = new URLSearchParams({ externalId: 'MEMBERSHIP-42', platform: 'acme' });
+const res = await fetch(`https://payments.plorea.no/subscriptions?${qs}`, {
+  headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' },
+});
+const { count, items } = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "externalId": "GOLDEN-EXT-001",
+    "count": 1,
+    "items": [
+        {
+            "subscriptionId": "sub_test_golden",
+            "tenantId": "test-tenant",
+            "customerId": null,
+            "paymentMethodId": "pm_test_golden_method",
+            "recurringType": "Subscription",
+            "amount": {
+                "value": 24900,
+                "currency": "NOK"
+            },
+            "quantity": null,
+            "interval": {
+                "count": 1,
+                "unit": "day"
+            },
+            "trialEndsAt": null,
+            "nextChargeAt": "2026-09-04T09:55:00.000Z",
+            "status": "active",
+            "externalId": "GOLDEN-EXT-001",
+            "title": "Golden fixture plan",
+            "description": "Golden fixture subscription",
+            "canceledAt": null,
+            "cancelReason": null,
+            "createdAt": "2026-09-04T09:55:00.000Z",
+            "updatedAt": "2026-09-04T09:55:00.000Z"
+        }
+    ]
+}</code></pre>
+      <ul>
+        <li>The top-level key echoes your filter: <code>externalId</code> or <code>tenantId</code>. <span class="badge verified">Verified</span></li>
+        <li>List items are shorter than a full read. They have no <code>retryCount</code>, <code>lastChargeAt</code> or <code>accessEndsAt</code>. Use <a href="#get-a-subscription">get a subscription</a> for those.</li>
+        <li>No pagination has been seen: no cursor, page or <code>hasMore</code>. Whether the list is complete at large sizes is unknown. <span class="badge open">Open question</span></li>
+      </ul>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="get-a-subscription">Get a subscription</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/subscriptions/{subscriptionId}?platform=acme</code></div>
+      <p>Reads the full subscription, with billing and cancellation state. Guide: <a href="subscriptions.html">Subscriptions</a>.</p>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/subscriptions/sub_test_golden?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$subscription = Plorea::subscriptions()-&gt;find('sub_test_golden');</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/subscriptions/sub_test_golden?platform=acme',
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+);
+const subscription = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK — active"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "shopperReference": "golden-shopper-001",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "recurringType": "Subscription",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "quantity": 2,
+    "interval": {
+        "count": 1,
+        "unit": "day"
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-09-05T09:55:00.000Z",
+    "retryPolicy": {
+        "maxRetries": 2,
+        "retryIntervalDays": 1
+    },
+    "retryCount": 0,
+    "lastChargeAt": "2026-09-04T09:55:00.000Z",
+    "lastPaymentReference": "sub_test_golden-chg_test_golden_1",
+    "failureReason": null,
+    "canceledAt": null,
+    "cancelReason": null,
+    "accessEndsAt": null,
+    "status": "active",
+    "externalId": "GOLDEN-EXT-001",
+    "title": "Golden fixture plan",
+    "description": "Golden fixture subscription",
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "metadata": [],
+    "createdAt": "2026-09-04T09:55:00.000Z",
+    "updatedAt": "2026-09-04T09:55:00.000Z"
+}</code></pre>
+
+      <h4>Status values</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>trialing</code></td><td>No charge yet. <code>nextChargeAt</code> = <code>trialEndsAt</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>active</code></td><td>The scheduler charges at <code>nextChargeAt</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>canceled</code></td><td>US spelling. <code>nextChargeAt</code> is <code>null</code>. Access runs to <code>accessEndsAt</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>payment_failed</code></td><td>Modelled in the SDK. Never observed: a failing scheduler charge cannot be produced in test. Watch <code>retryCount</code> and <code>failureReason</code>. <span class="badge unobserved">Not observable in test</span></td></tr>
+        </tbody>
+      </table></div>
+      <p>Neither the read nor the list returns <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>404</code></td><td>Unknown ID.</td></tr>
+          <tr><td><code>403</code></td><td><code>Tenant mismatch</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="update-a-subscription">Update a subscription</h2>
+      <div class="endpoint"><span class="method patch">PATCH</span><code>/subscriptions/{subscriptionId}</code></div>
+      <p>Changes the price, the card or the labels. Send only the fields that change. The interval cannot change: cancel and create a new subscription. Guide: <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>amount</code><span class="opt">optional</span></td><td class="type">Amount</td><td>New price per period. Applies from the next charge. No proration. <span class="badge open">Open question</span></td></tr>
+          <tr><td><code>vatRate</code><span class="opt">optional</span></td><td class="type">number</td><td>Send together with <code>vatAmount</code>.</td></tr>
+          <tr><td><code>vatAmount</code><span class="opt">optional</span></td><td class="type">integer</td><td>Recalculate when you change <code>amount</code>.</td></tr>
+          <tr><td><code>paymentMethodId</code><span class="opt">optional</span></td><td class="type">string</td><td>Swap the card. Must be <code>active</code>.</td></tr>
+          <tr><td><code>quantity</code><span class="opt">optional</span></td><td class="type">integer</td><td>Label only. Does not change <code>amount</code>.</td></tr>
+          <tr><td><code>externalId</code><span class="opt">optional</span></td><td class="type">string</td><td>Your ID.</td></tr>
+          <tr><td><code>title</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan name.</td></tr>
+          <tr><td><code>description</code><span class="opt">optional</span></td><td class="type">string</td><td>Plan description.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X PATCH https://payments.plorea.no/subscriptions/sub_test_golden \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "amount": { "value": 29900, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 5980
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$subscription = Plorea::subscriptions()
+    -&gt;update('sub_test_golden')
+    -&gt;amount(Amount::nok(29900))
+    -&gt;vat(0.25, 5980)
+    -&gt;save();
+
+// Swap the card:
+Plorea::subscriptions()-&gt;update('sub_test_golden')-&gt;paymentMethod('pm_new_card')-&gt;save();</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions/sub_test_golden', {
+  method: 'PATCH',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    amount: { value: 29900, currency: 'NOK' },
+    vatRate: 0.25,
+    vatAmount: 5980,
+  }),
+});
+const subscription = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "externalId": "GOLDEN-EXT-001",
+    "title": "Golden fixture plan",
+    "description": "Golden fixture subscription",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "quantity": 2,
+    "interval": {
+        "count": 1,
+        "unit": "day"
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": "2026-09-04T09:55:00.000Z",
+    "status": "active",
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "paymentMethodId": "pm_test_golden_method",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "updatedAt": "2026-09-04T09:55:00.000Z"
+}</code></pre>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td><code>{"error": "Payment method is not active", "status": "failed"}</code></td></tr>
+          <tr><td><code>404</code></td><td>Unknown ID.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> safe with the same body. The result is the same.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="charge-a-subscription">Charge a subscription</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/subscriptions/{subscriptionId}/charge</code></div>
+      <p>Charges the stored card now, outside the schedule. Use it for an upgrade difference or a one-off extra. The amount and VAT fall back to the subscription's values. Guide: <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>amount</code><span class="opt">optional</span></td><td class="type">Amount</td><td>Default: the subscription amount.</td></tr>
+          <tr><td><code>vatRate</code><span class="opt">optional</span></td><td class="type">number</td><td>Default: the subscription VAT rate.</td></tr>
+          <tr><td><code>vatAmount</code><span class="opt">optional</span></td><td class="type">integer</td><td>Default: the subscription VAT amount. Send it when you send a custom <code>amount</code>.</td></tr>
+          <tr><td><code>reason</code><span class="opt">optional</span></td><td class="type">string</td><td>Free text for your records.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_golden/charge \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "acme",
+    "reason": "Upgrade to Premium, rest of October",
+    "amount": { "value": 5000, "currency": "NOK" },
+    "vatRate": 0.25,
+    "vatAmount": 1000
+  }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+
+try {
+    $charge = Plorea::subscriptions()-&gt;charge(
+        'sub_test_golden',
+        amount: Amount::nok(5000),
+        reason: 'Upgrade to Premium, rest of October',
+        vatRate: 0.25,
+        vatAmount: 1000,
+    );
+} catch (ChargeFailedException $e) {
+    // 402: the card was declined
+}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions/sub_test_golden/charge', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'acme',
+    reason: 'Upgrade to Premium, rest of October',
+    amount: { value: 5000, currency: 'NOK' },
+    vatRate: 0.25,
+    vatAmount: 1000,
+  }),
+});
+if (res.status === 402) { /* declined */ }
+const charge = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "status": "charge_created",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_1",
+    "reference": "sub_test_golden-chg_test_golden_1",
+    "pspReference": "TESTCHARGEPSP001",
+    "resultCode": "Authorised",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "vatRate": 0.25,
+    "vatAmount": 4980,
+    "nextChargeAt": "2026-09-05T09:55:00.000Z"
+}</code></pre>
+      <ul>
+        <li><code>resultCode</code> is Adyen's answer. <code>Authorised</code> means success. <span class="badge verified">Verified</span></li>
+        <li>The payment <code>reference</code> is <code>{subscriptionId}-{chargeId}</code>. It resolves on <a href="#get-payment-status">payment status</a>. A manual charge also sends a <code>payment.authorised</code> webhook. <span class="badge verified">Verified</span></li>
+      </ul>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td><code>{"error": "Subscription is not chargeable", "subscriptionId": "…", "status": "canceled"}</code></td></tr>
+          <tr><td><code>400</code></td><td><code>Payment method is not active</code></td></tr>
+          <tr><td><code>402</code></td><td>The card was declined. Only a decline returns 402. <span class="badge verified">Verified</span></td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout warning">
+        <p class="callout-title">Not safe to retry</p>
+        <p>Every call is a new charge. After a timeout, read <a href="#list-subscription-charges">the charge list</a> and look for your charge before you try again.</p>
+      </div>
+
+      <!-- ============================================================ -->
+      <h2 id="list-subscription-charges">List subscription charges</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/subscriptions/{subscriptionId}/charges?platform=acme</code></div>
+      <p>Lists every charge of a subscription, scheduled and manual, newest first. This is the only way to read the outcome of a scheduled charge. Guide: <a href="dunning.html">Failed charges and dunning</a>.</p>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/subscriptions/sub_test_golden/charges?platform=acme" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$charges = Plorea::subscriptions()-&gt;charges('sub_test_golden');</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
+  'https://payments.plorea.no/subscriptions/sub_test_golden/charges?platform=acme',
+  { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
+);
+const { items } = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "items": [
+        {
+            "subscriptionId": "sub_test_golden",
+            "chargeId": "chg_test_golden_2",
+            "tenantId": "test-tenant",
+            "reference": "sub_test_golden-chg_test_golden_2",
+            "pspReference": "TESTCHARGEPSP002",
+            "amount": {
+                "currency": "NOK",
+                "value": 29900
+            },
+            "vatRate": 0.25,
+            "vatAmount": 4980,
+            "status": "authorised",
+            "retryNumber": 0,
+            "failureReason": null,
+            "reason": "scheduled_charge",
+            "createdAt": "2026-09-04T10:04:00.000Z",
+            "updatedAt": "2026-09-04T10:04:00.000Z"
+        },
+        {
+            "subscriptionId": "sub_test_golden",
+            "chargeId": "chg_test_golden_1",
+            "tenantId": "test-tenant",
+            "reference": "sub_test_golden-chg_test_golden_1",
+            "pspReference": "TESTCHARGEPSP001",
+            "amount": {
+                "currency": "NOK",
+                "value": 29900
+            },
+            "vatRate": 0.25,
+            "vatAmount": 4980,
+            "status": "authorised",
+            "retryNumber": 0,
+            "failureReason": null,
+            "reason": "manual_charge",
+            "createdAt": "2026-09-04T09:55:00.000Z",
+            "updatedAt": "2026-09-04T09:55:00.000Z"
+        }
+    ]
+}</code></pre>
+      <ul>
+        <li><code>reason</code> is <code>scheduled_charge</code> or <code>manual_charge</code>. Your own <code>reason</code> text from the charge call does not show here. <span class="badge verified">Verified</span></li>
+        <li>There is no <code>count</code> and no pagination. A long history may be cut without notice. <span class="badge open">Open question</span></li>
+        <li>The shape of a failed scheduled charge is unknown: test cannot produce one. <span class="badge unobserved">Not observable in test</span></li>
+      </ul>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="cancel-a-subscription">Cancel a subscription</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/subscriptions/{subscriptionId}/cancel</code></div>
+      <p>Stops future charges at once. The customer keeps access until <code>accessEndsAt</code>, which is the last charge plus one interval. No refund is made. Guide: <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+
+      <h4>Body parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>reason</code><span class="opt">optional</span></td><td class="type">string</td><td>Stored as <code>cancelReason</code>, for example <code>customer_requested</code>.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_golden/cancel \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme", "reason": "customer_requested" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$cancellation = Plorea::subscriptions()-&gt;cancel('sub_test_golden', reason: 'customer_requested');
+
+$cancellation-&gt;accessEndsAt; // null during a trial: access ends now</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions/sub_test_golden/cancel', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ platform: 'acme', reason: 'customer_requested' }),
+});
+const { accessEndsAt } = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <div class="tabs">
+        <div class="tab" data-label="After a charge"><pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "status": "canceled",
+    "canceledAt": "2026-09-04T10:04:00.000Z",
+    "accessEndsAt": "2026-09-05T09:55:00.000Z",
+    "reason": "customer_requested"
+}</code></pre></div>
+        <div class="tab" data-label="During a trial"><pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden_trial",
+    "status": "canceled",
+    "canceledAt": "2026-09-07T19:57:00.000Z",
+    "accessEndsAt": null,
+    "reason": "customer_requested"
+}</code></pre></div>
+      </div>
+      <p>During a trial there is no charge, so <code>accessEndsAt</code> is <code>null</code>. Treat <code>null</code> as "access ends now". <span class="badge verified">Verified</span> No webhook is sent for a cancel. <span class="badge stated">Stated by Plorea</span></p>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody><tr><td><code>404</code></td><td>Unknown ID.</td></tr></tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> the effect is the same on a retry, but read the subscription first to confirm the state.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="reactivate-a-subscription">Reactivate a subscription</h2>
+      <div class="endpoint"><span class="method post">POST</span><code>/subscriptions/{subscriptionId}/reactivate</code></div>
+      <p>Undoes a cancellation. Billing resumes one interval after the last charge. A paid period is not billed twice. No body. Guide: <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_golden/reactivate \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Content-Type: application/json" \
+  -d '{ "platform": "acme" }'</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$subscription = Plorea::subscriptions()-&gt;reactivate('sub_test_golden');</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/subscriptions/sub_test_golden/reactivate', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
+    'X-Environment': 'test',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ platform: 'acme' }),
+});
+const subscription = await res.json();</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK"><code class="lang-json">{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "status": "active",
+    "nextChargeAt": "2026-09-04T10:04:00.000Z",
+    "reactivatedAt": "2026-09-04T10:04:00.000Z",
+    "paymentMethodId": "pm_test_golden_method",
+    "amount": {
+        "value": 29900,
+        "currency": "NOK"
+    },
+    "interval": {
+        "count": 1,
+        "unit": "day"
+    },
+    "externalId": "GOLDEN-EXT-001",
+    "title": "Golden fixture plan"
+}</code></pre>
+      <div class="callout warning">
+        <p class="callout-title"><code>nextChargeAt</code> can lie in the past</p>
+        <p>The next charge is the last charge plus one interval. If the customer comes back after that date, the scheduler charges at once. Check <code>accessEndsAt</code> before you reactivate. A long gap is better handled with a new subscription. <span class="badge verified">Verified</span></p>
+      </div>
+      <h4>Errors</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td><code>{"error": "Only canceled subscriptions can be reactivated", "status": "active"}</code></td></tr>
+          <tr><td><code>404</code></td><td>Unknown ID.</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Retry safety:</strong> a second call returns <code>400</code> because the subscription is already active. It cannot double-charge. <span class="badge verified">Verified</span></p>
+
+      <p class="site-foot">Community draft. Response shapes captured from the Plorea test environment between August and September 2026 and anonymised.</p>
+    </article>
+  </main>
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+</body>
+</html>
