@@ -6,13 +6,20 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ### Changed
 
-- `PaymentSession` and `PaymentMethodSession` also read Adyen's own field
-  names, `id` and `data`, when `sessionId` or `sessionData` is missing.
-  Plorea's pay page reads both (2026-09-14). A session response with no id
-  now throws `PloreaException`. Before, it gave an empty `sessionId`, which
-  failed late, inside Drop-in.
+- `PaymentSession` also reads Adyen's own field names, `id` and `data`, when
+  `sessionId` or `sessionData` is missing or empty. Plorea's pay page reads
+  both (2026-09-14). `PaymentMethodSession` does not: a card-setup response
+  also carries a payment method id.
+- **Breaking for tests and direct callers:** a session response with no
+  session id now throws `PloreaException`, both from the resources and from
+  `PaymentSession::fromArray()` / `PaymentMethodSession::fromArray()`. Before,
+  it gave an empty `sessionId`, which failed late, inside Drop-in. A custom
+  `Plorea::fake()` stub for `payments/session` or
+  `payment-methods/setup/session` must now include `sessionId`. The default
+  fakes already do.
 - `PaymentLink` also reads `orgNr`, `invoiceUrl` and `status: "expired"`,
-  the other names Plorea's pay page accepts. `expired` is true when either
+  the other names Plorea's pay page accepts. An empty value counts as
+  missing, so it does not hide the other name. `expired` is true when either
   `expired` is true or `status` is `expired`.
 
 ## v0.3.11 - 2026-10-07

@@ -155,10 +155,13 @@ const checkout = await AdyenCheckout({
 new Dropin(checkout).mount('#checkout');
 ```
 
-**Installed with npm?** The script tag includes every payment method. The npm
-package `@adyen/adyen-web` does not: Drop-in shows only the methods in
-`paymentMethodComponents`, so without them the box is empty. Plorea's own pay
-page passes `[Card]`:
+**Installed with npm?** The script tag includes every payment method, and so
+does the npm import `@adyen/adyen-web/auto`. The plain import
+`@adyen/adyen-web` does not: Drop-in shows only the methods in
+`paymentMethodComponents`, so without them the box is empty. The example below
+is cards only; add a component for each other method you want. Plorea's own
+pay page imports from `/auto` and still passes `[Card]`, because Drop-in
+otherwise reported that the card component was not configured:
 
 ```js
 import { AdyenCheckout, Dropin, Card } from '@adyen/adyen-web';
@@ -182,11 +185,17 @@ page. The customer comes back to your `returnUrl` with `redirectResult`, and
 usually `sessionId`, in the query. Finish the payment there, exactly once:
 
 - Do not create a new session. Ask your server only for `clientKey` and
-  `environment`.
+  `environment`. Pass `countryCode` too: Adyen Web v6 does not start without
+  it, and no session setup supplies it here.
 - Take the session id from the query, or from Drop-in's own
-  `localStorage` entry `adyen-checkout__session`.
-- Remove the redirect parameters after use. Otherwise a refresh submits
-  `redirectResult` again and the customer sees an error after paying.
+  `localStorage` entry `adyen-checkout__session`. That entry holds one
+  session for each site, so a checkout in a second tab can replace it. If
+  customers can pay two things at once, skip the fallback and ask your server
+  for the status.
+- Remove the redirect parameters only after Adyen answers. `submitDetails`
+  does not return the result; `onPaymentCompleted` or `onPaymentFailed` does.
+  Then a refresh cannot submit `redirectResult` again. If Adyen does not
+  answer, keep the parameters, so a refresh can try again.
 
 ```js
 const params = new URLSearchParams(location.search);
@@ -194,7 +203,8 @@ const redirectResult = params.get('redirectResult');
 
 function storedSessionId() {
     try {
-        return JSON.parse(localStorage.getItem('adyen-checkout__session'))?.id ?? null;
+        const id = JSON.parse(localStorage.getItem('adyen-checkout__session'))?.id;
+        return typeof id === 'string' ? id : null;
     } catch {
         return null;
     }
@@ -207,19 +217,27 @@ function stripRedirectParams() {
 }
 
 if (redirectResult) {
-    try {
-        const sessionId = params.get('sessionId') ?? storedSessionId();
-        if (!sessionId) throw new Error('No session to finish');
+    const sessionId = params.get('sessionId') ?? storedSessionId();
 
+    if (!sessionId) {
+        checkStatusOnServer();               // nothing to finish in the browser
+    } else {
         const checkout = await AdyenCheckout({
-            clientKey, environment,              // no new session
+            clientKey, environment,          // no new session
+            countryCode: 'NO',
             session: { id: sessionId },
-            onPaymentCompleted, onPaymentFailed,
+            onPaymentCompleted: ({ resultCode }) => {
+                stripRedirectParams();
+                resultCode === 'Authorised' ? showPaid() : showProcessing();
+            },
+            onPaymentFailed: () => {
+                stripRedirectParams();
+                showRetry();
+            },
+            onError: () => checkStatusOnServer(),  // parameters stay; a refresh tries again
         });
 
         checkout.submitDetails({ details: { redirectResult } });
-    } finally {
-        stripRedirectParams();
     }
 }
 ```

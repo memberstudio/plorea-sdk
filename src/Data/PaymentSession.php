@@ -39,7 +39,7 @@ final readonly class PaymentSession implements JsonSerializable
      */
     public static function fromArray(array $data, ?string $clientKey = null, ?string $environment = null): self
     {
-        [$sessionId, $sessionData] = self::sessionFields($data);
+        [$sessionId, $sessionData] = self::sessionFields($data, acceptAdyenNames: true);
 
         return new self(
             sessionId: $sessionId,

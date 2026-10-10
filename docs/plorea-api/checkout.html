@@ -201,7 +201,7 @@ const checkout = await AdyenCheckout({
 });
 
 new Dropin(checkout).mount('#checkout');</code></pre>
-      <p><strong>Installed with npm?</strong> The script tag above includes every payment method. The npm package <code>@adyen/adyen-web</code> does not: Drop-in shows only the methods you pass in <code>paymentMethodComponents</code>. Without them, the customer sees an empty box. Plorea's own pay page passes <code>[Card]</code>.</p>
+      <p><strong>Installed with npm?</strong> The script tag above includes every payment method, and so does the npm import <code>@adyen/adyen-web/auto</code>. The plain import <code>@adyen/adyen-web</code> does not: Drop-in shows only the methods you pass in <code>paymentMethodComponents</code>. Without them, the customer sees an empty box. The example below shows cards only. Add a component for each other method you want, such as Vipps or Apple Pay. Plorea's own pay page imports from <code>/auto</code> and still passes <code>[Card]</code>, because Drop-in otherwise reported that the card component was not configured.</p>
       <pre data-title="checkout.js (npm)"><code class="lang-javascript">import { AdyenCheckout, Dropin, Card } from '@adyen/adyen-web';
 import '@adyen/adyen-web/styles/adyen.css';
 
@@ -222,19 +222,22 @@ new Dropin(checkout, { paymentMethodComponents: [Card] }).mount('#checkout');</c
       </div>
       <p>Plorea's own pay page does the same. The customer's screen is never proof of payment.</p>
 
+      <p><strong>Send the session as JSON.</strong> <code>sessionData</code> is base64 and can hold a <code>+</code>. In a query string, a <code>+</code> becomes a space, and Drop-in then rejects the session. If you must put it in a URL, encode it with <code>encodeURIComponent</code>.</p>
+
       <h3>Finish a redirect payment</h3>
       <p>3-D Secure and redirect methods leave your page. The customer returns to <code>returnUrl</code> with <code>redirectResult</code> in the query string, and usually <code>sessionId</code>. Finish the payment there, exactly once:</p>
       <ul>
-        <li><strong>Do not create a new session.</strong> The payment already exists. Ask your server only for <code>clientKey</code> and <code>environment</code>.</li>
-        <li><strong>Take the session id from the URL, or from Adyen's storage.</strong> Drop-in saves the session in <code>localStorage</code> under <code>adyen-checkout__session</code>. Plorea's own pay page falls back to it.</li>
-        <li><strong>Remove the redirect parameters after use.</strong> Otherwise a page refresh submits <code>redirectResult</code> a second time, and the customer sees an error after they paid.</li>
+        <li><strong>Do not create a new session.</strong> The payment already exists. Ask your server only for <code>clientKey</code> and <code>environment</code>. Pass <code>countryCode</code> too: Adyen Web v6 does not start without it, and here there is no session setup to supply it.</li>
+        <li><strong>Take the session id from the URL, or from Adyen's storage.</strong> Drop-in saves the session in <code>localStorage</code> under <code>adyen-checkout__session</code>. Plorea's own pay page falls back to it. The storage holds one session for each site, so a checkout in a second tab can replace it. If your customers can pay two things at once, skip the fallback and ask your server for the status.</li>
+        <li><strong>Remove the redirect parameters only after Adyen answers.</strong> <code>submitDetails</code> does not return the result. The result arrives in <code>onPaymentCompleted</code> or <code>onPaymentFailed</code>. Remove the parameters there. Then a refresh cannot submit <code>redirectResult</code> a second time. If Adyen does not answer, keep them, so a refresh can try again.</li>
       </ul>
       <pre data-title="return page"><code class="lang-javascript">const params = new URLSearchParams(location.search);
 const redirectResult = params.get('redirectResult');
 
 function storedSessionId() {
   try {
-    return JSON.parse(localStorage.getItem('adyen-checkout__session'))?.id ?? null;
+    const id = JSON.parse(localStorage.getItem('adyen-checkout__session'))?.id;
+    return typeof id === 'string' ? id : null;
   } catch {
     return null;
   }
@@ -247,21 +250,28 @@ function stripRedirectParams() {
 }
 
 if (redirectResult) {
-  try {
-    const sessionId = params.get('sessionId') ?? storedSessionId();
-    if (!sessionId) throw new Error('No session to finish');
+  const sessionId = params.get('sessionId') ?? storedSessionId();
 
+  if (!sessionId) {
+    checkStatusOnServer();   // nothing to finish in the browser
+  } else {
     const checkout = await AdyenCheckout({
       clientKey,             // from your server, as before; no new session
       environment,
+      countryCode: 'NO',
       session: { id: sessionId },
-      onPaymentCompleted: () =&gt; showProcessing(),
-      onPaymentFailed: () =&gt; showRetry(),
+      onPaymentCompleted: ({ resultCode }) =&gt; {
+        stripRedirectParams();
+        resultCode === 'Authorised' ? showPaid() : showProcessing();
+      },
+      onPaymentFailed: () =&gt; {
+        stripRedirectParams();
+        showRetry();
+      },
+      onError: () =&gt; checkStatusOnServer(),  // parameters stay; a refresh tries again
     });
 
     checkout.submitDetails({ details: { redirectResult } });
-  } finally {
-    stripRedirectParams();
   }
 }</code></pre>
       <p>The result in the browser is for display only. Wait for the webhook or <code>GET /payments/status/{reference}</code> before you deliver anything.</p>
