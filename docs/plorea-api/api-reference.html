@@ -96,7 +96,7 @@
             <tr><td><code>amount</code><span class="req">required</span></td><td class="type">integer</td><td>Minor units. <code>19900</code> = 199,00 kr.</td></tr>
             <tr><td><code>currency</code><span class="req">required</span></td><td class="type">string</td><td><code>NOK</code>.</td></tr>
             <tr><td><code>returnUrl</code><span class="req">required</span></td><td class="type">string</td><td>Where the pay page sends the customer afterwards. Do not treat the return as proof of payment.</td></tr>
-            <tr><td><code>merchantOrgNr</code><span class="req">contract</span></td><td class="type">string</td><td>Organisation number of the invoice issuer (your client, not you). Required by contract, not enforced by the API. Without it, Plorea cannot route the payout. <span class="badge stated">Stated by Plorea</span> KYC starts on the first payment. Payout takes 1–5 business days.</td></tr>
+            <tr><td><code>merchantOrgNr</code><span class="req">contract</span></td><td class="type">string</td><td>Organisation number of the invoice issuer (your client, not you). Required by contract, not enforced by the API. Without it, Plorea cannot route the payout. <span class="badge stated">Stated by Plorea</span> KYC starts on the first payment. The payout is held until KYC is approved, which takes 1–5 business days.</td></tr>
             <tr><td><code>merchantName</code><span class="opt">optional</span></td><td class="type">string</td><td>Legal name of the invoice issuer.</td></tr>
             <tr><td><code>merchantEmail</code><span class="opt">optional</span></td><td class="type">string</td><td>Contact email of the invoice issuer.</td></tr>
             <tr><td><code>merchantPhone</code><span class="opt">optional</span></td><td class="type">string</td><td>Contact phone of the invoice issuer.</td></tr>
@@ -433,7 +433,7 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
           <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
         </tbody>
       </table></div>
-      <p><strong>Retry safety:</strong> safe with the same <code>modificationReference</code>. A new <code>modificationReference</code> is a new refund.</p>
+      <p><strong>Retry safety:</strong> unknown. <span class="badge open">Open question</span> <code>modificationReference</code> is your reference for this refund. Plorea has not confirmed that it works as an idempotency key. Before a retry, read <a href="#get-payment-status">payment status</a>. Do not retry automatically.</p>
 
       <!-- ============================================================ -->
       <h2 id="cancel-a-payment">Cancel a payment</h2>
@@ -496,7 +496,7 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
           <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
         </tbody>
       </table></div>
-      <p><strong>Retry safety:</strong> safe with the same <code>modificationReference</code>.</p>
+      <p><strong>Retry safety:</strong> unknown. <span class="badge open">Open question</span> <code>modificationReference</code> is your reference for this cancellation. Plorea has not confirmed that it works as an idempotency key. Before a retry, read <a href="#get-payment-status">payment status</a>. Do not retry automatically.</p>
 
       <!-- ============================================================ -->
       <h2 id="get-a-payment-link">Get a payment link</h2>
@@ -633,7 +633,7 @@ const { sessionId, sessionData, clientKey, environment } = await res.json();</co
 }</code></pre>
       <ul>
         <li><code>clientKey</code> is returned for every channel since 2026-09-19. Use it to mount Drop-in. <span class="badge verified">Verified</span></li>
-        <li>Browser origins must be whitelisted on that key. A wildcard covers subdomains. <code>localhost</code> is not allowed. Native apps send no origin and are not checked. <span class="badge verified">Verified</span></li>
+        <li>Browser origins must be whitelisted on that key. A wildcard covers subdomains. <code>localhost</code> was not whitelisted on the key we tested; the allow-list is set per key. Native apps send no origin and are not checked. <span class="badge verified">Verified</span></li>
         <li>3-D Secure arrives as a browser redirect, also in native apps. Handle the <code>returnUrl</code>. Native 3DS2 is announced. <span class="badge stated">Stated by Plorea</span></li>
         <li>An abandoned session stays <code>created</code> forever. Time out the attempt yourself. <span class="badge verified">Verified</span></li>
         <li>Pass only <code>sessionId</code>, <code>sessionData</code>, <code>clientKey</code> and <code>environment</code> to the client.</li>
@@ -691,7 +691,7 @@ $method = Plorea::paymentMethods()
     -&gt;description('Card for your Acme membership')
     -&gt;create();
 
-redirect($method-&gt;setupUrl);</code></pre></div>
+return redirect($method-&gt;adyenPaymentLinkUrl);</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch('https://payments.plorea.no/payment-methods/setup', {
   method: 'POST',
   headers: {
@@ -975,6 +975,7 @@ const subscription = await res.json();</code></pre></div>
       </div>
 
       <h4>Response</h4>
+      <p>The responses below are real captures from separate test calls. They show the shape, not the answer to the request above.</p>
       <div class="tabs">
         <div class="tab" data-label="With trial and merchant"><pre data-title="200 OK"><code class="lang-json">{
     "subscriptionId": "sub_test_golden_merchant",
@@ -1360,6 +1361,7 @@ const charge = await res.json();</code></pre></div>
       </div>
 
       <h4>Response</h4>
+      <p>The response below is a real capture from a separate test call. It shows the shape, not the answer to the request above.</p>
       <pre data-title="200 OK"><code class="lang-json">{
     "status": "charge_created",
     "subscriptionId": "sub_test_golden",
@@ -1385,7 +1387,7 @@ const charge = await res.json();</code></pre></div>
         <tbody>
           <tr><td><code>400</code></td><td><code>{"error": "Subscription is not chargeable", "subscriptionId": "…", "status": "canceled"}</code></td></tr>
           <tr><td><code>400</code></td><td><code>Payment method is not active</code></td></tr>
-          <tr><td><code>402</code></td><td>The card was declined. Only a decline returns 402. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>402</code></td><td>The card was declined. Only a decline returns 402. <span class="badge stated">Stated by Plorea</span> <span class="badge unobserved">Not observable in test</span></td></tr>
         </tbody>
       </table></div>
       <div class="callout warning">
@@ -1568,7 +1570,7 @@ const subscription = await res.json();</code></pre></div>
 }</code></pre>
       <div class="callout warning">
         <p class="callout-title"><code>nextChargeAt</code> can lie in the past</p>
-        <p>The next charge is the last charge plus one interval. If the customer comes back after that date, the scheduler charges at once. Check <code>accessEndsAt</code> before you reactivate. A long gap is better handled with a new subscription. <span class="badge verified">Verified</span></p>
+        <p>The next charge is the last charge plus one interval. <span class="badge verified">Verified</span> If the customer comes back after that date, we expect the scheduler to charge at once. The test covered reactivation inside a paid period only. <span class="badge open">Open question</span> Check <code>accessEndsAt</code> before you reactivate. A long gap is better handled with a new subscription.</p>
       </div>
       <h4>Errors</h4>
       <div class="table-wrap"><table>

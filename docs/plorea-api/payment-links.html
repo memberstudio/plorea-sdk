@@ -294,7 +294,9 @@ use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
 
 try {
     // Serialise per reference: firstOrCreate() is not atomic.
-    $link = Cache::lock("plorea:{$invoice-&gt;reference}", 10)-&gt;block(5, fn () =&gt; Plorea::payments()
+    // The lock must outlive the whole walk: each request can take 30 s,
+    // and firstOrCreate() sends several. block() releases it when done.
+    $link = Cache::lock("plorea:{$invoice-&gt;reference}", 900)-&gt;block(5, fn () =&gt; Plorea::payments()
         -&gt;link($invoice-&gt;reference, $invoice-&gt;title, Amount::nok($invoice-&gt;ore), route('invoices.paid', $invoice))
         -&gt;merchant(orgNr: '999999999', name: 'Acme Gym AS')
         -&gt;firstOrCreate());
@@ -306,6 +308,7 @@ try {
 // X-Environment headers and returns the Response.
 const OPEN = ['created', 'pending', 'active'];
 const PAID = ['authorised', 'paid'];
+const ENVIRONMENT = 'test'; // the X-Environment you send
 
 async function firstOrCreate(base, payload, maxAttempts = 10) {
   let reusable = null;
@@ -313,7 +316,7 @@ async function firstOrCreate(base, payload, maxAttempts = 10) {
     const reference = i === 0 ? base : `${base}-${i}`;
     const res = await plorea('GET', `/payments/status/${encodeURIComponent(reference)}`);
     if (res.status === 404) {
-      // End of the chain: reuse the last open link, or create here.
+      // End of the chain: reuse the first open link, or create here.
       return reusable ?? plorea('POST', '/payments/link', { ...payload, reference });
     }
     const status = await res.json();
@@ -321,8 +324,13 @@ async function firstOrCreate(base, payload, maxAttempts = 10) {
     const page = OPEN.includes(status.status) &amp;&amp; status.paymentLinkId
       ? await plorea('GET', `/pay/${status.paymentLinkId}`).then((r) =&gt; r.json())
       : null;
-    const sameTerms = status.amount === payload.amount &amp;&amp; status.currency === payload.currency;
-    reusable = page &amp;&amp; !page.expired &amp;&amp; sameTerms ? status : null;
+    const sameTerms = status.amount === payload.amount
+      &amp;&amp; status.currency?.toUpperCase() === payload.currency.toUpperCase()
+      &amp;&amp; (status.tenantId == null || status.tenantId === payload.tenantId)
+      &amp;&amp; (status.environment == null || status.environment === ENVIRONMENT);
+    // Keep the first reusable link. Keep walking to prove that no later
+    // suffix is paid, but never drop the candidate you already have.
+    if (!reusable &amp;&amp; page &amp;&amp; !page.expired &amp;&amp; sameTerms) reusable = status;
   }
   throw new Error('Too many superseded links');
 }</code></pre></div>
@@ -330,7 +338,7 @@ async function firstOrCreate(base, payload, maxAttempts = 10) {
       <div class="callout warning">
         <p class="callout-title">Two caveats</p>
         <ul>
-          <li>The check-then-create is <strong>not atomic</strong>. Two requests that race on a new reference can both create a link. Hold a lock per reference.</li>
+          <li>The check-then-create is <strong>not atomic</strong>. Two requests that race on a new reference can both create a link. Hold a lock per reference for the whole walk. Give the lock a lifetime longer than the worst case: every request can take up to your HTTP timeout, and the walk sends several. If the lock expires first, a second caller can create a duplicate link.</li>
           <li>The suffix scheme assumes that <code>{reference}-1</code> is never a real invoice number in your system.</li>
         </ul>
       </div>

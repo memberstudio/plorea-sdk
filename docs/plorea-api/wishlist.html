@@ -86,7 +86,7 @@ Idempotent-Replayed: true</code></pre>
       <pre data-title="GET /payments/status/order-1001"><code class="lang-json">{ "status": "captured", "capturedAt": "2026-10-01T12:03:00Z", "capturedAmount": 10000 }</code></pre>
 
       <h3 id="per-refund-status">8. Per-refund status</h3>
-      <p><strong>Problem.</strong> The payment shows only the <em>last</em> refund. <code>refundPspReference</code> exists only on the refund response. A partial refund followed by a second refund hides the first one. <span class="badge verified">Verified</span></p>
+      <p><strong>Problem.</strong> The payment shows only the <em>last</em> refund. <code>refundPspReference</code> exists only on the refund response. The payment carries only last-refund fields. <span class="badge verified">Verified</span> So a second partial refund would hide the first one. We infer this from the shape; we did not run two partial refunds.</p>
       <p><strong>Impact.</strong> Integrators cannot reconcile several partial refunds. A lost refund response loses the refund's own reference forever.</p>
       <p><strong>Proposal.</strong> Return a list of refunds on the payment, each with its own status.</p>
       <pre><code class="lang-json">{

@@ -95,7 +95,7 @@ flowchart TD
         <li><strong>List subscriptions per billed entity</strong>Call <code>GET /subscriptions?externalId=…</code> or <code>?tenantId=…</code>. The list has never been seen to paginate. If you hold many subscriptions per filter, compare <code>count</code> with your own records. <span class="badge open">Open question</span></li>
         <li><strong>Apply the two tests</strong>Keep the subscriptions that are <code>payment_failed</code> or overdue.</li>
         <li><strong>Read the charge history</strong>Call <code>GET /subscriptions/{id}/charges</code>. The newest item comes first.</li>
-        <li><strong>Decide</strong>If the newest charge is not <code>authorised</code>, or no charge covers the missed date, start dunning.</li>
+        <li><strong>Decide</strong>A charge covers the missed renewal only if it is <code>authorised</code> and its <code>createdAt</code> is on or after the missed <code>nextChargeAt</code>. An older success does not count. If no charge covers the missed renewal, start dunning.</li>
       </ol>
 
       <div class="tabs">
@@ -113,11 +113,17 @@ curl "https://payments.plorea.no/subscriptions/sub_test_acme_001/charges?platfor
 $flagged = Plorea::subscriptions()-&gt;needingAttention('member-1001', graceMinutes: 60);
 
 foreach ($flagged as $subscription) {
+    $missedAt = $subscription-&gt;nextChargeAt;
     $latest = Plorea::subscriptions()-&gt;charges($subscription-&gt;id)-&gt;first();
 
-    if ($latest?-&gt;isAuthorised() !== true) {
+    // An older success must not hide the missed renewal.
+    $covered = $latest?-&gt;isAuthorised() === true
+        &amp;&amp; $missedAt !== null
+        &amp;&amp; $latest-&gt;createdAt?-&gt;greaterThanOrEqualTo($missedAt) === true;
+
+    if (! $covered) {
         // Start dunning. Do not branch on failureReason: it is null.
-        StartDunning::dispatch($subscription-&gt;id);
+        StartDunning::dispatch($subscription-&gt;id, $missedAt);
     }
 }
 
@@ -149,8 +155,16 @@ for (const s of flagged) {
     { headers },
   ).then((r) =&gt; r.json());
 
-  if (items[0]?.status !== 'authorised') {
-    await startDunning(s.subscriptionId);
+  // An older success must not hide the missed renewal.
+  const missedAt = s.nextChargeAt ? new Date(s.nextChargeAt).getTime() : null;
+  const latest = items[0];
+  const covered =
+    latest?.status === 'authorised' &amp;&amp;
+    missedAt !== null &amp;&amp;
+    new Date(latest.createdAt).getTime() &gt;= missedAt;
+
+  if (!covered) {
+    await startDunning(s.subscriptionId, s.nextChargeAt);
   }
 }</code></pre></div>
       </div>
@@ -207,7 +221,7 @@ gantt
       </figure>
 
       <ol class="steps">
-        <li><strong>Open a dunning case</strong>Store the subscription ID, the missed <code>nextChargeAt</code> and the time you first flagged it. Use the case to avoid sending the same email twice.</li>
+        <li><strong>Open a dunning case</strong>Store the subscription ID, the missed <code>nextChargeAt</code>, the time you first flagged it and the end of the retry window. Use the case to avoid sending the same email twice.</li>
         <li><strong>Notify the customer at once</strong>Say that the payment failed, the amount, and how long access continues. Link to a card update page. Do not guess the reason: the API does not give one.</li>
         <li><strong>Keep access for a grace period</strong>Most declines are temporary: low balance, a blocked card, an expired card. A grace period of 3–7 days keeps good customers.</li>
         <li><strong>Collect a new card</strong>Run <a href="subscription-workflows.html#replace-the-card">Replace the card</a>: a new setup, then <code>PATCH paymentMethodId</code>.</li>
@@ -239,9 +253,11 @@ gantt
       <ol class="steps">
         <li><strong>PATCH the new card first</strong>A retry can only succeed on a working card. Whether pending retries use the card stored at retry time is not confirmed. <span class="badge open">Open question</span></li>
         <li><strong>Re-read the subscription and the charges</strong>Check whether a retry already succeeded.</li>
-        <li><strong>Charge now only if no retry is left</strong>If the subscription is still overdue after the last retry window, call <code>POST /subscriptions/{id}/charge</code> without an <code>amount</code>. The subscription amount is used. Use <code>reason: "dunning_recovery"</code>.</li>
+        <li><strong>Wait until the retry window ends</strong>The API does not say when Plorea stops retrying. Compute the end on your own clock: the time you first flagged the case, plus <code>maxRetries</code> × <code>retryIntervalDays</code>, plus a margin. Do not charge before that time.</li>
+        <li><strong>Charge once</strong>Call <code>POST /subscriptions/{id}/charge</code> without an <code>amount</code>. The subscription amount is used. Use <code>reason: "dunning_recovery"</code>.</li>
+        <li><strong>Save the charge reference at once</strong>Store it on the case before any other step. If the case already has a reference, do not charge again. Reconcile that charge instead.</li>
         <li><strong>Handle 402 and 400</strong><code>402</code> means the new card also declined. <code>400</code> means the subscription is canceled or the card is not active.</li>
-        <li><strong>Re-read <code>nextChargeAt</code></strong>Confirm the schedule moved forward. If it did not, the subscription stays overdue and your job flags it again.</li>
+        <li><strong>Confirm the outcome before you close the case</strong>The charge call returns <code>status: "charge_created"</code>, not <code>authorised</code>. Read <code>GET /subscriptions/{id}/charges</code> and find the item with your reference. Close the case only when that item is <code>authorised</code>. Then confirm that <code>nextChargeAt</code> moved forward.</li>
       </ol>
 
       <div class="tabs">
@@ -254,35 +270,75 @@ gantt
 use MemberFlow\Plorea\Exceptions\ValidationException;
 use MemberFlow\Plorea\Facades\Plorea;
 
+use MemberFlow\Plorea\Data\SubscriptionCharge;
+
 $subscriptions = Plorea::subscriptions();
-$subscription = $subscriptions-&gt;find('sub_test_acme_001');
+$subscription = $subscriptions-&gt;find($case-&gt;subscription_id);
 
 if (! $subscription-&gt;isOverdue() &amp;&amp; ! $subscription-&gt;hasPaymentFailure()) {
-    $case-&gt;close(); // A retry already succeeded.
+    $case-&gt;close(); // The renewal completed.
     return;
 }
 
-try {
-    $charge = $subscriptions-&gt;charge($subscription-&gt;id, reason: 'dunning_recovery');
-    $case-&gt;close($charge-&gt;reference);
-} catch (ChargeFailedException $e) {
-    // 402: the new card declined too. Keep the case open.
-} catch (ValidationException $e) {
-    // 400: canceled, or the card is not active. Fix state first.
-}</code></pre></div>
-        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(`${base}/subscriptions/sub_test_acme_001/charge`, {
-  method: 'POST',
-  headers: { ...headers, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ platform: 'acme', reason: 'dunning_recovery' }),
-});
+if ($case-&gt;recovery_reference === null) {
+    // retries_end_at = first flagged + maxRetries × retryIntervalDays + margin.
+    if (now()-&gt;lt($case-&gt;retries_end_at)) {
+        return; // Plorea may still retry. A charge now risks a double charge.
+    }
 
-if (res.status === 402) {
-  // Declined again. Keep the case open.
-} else if (res.status === 400) {
-  // Not chargeable. Check status and card.
-} else if (res.ok) {
-  const charge = await res.json(); // status "charge_created", resultCode
-}</code></pre></div>
+    try {
+        $charge = $subscriptions-&gt;charge($subscription-&gt;id, reason: 'dunning_recovery');
+    } catch (ChargeFailedException $e) {
+        return; // 402: the new card declined too. Keep the case open.
+    } catch (ValidationException $e) {
+        return; // 400: canceled, or the card is not active. Fix state first.
+    }
+
+    // Save before any other step, so a crash cannot cause a second charge.
+    $case-&gt;update(['recovery_reference' =&gt; $charge-&gt;reference]);
+}
+
+// "charge_created" is not "authorised". Confirm in the history.
+$landed = $subscriptions-&gt;charges($subscription-&gt;id)
+    -&gt;first(fn (SubscriptionCharge $item): bool =&gt; $item-&gt;reference === $case-&gt;recovery_reference);
+
+if ($landed?-&gt;isAuthorised() === true) {
+    $case-&gt;close();
+}
+// Otherwise keep the case open. The next run reconciles the same charge.</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">const id = dunningCase.subscriptionId;
+
+if (!dunningCase.recoveryReference) {
+  // retriesEndAt = first flagged + maxRetries × retryIntervalDays + margin.
+  if (Date.now() &lt; dunningCase.retriesEndAt.getTime()) return;
+
+  const res = await fetch(`${base}/subscriptions/${id}/charge`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'acme', reason: 'dunning_recovery' }),
+  });
+
+  if (res.status === 402) return; // Declined again. Keep the case open.
+  if (res.status === 400) return; // Not chargeable. Check status and card.
+  if (!res.ok) throw new Error(`Charge failed: ${res.status}`);
+
+  const charge = await res.json(); // status "charge_created"
+  // Save before any other step, so a crash cannot cause a second charge.
+  dunningCase.recoveryReference = charge.reference;
+  await saveCase(dunningCase);
+}
+
+// "charge_created" is not "authorised". Confirm in the history.
+const { items } = await fetch(
+  `${base}/subscriptions/${id}/charges?platform=acme`,
+  { headers },
+).then((r) =&gt; r.json());
+const landed = items.find((c) =&gt; c.reference === dunningCase.recoveryReference);
+
+if (landed?.status === 'authorised') {
+  await closeCase(dunningCase);
+}
+// Otherwise keep the case open. The next run reconciles the same charge.</code></pre></div>
       </div>
 
       <h2>Give up and cancel</h2>

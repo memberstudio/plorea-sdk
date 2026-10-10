@@ -23,7 +23,7 @@
       <div class="callout tip">
         <p class="callout-title">Short version</p>
         <ul>
-          <li><code>authorised</code> or <code>paid</code> means money moved. Book the order.</li>
+          <li><code>authorised</code> (or <code>paid</code>) is your success state. Book the order. It means Adyen authorised the payment. The API does not show capture or settlement.</li>
           <li><code>failed</code> means the card was declined. There is no <code>refused</code> status.</li>
           <li>Capture happens automatically. There is no capture call.</li>
           <li>A link never reports <code>expired</code>. Check <code>expiresAt</code> yourself.</li>
@@ -40,8 +40,8 @@
             <tr><td rowspan="3"><strong>Open</strong><br><span class="muted">still payable</span></td><td><code>created</code></td><td>The link exists. Nobody has paid yet. A new link and an abandoned session both sit here.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>pending</code></td><td>A payment is in progress at Adyen.</td><td><span class="badge stated">Stated</span></td></tr>
             <tr><td><code>active</code></td><td>The link is open and payable.</td><td><span class="badge stated">Stated</span></td></tr>
-            <tr><td rowspan="2"><strong>Paid</strong><br><span class="muted">money moved</span></td><td><code>authorised</code></td><td>Adyen authorised the payment. Capture follows automatically. In test, this is where a successful payment stays.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>paid</code></td><td>Settled. Treat it the same as <code>authorised</code>.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr><td rowspan="2"><strong>Paid</strong><br><span class="muted">success state</span></td><td><code>authorised</code></td><td>Adyen authorised the payment. Plorea says capture follows automatically, but the API does not show it. In test, this is where a successful payment stays.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paid</code></td><td>Not seen in test. When Plorea reports it is not documented. Treat it the same as <code>authorised</code>, as the SDK does.</td><td><span class="badge open">Open question</span></td></tr>
             <tr><td><strong>Declined</strong></td><td><code>failed</code></td><td>Adyen refused the payment. No money moved. No reason is given.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td rowspan="2"><strong>Modification pending</strong></td><td><code>refund_requested</code></td><td>Plorea accepted a refund. Adyen has not settled it yet.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>cancel_requested</code></td><td>Plorea accepted a cancel. Adyen has not processed it yet.</td><td><span class="badge verified">Verified</span></td></tr>
@@ -70,7 +70,7 @@ stateDiagram-v2
   pending --> failed: card declined
   authorised --> cancel_requested: POST /payments/cancel
   authorised --> refund_requested: POST /payments/refund
-  authorised --> paid: settled (not seen in test)
+  authorised --> paid: unconfirmed (never seen)
   paid --> refund_requested: POST /payments/refund
   cancel_requested --> cancelled: Adyen processes
   refund_requested --> refunded: Adyen settles
@@ -78,7 +78,7 @@ stateDiagram-v2
   cancelled --> [*]
   refunded --> [*]
         </pre>
-        <figcaption>Transitions to <code>cancelled</code>, <code>refunded</code> and <code>paid</code> are stated by Plorea. We have not observed them in test.</figcaption>
+        <figcaption>Plorea states that <code>cancelled</code> and <code>refunded</code> are the final modification statuses. We have not observed them in test. Nobody has described when <code>paid</code> appears. We have never seen it.</figcaption>
       </figure>
 
       <h2>Authorisation and capture</h2>
@@ -240,7 +240,7 @@ await db.refunds.insert({ orderRef: 'ORDER-1001', psp: refund.refundPspReference
         <p><code>webhookEventCode</code>, <code>webhookSuccess</code> and <code>lastWebhookAt</code> describe the notification that Adyen sent to Plorea. They say nothing about the webhook that Plorea sends to you. After a refund, <code>webhookEventCode</code> still reads <code>AUTHORISATION</code>. <span class="badge verified">Verified</span></p>
       </div>
       <p>The API gives no reason for a decline. You cannot tell "insufficient funds" from "card blocked". Show the customer a general message and offer a new attempt. Plorea says a <code>refusalReason</code> field is coming. <span class="badge stated">Stated by Plorea</span> Do not depend on it until you see it.</p>
-      <p>Is <code>failed</code> final for a link? The customer can probably try again on the same page, but this is not confirmed. <span class="badge open">Open question</span> The safe pattern: on <code>failed</code>, create a new link on a suffixed reference for the next attempt.</p>
+      <p>Is <code>failed</code> final for a link? Whether the customer can pay the same link again after a decline is not known. <span class="badge open">Open question</span> The SDK does not reuse a failed link. The safe pattern: on <code>failed</code>, create a new link on a suffixed reference for the next attempt.</p>
 
       <h2 id="deciding-paid">How to decide "paid" in code</h2>
       <p>Three events can tell you about a payment: the customer returns, a webhook arrives, or your poll runs. They can arrive in any order, more than once, or not at all. Route all three into one function that re-reads the status and applies it idempotently.</p>
@@ -258,7 +258,7 @@ flowchart TD
   E -->|no| K["Keep waiting"]
   E -->|yes| X["Mark expired, offer new link"]
   D -->|failed| G["Show decline, offer new attempt"]
-  D -->|"refund_requested / refunded"| H["Mark refunded"]
+  D -->|"refund_requested / refunded"| H["Reconcile refund ledger (partial or full)"]
   D -->|"cancel_requested / cancelled"| I["Mark cancelled"]
   D -->|unknown| M
         </pre>
@@ -282,7 +282,9 @@ function syncPayment(Order $order): void
             : $order-&gt;flagForReview('amount mismatch'),
         $status-&gt;isOpen() =&gt; $order-&gt;expires_at?-&gt;isPast() ? $order-&gt;markExpired() : null,
         $status-&gt;is('failed') =&gt; $order-&gt;markDeclined(),
-        $status-&gt;isRefundRequested(), $status-&gt;is('refunded') =&gt; $order-&gt;markRefunded(),
+        // The status body shows only the last refund. Your own ledger (one row per
+        // modificationReference) decides whether the order is partly or fully refunded.
+        $status-&gt;isRefundRequested(), $status-&gt;is('refunded') =&gt; $order-&gt;reconcileRefunds($status),
         $status-&gt;isCancelRequested(), $status-&gt;is('cancelled') =&gt; $order-&gt;markCancelled(),
         default =&gt; $order-&gt;flagForReview("unknown status {$status-&gt;status}"),
     };
@@ -307,7 +309,9 @@ export async function syncPayment(order) {
   }
   if (OPEN.includes(status)) return new Date(order.expiresAt) &lt; new Date() ? order.markExpired() : undefined;
   if (status === 'failed') return order.markDeclined();
-  if (['refund_requested', 'refunded'].includes(status)) return order.markRefunded();
+  // The status body shows only the last refund. Your own refund ledger decides
+  // whether the order is partly or fully refunded.
+  if (['refund_requested', 'refunded'].includes(status)) return order.reconcileRefunds(p);
   if (['cancel_requested', 'cancelled'].includes(status)) return order.markCancelled();
   return order.flagForReview(`unknown status ${p.status}`);
 }</code></pre></div>

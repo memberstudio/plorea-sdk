@@ -66,7 +66,7 @@ flowchart TD
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>reference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>The reference of the payment to refund.</td></tr>
-            <tr><td><code>modificationReference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Your unique reference for <em>this refund attempt</em>. It is the retry key. See <a href="#retry-safely">Retry safely</a>.</td></tr>
+            <tr><td><code>modificationReference</code><span class="req">required</span></td><td><span class="type">string</span></td><td>Your unique reference for <em>this refund attempt</em>. Plorea echoes it as <code>lastRefundReference</code>. It is not a confirmed idempotency key. See <a href="#retry-safely">Retry safely</a>.</td></tr>
             <tr><td><code>amount</code><span class="opt">optional</span></td><td><span class="type">integer</span></td><td>Minor units (øre). Leave it out for a full refund. A flat integer, like on payment links.</td></tr>
             <tr><td><code>reason</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Free text for your records. Echoed later as <code>lastRefundReason</code> on the status.</td></tr>
             <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for reporting.</td></tr>
@@ -253,17 +253,17 @@ stateDiagram-v2
       </ul>
 
       <h2 id="retry-safely">Retry safely</h2>
-      <p>Refund and cancel are safe to retry, but only with the <strong>same</strong> <code>modificationReference</code>. The modification reference is your idempotency key for the modification. A retry with a new modification reference is a new refund.</p>
+      <p>Retry safety for refund and cancel is not known. <span class="badge open">Open question</span> The <code>modificationReference</code> is your reference for one attempt. Plorea has not confirmed that it deduplicates a repeated reference. Treat it as a reference, not as an idempotency key. Do not retry a refund or a cancel automatically.</p>
       <ol class="steps">
         <li><strong>Create the modification reference before the call.</strong>Derive it from your own refund record, for example <code>{reference}-refund-{n}</code>. Save it first.</li>
         <li><strong>Send the request.</strong>On a timeout or a <code>5xx</code>, the outcome is unknown, not failed.</li>
-        <li><strong>Read the status.</strong>If <code>lastRefundReference</code> equals your modification reference, the refund was accepted. Stop.</li>
-        <li><strong>Otherwise retry with the same modification reference.</strong>Never generate a new one for the same intent.</li>
+        <li><strong>Read the payment status.</strong>If <code>lastRefundReference</code> (or <code>lastCancelReference</code>) equals your modification reference, Plorea accepted the request. Stop.</li>
+        <li><strong>Otherwise, escalate to a person.</strong>A missing match does not prove that Plorea rejected the request. The request can still be in flight, and a later refund overwrites the <code>lastRefund*</code> fields. A person decides whether to send it again, with the same modification reference.</li>
       </ol>
-      <p>How Plorea handles a repeated modification reference is not documented. <span class="badge open">Open question</span> The read-before-retry step protects you either way.</p>
+      <p>Ask Plorea to confirm how it handles a repeated modification reference. Until then, the status check lowers the risk of a double refund. It does not remove the risk.</p>
 
       <h2>Refunds on subscription charges</h2>
-      <p>A manual subscription charge has a reference of the form <code>{subscriptionId}-{chargeId}</code>. That reference resolves on <code>GET /payments/status</code>, so you can refund it like any payment. <span class="badge verified">Verified</span> A <em>scheduled</em> charge reference does not resolve on the status endpoint. Whether such a charge can be refunded through this API is not known. <span class="badge open">Open question</span> See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
+      <p>A manual subscription charge has a reference of the form <code>{subscriptionId}-{chargeId}</code>. That reference resolves on <code>GET /payments/status</code>. <span class="badge verified">Verified</span> A refund on that reference has not been tested. It should work like a refund on any payment, but this is not confirmed. <span class="badge open">Open question</span> A <em>scheduled</em> charge reference does not resolve on the status endpoint. Whether such a charge can be refunded through this API is not known. <span class="badge open">Open question</span> See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
 
       <h2>Errors</h2>
       <div class="table-wrap">
@@ -273,7 +273,7 @@ stateDiagram-v2
             <tr><td><code>401</code></td><td><code>errorType: "security"</code></td><td>Usually a missing <code>X-Environment</code>. Then a bad key.</td></tr>
             <tr><td><code>403</code></td><td><code>{"error": "Tenant mismatch"}</code></td><td>The payment belongs to another tenant than your key.</td></tr>
             <tr><td><code>404</code></td><td><code>{"error": "Payment not found", ...}</code></td><td>Unknown reference. Check the environment too.</td></tr>
-            <tr><td><code>5xx</code></td><td>varies</td><td>Unknown outcome. Read the status, then retry with the same modification reference.</td></tr>
+            <tr><td><code>5xx</code></td><td>varies</td><td>Unknown outcome. Read the status. If your modification reference is not there, escalate to a person. See <a href="#retry-safely">Retry safely</a>.</td></tr>
           </tbody>
         </table>
       </div>

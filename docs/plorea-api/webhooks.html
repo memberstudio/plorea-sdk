@@ -180,8 +180,8 @@ sequenceDiagram
   }
 }</code></pre>
       <div class="callout note">
-        <p class="callout-title">A failed payment link stays payable</p>
-        <p>A decline does not close the hosted page. The customer can try again with another card on the same link. A later <code>payment.authorised</code> for the same reference is normal.</p>
+        <p class="callout-title">Treat a failed link as closed</p>
+        <p>Whether the customer can try again on the same link after a decline is not confirmed. <span class="badge open">Open question</span> Do not depend on it. On <code>payment.failed</code>, offer a new link on a suffixed reference. Still handle a later <code>payment.authorised</code> for the failed reference: book it idempotently on the reference. See <a href="payment-lifecycle.html">Payment lifecycle</a>.</p>
       </div>
 
       <h3>payment.refunded</h3>
@@ -218,7 +218,7 @@ sequenceDiagram
       <p>Plorea states that charge webhooks include the subscription's <code>merchantOrgNr</code> when one is set. Our captures predate that field. <span class="badge stated">Stated by Plorea</span></p>
 
       <h2 id="what-is-not-sent">What is not sent</h2>
-      <p>Plorea sends <strong>no</strong> webhook for the transitions below. You must poll for them. <span class="badge stated">Stated by Plorea</span> <span class="badge verified">Verified</span></p>
+      <p>Plorea sends <strong>no</strong> webhook for the transitions below. You must poll for them. <span class="badge stated">Stated by Plorea</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Transition</th><th>How to detect it</th></tr></thead>
@@ -296,7 +296,7 @@ import crypto from 'node:crypto';
 const app = express();
 
 // Keep the raw bytes. express.json() would re-encode them.
-app.post('/plorea/webhook', express.raw({ type: 'application/json' }), (req, res) =&gt; {
+app.post('/plorea/webhook', express.raw({ type: 'application/json' }), async (req, res) =&gt; {
   const secret = process.env.PLOREA_WEBHOOK_SECRET;
   const given = Buffer.from(req.get('x-plorea-signature') ?? '', 'utf8');
   if (!secret) return res.sendStatus(403); // fail closed
@@ -311,8 +311,14 @@ app.post('/plorea/webhook', express.raw({ type: 'application/json' }), (req, res
   }
 
   const event = JSON.parse(req.body.toString('utf8'));
-  // Store, then answer. Process in a job.
-  queue.add('plorea-event', event);
+  // Store durably, then answer. Process in a job.
+  try {
+    await inbox.store(event); // e.g. the plorea_events table below
+  } catch (err) {
+    // Not stored: the event is lost unless reconciliation finds it.
+    console.error('Plorea webhook not stored', err);
+    return res.sendStatus(500);
+  }
   res.sendStatus(200);
 });</code></pre></div>
       </div>
@@ -328,12 +334,13 @@ app.post('/plorea/webhook', express.raw({ type: 'application/json' }), (req, res
           <li>Run the reconciliation job below.</li>
         </ul>
       </div>
-      <p>The Laravel SDK answers <code>200 [accepted]</code> to every verified delivery, also to bodies it cannot parse. <span class="badge verified">Verified</span></p>
+      <p>The Laravel SDK's controller answers <code>200 [accepted]</code> to a verified delivery, also to a body it cannot parse. It dispatches your listeners <strong>before</strong> it answers. A synchronous listener that throws turns the answer into a <code>500</code>, and Plorea does not redeliver. Keep listeners small: store the event and queue the work. Implement <code>ShouldQueue</code> on a listener class, or dispatch a job from the closure.</p>
 
       <h2>Deduplicate on eventId</h2>
       <p>The same event can arrive more than once. A webhook, a status poll and the customer's return page can also race on the same payment. Make every handler idempotent.</p>
       <ul>
-        <li>Store <code>eventId</code> from the <strong>body</strong> with a unique constraint. Skip events you have seen.</li>
+        <li>Store <code>eventId</code> from the <strong>body</strong> with a unique constraint.</li>
+        <li>Keep "received" and "processed" apart. Set <code>processed_at</code> only after the work succeeds. Skip an event only when it is processed. Retry unprocessed events from a scheduled job.</li>
         <li>Book money idempotently on the payment <code>reference</code>, not on the event.</li>
       </ul>
       <div class="tabs">
@@ -353,36 +360,50 @@ use MemberFlow\Plorea\Facades\Plorea;
 
 Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) {
     // eventId is read from the signed body, never from the header.
-    if (! Cache::add("plorea:webhook:{$event-&gt;eventId}", true, now()-&gt;addDay())) {
-        return; // already handled
+    $key = "plorea:webhook:{$event-&gt;eventId}";
+
+    if (Cache::has($key)) {
+        return; // already processed
     }
 
     // The webhook is a ping. Read the authoritative state.
+    // If this throws, nothing is marked, so a retry processes the event again.
     $status = Plorea::payments()-&gt;status($event-&gt;reference);
 
     if ($status-&gt;isPaid()) {
         // Compare $status-&gt;amount with what you expect, then book
         // idempotently on the reference.
     }
+
+    // Mark as processed only after the work succeeded.
+    Cache::put($key, true, now()-&gt;addDay());
 });</code></pre></div>
-        <div class="tab" data-label="Node"><pre><code class="lang-javascript">async function handle(event) {
-  const inserted = await db.query(
-    `INSERT INTO plorea_events (event_id, type, payload)
-     VALUES ($1, $2, $3) ON CONFLICT (event_id) DO NOTHING`,
-    [event.eventId, event.type, event],
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Runs from a job for each stored event, and again from a scheduled
+// job for any event with processed_at still null.
+async function handle(event) {
+  const { rows } = await db.query(
+    'SELECT processed_at FROM plorea_events WHERE event_id = $1',
+    [event.eventId],
   );
-  if (inserted.rowCount === 0) return; // duplicate
+  if (rows[0]?.processed_at) return; // already processed
 
   if (event.type.startsWith('payment.')) {
     const res = await fetch(
       `https://payments.plorea.no/payments/status/${encodeURIComponent(event.data.reference)}?platform=acme`,
       { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
     );
+    if (!res.ok) throw new Error(`Status read failed: ${res.status}`); // stays unprocessed
     const payment = await res.json();
     if (payment.status === 'authorised' || payment.status === 'paid') {
       await bookPayment(payment.reference, payment.amount); // idempotent
     }
   }
+
+  // Mark as processed only after the work succeeded.
+  await db.query(
+    'UPDATE plorea_events SET processed_at = now() WHERE event_id = $1',
+    [event.eventId],
+  );
 }</code></pre></div>
       </div>
 
@@ -392,9 +413,9 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
           <thead><tr><th>Event</th><th>Re-read</th><th>Then</th></tr></thead>
           <tbody>
             <tr><td><code>payment.authorised</code></td><td><code>GET /payments/status/{reference}</code></td><td>Mark the order paid if the status is <code>authorised</code> or <code>paid</code> and the amount matches.</td></tr>
-            <tr><td><code>payment.failed</code></td><td><code>GET /payments/status/{reference}</code></td><td>Show the customer a retry option. The link is still payable.</td></tr>
+            <tr><td><code>payment.failed</code></td><td><code>GET /payments/status/{reference}</code></td><td>Offer a new link on a suffixed reference. Whether the failed link stays payable is not confirmed.</td></tr>
             <tr><td><code>payment.refunded</code></td><td><code>GET /payments/status/{reference}</code></td><td>Confirm the refund you already booked. Do not book it twice.</td></tr>
-            <tr><td><code>subscription.charge_succeeded</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Extend access to <code>accessEndsAt</code>. Record the charge from <code>GET /subscriptions/{id}/charges</code>.</td></tr>
+            <tr><td><code>subscription.charge_succeeded</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Extend access to <code>nextChargeAt</code>, the end of the paid period. Do not use <code>accessEndsAt</code>: it is <code>null</code> on an active subscription. Record the charge from <code>GET /subscriptions/{id}/charges</code>.</td></tr>
             <tr><td>Unknown type</td><td>—</td><td>Store and log it. Return <code>200</code>.</td></tr>
           </tbody>
         </table>
@@ -415,7 +436,10 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $event-&gt;eventId;     // deduplicate on this
 
     $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
-    // Extend access to $subscription-&gt;accessEndsAt, idempotently.
+    // The paid period ends at nextChargeAt. accessEndsAt is null while active.
+    if ($subscription-&gt;isActive() &amp;&amp; $subscription-&gt;nextChargeAt !== null) {
+        // Extend access to $subscription-&gt;nextChargeAt, idempotently.
+    }
 });
 
 // Every delivery also fires WebhookReceived, including unknown types.
@@ -428,8 +452,12 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
     `https://payments.plorea.no/subscriptions/${encodeURIComponent(subscriptionId)}?platform=acme`,
     { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'test' } },
   );
+  if (!res.ok) throw new Error(`Subscription read failed: ${res.status}`);
   const subscription = await res.json();
-  await extendAccess(subscription.externalId, subscription.accessEndsAt);
+  // The paid period ends at nextChargeAt. accessEndsAt is null while active.
+  if (subscription.status === 'active' &amp;&amp; subscription.nextChargeAt) {
+    await extendAccess(subscription.externalId, subscription.nextChargeAt);
+  }
 }</code></pre></div>
       </div>
       <p>The SDK fires <code>SubscriptionChargeSucceeded</code> for a scheduler charge and does <strong>not</strong> also fire <code>PaymentStatusUpdated</code>. Two events for one charge would make listeners book it twice.</p>
@@ -443,7 +471,7 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
             <tr><td>Open payment links</td><td><code>GET /payments/status/{reference}</code></td><td>Every few minutes until paid or past <code>expiresAt</code>.</td></tr>
             <tr><td>Card setups</td><td><code>GET /payment-methods/{id}</code></td><td>Every few minutes until <code>active</code> or <code>failed</code>.</td></tr>
             <tr><td>Refunds and cancels in flight</td><td><code>GET /payments/status/{reference}</code></td><td>Hourly. Settlement can take more than 11 hours.</td></tr>
-            <tr><td>Active subscriptions</td><td><code>GET /subscriptions?externalId=…&amp;status=active</code></td><td>Hourly. Flag any with <code>nextChargeAt</code> in the past.</td></tr>
+            <tr><td>Subscriptions</td><td><code>GET /subscriptions?externalId=…</code> without a <code>status</code> filter</td><td>Hourly. Flag any that is <code>payment_failed</code>. Also flag any that is not <code>canceled</code> and has <code>nextChargeAt</code> in the past. A <code>status=active</code> filter hides <code>payment_failed</code> and overdue trials.</td></tr>
           </tbody>
         </table>
       </div>

@@ -84,7 +84,8 @@ flowchart TB
       <h2>The merchant: who gets the money</h2>
       <p>The tenant groups your data. The <strong>merchant</strong> is the company that receives the payout. You name it with <code>merchantOrgNr</code>, the Norwegian organisation number of the invoice issuer. Never send your own platform's number unless you are the seller.</p>
       <ul>
-        <li>Plorea requires it by contract, on payment links and subscriptions. <span class="badge stated">Stated by Plorea</span> The payment-link endpoint does not enforce it. <span class="badge verified">Verified</span></li>
+        <li>Plorea requires it by contract on payment links. <span class="badge stated">Stated by Plorea</span> The payment-link endpoint does not enforce it. <span class="badge verified">Verified</span></li>
+        <li>On a subscription the field is optional. Every charge inherits the company. A subscription without it behaves as before. <span class="badge stated">Stated by Plorea</span></li>
         <li>On subscriptions the value must be nine digits. Otherwise the API answers <code>400</code>. <span class="badge verified">Verified</span></li>
         <li>The first payment for a new organisation number starts KYC automatically. The payout waits until KYC is approved, usually 1–5 business days. The link stays payable. <span class="badge stated">Stated by Plorea</span></li>
         <li>Reads do not return the merchant on subscriptions, and the link-create response does not echo it. Keep your own record. <span class="badge verified">Verified</span></li>
@@ -108,7 +109,7 @@ flowchart TB
         <p class="callout-title">A missing header can reach live</p>
         <p>Most endpoints default to test when the header is missing. <code>POST /payments/refund</code> does not: it routes to the live credentials and answers <code>401</code> with <code>"errorType": "security"</code>. The error looks like a bad key. Send <code>X-Environment</code> on every request, from one place in your code. <span class="badge verified">Verified</span></p>
       </div>
-      <p>Every response and webhook carries <code>environment</code>. Check it in your webhook handler. Drop events whose environment does not match the server that receives them.</p>
+      <p>Payment, payment-method and session responses and webhooks carry <code>environment</code>. Subscription responses and error bodies do not. Keep the environment of each request in your own context. Check it in your webhook handler. Drop events whose environment does not match the server that receives them.</p>
 
       <h2>Amounts and currency</h2>
       <p>All amounts are integers in minor units. For NOK, that is øre. There is no decimal form anywhere in the API. <span class="badge verified">Verified</span></p>

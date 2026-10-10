@@ -184,8 +184,8 @@ try {
           <thead><tr><th>Operation</th><th>Safe to retry?</th><th>Why</th></tr></thead>
           <tbody>
             <tr><td>All <code>GET</code> requests</td><td><strong>Yes</strong></td><td>Reads change nothing.</td></tr>
-            <tr><td><code>POST /payments/refund</code></td><td><strong>Yes</strong>, with the same <code>modificationReference</code></td><td>The modification reference identifies the attempt.</td></tr>
-            <tr><td><code>POST /payments/cancel</code></td><td><strong>Yes</strong>, with the same <code>modificationReference</code></td><td>Same as refund.</td></tr>
+            <tr><td><code>POST /payments/refund</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Plorea has not confirmed that a repeated <code>modificationReference</code> is deduplicated. Read the payment status before any retry. Do not retry automatically.</td></tr>
+            <tr><td><code>POST /payments/cancel</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Same as refund. Check <code>lastCancelReference</code>.</td></tr>
             <tr><td><code>POST /payments/link</code></td><td><strong>No</strong></td><td>A retry can create a second live link for the same reference.</td></tr>
             <tr><td><code>POST /subscriptions/{id}/charge</code></td><td><strong>No</strong></td><td>No idempotency key. A retry can charge twice.</td></tr>
             <tr><td><code>POST /subscriptions</code></td><td><strong>No</strong></td><td>A retry can create two subscriptions. Billing starts immediately on each.</td></tr>
@@ -202,11 +202,11 @@ try {
         <li><strong>Payment link timed out</strong>Call <code>GET /payments/status/{reference}</code>. A <code>200</code> means the link exists. Reuse it. A <code>404</code> means you can create it.</li>
         <li><strong>Charge timed out</strong>Call <code>GET /subscriptions/{id}/charges</code>. Look for a new <code>manual_charge</code> item before you charge again.</li>
         <li><strong>Subscription create timed out</strong>Call <code>GET /subscriptions?externalId=…</code>. Look for a subscription with your <code>externalId</code>.</li>
-        <li><strong>Refund or cancel timed out</strong>Send it again with the same <code>modificationReference</code>.</li>
+        <li><strong>Refund or cancel timed out</strong>Call <code>GET /payments/status/{reference}</code>. If <code>lastRefundReference</code> or <code>lastCancelReference</code> equals your <code>modificationReference</code>, Plorea accepted it. Otherwise, escalate to a person. Do not retry automatically: Plorea has not confirmed that a repeated <code>modificationReference</code> is safe. <span class="badge open">Open question</span></li>
       </ol>
 
       <h3>Create payment links safely</h3>
-      <p>The SDK provides <code>firstOrCreate()</code>. It reads the status of the reference first. If an open, reusable link exists, it returns that link. If the reference is already paid, it throws <code>PaymentAlreadyPaidException</code>. If a link exists but cannot be reused, for example because it expired, it creates a new link on a suffixed reference: <code>order-1001-1</code>, <code>order-1001-2</code>, and so on. Run it inside a lock per reference.</p>
+      <p>The SDK provides <code>firstOrCreate()</code>. It reads the status of the reference first. If an open, reusable link exists, it returns that link. If the reference is already paid, it throws <code>PaymentAlreadyPaidException</code>. If a link exists but cannot be reused, for example because it expired, it creates a new link on a suffixed reference: <code>order-1001-1</code>, <code>order-1001-2</code>, and so on. Run it inside a lock per reference. Without the SDK, use the walk in <a href="payment-links.html#duplicate-references">Duplicate references and firstOrCreate</a>.</p>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash"># 1. Check first.
 curl -s -o /dev/null -w '%{http_code}' \
@@ -217,7 +217,9 @@ curl -s -o /dev/null -w '%{http_code}' \
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException;
 
-$link = Cache::lock("plorea:link:{$invoice-&gt;reference}", 30)-&gt;block(10, function () use ($invoice) {
+// The lock must outlive the whole walk: each request can take 30 s,
+// and firstOrCreate() sends several. block() releases it when done.
+$link = Cache::lock("plorea:link:{$invoice-&gt;reference}", 900)-&gt;block(10, function () use ($invoice) {
     try {
         return Plorea::payments()
             -&gt;link($invoice-&gt;reference, 'Invoice '.$invoice-&gt;number, Amount::nok($invoice-&gt;total), 'https://example.com/return')
@@ -228,22 +230,11 @@ $link = Cache::lock("plorea:link:{$invoice-&gt;reference}", 30)-&gt;block(10, fu
         return null;
     }
 });</code></pre></div>
-        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// The status body has no expiresAt. Keep the one from the create
-// response, or read `expired` from GET /pay/{paymentLinkId}.
-async function firstOrCreateLink(reference, payload) {
-  try {
-    const existing = await plorea(`/payments/status/${encodeURIComponent(reference)}?platform=acme`);
-    if (['authorised', 'paid'].includes(existing.status)) throw new Error('Already paid');
-    if (['created', 'pending', 'active'].includes(existing.status)) {
-      const page = await plorea(`/pay/${existing.paymentLinkId}?platform=acme`);
-      if (!page.expired) return existing; // reuse the open link
-    }
-    // Not reusable: create on a suffixed reference (reference-1, reference-2, ...).
-  } catch (e) {
-    if (e.status !== 404) throw e;
-  }
-  return plorea('/payments/link', { method: 'POST', body: { ...payload, reference } });
-}</code></pre></div>
+        <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Plorea has no firstOrCreate. Build it yourself: read the base
+// reference, then each suffix (order-1001-1, order-1001-2, ...).
+// Keep the first reusable link you find. Create a new link only on the
+// first suffix that returns 404. Hold the lock for the whole walk.
+// Full algorithm: payment-links.html#duplicate-references</code></pre></div>
       </div>
 
       <h3>Automatic retries in the SDK</h3>

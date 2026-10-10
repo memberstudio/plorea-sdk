@@ -90,7 +90,7 @@ sequenceDiagram
 // config/plorea.php reads PLOREA_API_KEY and PLOREA_ENVIRONMENT.
 $payment = Plorea::payments()-&gt;status('order-1001');
 
-$payment-&gt;status;   // PaymentStatus::Authorised
+$payment-&gt;status;   // 'authorised'
 $payment-&gt;isPaid(); // true</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
   'https://payments.plorea.no/payments/status/order-1001?platform=acme',

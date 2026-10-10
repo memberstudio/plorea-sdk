@@ -185,7 +185,7 @@ console.log(link.paymentLinkUrl);</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$status = Plorea::payments()-&gt;status('ORDER-1001');
 
 if ($status-&gt;isPaid()) {
-    // authorised or paid: money moved. Book the order.
+    // authorised or paid: the success state. Book the order.
 }</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const res = await fetch(
   'https://payments.plorea.no/payments/status/ORDER-1001?platform=acme',

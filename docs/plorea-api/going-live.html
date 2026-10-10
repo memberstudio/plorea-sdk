@@ -82,7 +82,7 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
       <p>Skip this section if you use hosted payment links only.</p>
       <ul>
         <li><strong>Use a live Adyen client key.</strong> A test key does not work with live sessions. The PHP SDK throws if the key prefix (<code>live_</code>) does not match the environment.</li>
-        <li><strong>Get your production origins whitelisted</strong> for the live key. The origin allow-list is per key and applies only to browsers. A wildcard covers subdomains at any depth but not always the bare domain, and <code>localhost</code> is never allowed. <span class="badge verified">Verified</span></li>
+        <li><strong>Get your production origins whitelisted</strong> for the live key. The origin allow-list is per key and applies only to browsers. A wildcard covers subdomains at any depth but not always the bare domain. <code>localhost</code> was not whitelisted on the key we tested; ask Plorea if you need it. <span class="badge verified">Verified</span></li>
         <li><strong>Route customer-owned domains through your own subdomain.</strong> No API exists to register single origins. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>Register your production app identifiers</strong> with Plorea for native apps.</li>
         <li><strong>Test return URLs in production builds.</strong> Universal links and App Links must verify on the production domain. A custom-scheme return URL is accepted. <span class="badge verified">Verified</span></li>
@@ -123,8 +123,9 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
       <h2>7. Reconciliation</h2>
       <p>Webhooks can be missed, and several transitions send none. Run a scheduled job that reads state directly from the API.</p>
       <div class="tabs">
-        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Active subscriptions for one of your entities.
-curl "https://payments.plorea.no/subscriptions?externalId=membership-42&amp;status=active&amp;platform=acme" \
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash"># All subscriptions for one of your entities. Do not filter on status:
+# status=active hides payment_failed and overdue trials.
+curl "https://payments.plorea.no/subscriptions?externalId=membership-42&amp;platform=acme" \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
   -H "X-Environment: live"</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">// Schedule hourly.
@@ -142,12 +143,18 @@ foreach ($workspaces as $workspace) {
 }</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">// Schedule hourly.
 const res = await fetch(
-  'https://payments.plorea.no/subscriptions?externalId=membership-42&amp;status=active&amp;platform=acme',
+  // No status filter: status=active hides payment_failed and overdue trials.
+  'https://payments.plorea.no/subscriptions?externalId=membership-42&amp;platform=acme',
   { headers: { Authorization: `Bearer ${process.env.PLOREA_API_KEY}`, 'X-Environment': 'live' } },
 );
 const { items } = await res.json();
-const overdue = items.filter((s) =&gt; s.nextChargeAt &amp;&amp; new Date(s.nextChargeAt) &lt; Date.now() - 60 * 60 * 1000);
-for (const s of overdue) await startDunning(s);</code></pre></div>
+const flagged = items.filter((s) =&gt;
+  s.status === 'payment_failed' ||
+  (s.status !== 'canceled' &amp;&amp;
+    s.nextChargeAt &amp;&amp;
+    new Date(s.nextChargeAt).getTime() &lt; Date.now() - 60 * 60 * 1000),
+);
+for (const s of flagged) await startDunning(s);</code></pre></div>
       </div>
       <p>Also reconcile money against Adyen payouts in your accounting. The API has no payout or settlement report endpoint. <span class="badge open">Open question</span></p>
 

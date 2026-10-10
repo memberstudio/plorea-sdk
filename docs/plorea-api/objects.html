@@ -288,7 +288,7 @@ stateDiagram-v2
             <tr><td><code>expiryDate</code></td><td class="type">string</td><td>yes</td><td><code>MM/YYYY</code>.</td></tr>
             <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>no</td><td>When the setup link or session expires. Not the card expiry.</td></tr>
             <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. An empty value comes back as <code>[]</code>, not <code>{}</code>. <span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>Always null, also on a real refusal. Do not rely on it. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>failureReason</code></td><td class="type">string</td><td>missing</td><td>Missing from the captured responses, also on a real refusal. Expect the key to be absent or <code>null</code>. Branch on <code>status</code> alone. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
             <tr><td><code>updatedAt</code></td><td class="type">datetime</td><td>no</td><td>Last change.</td></tr>
           </tbody>
@@ -396,9 +396,8 @@ stateDiagram-v2
   active --> canceled: cancel
   canceled --> active: reactivate
   active --> payment_failed: charge fails (unobserved)
-  payment_failed --> active: reactivate (unobserved)
         </pre>
-        <figcaption>Subscription states. Transitions to and from <code>payment_failed</code> cannot be produced in test.</figcaption>
+        <figcaption>Subscription states. The transition to <code>payment_failed</code> cannot be produced in test. How a subscription leaves <code>payment_failed</code> is an open question. Reactivate works only from <code>canceled</code>.</figcaption>
       </figure>
 
       <h3>Interval units</h3>
