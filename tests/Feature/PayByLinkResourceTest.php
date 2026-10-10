@@ -55,6 +55,24 @@ class PayByLinkResourceTest extends TestCase
         $this->assertTrue($link->expired);
     }
 
+    public function test_an_empty_link_field_does_not_hide_its_alternative(): void
+    {
+        Http::fake([
+            'payments.plorea.no/pay/pl_123?*' => Http::response([
+                'id' => 'pl_123',
+                'merchantOrgNr' => '',
+                'orgNr' => '123456789',
+                'invoice_url' => '',
+                'invoiceUrl' => 'https://app.example/invoices/123.pdf',
+            ]),
+        ]);
+
+        $link = Plorea::payByLink()->find('pl_123');
+
+        $this->assertSame('123456789', $link->merchantOrgNr);
+        $this->assertSame('https://app.example/invoices/123.pdf', $link->invoiceUrl);
+    }
+
     public function test_it_creates_a_payment_session(): void
     {
         Http::fake([
@@ -103,12 +121,20 @@ class PayByLinkResourceTest extends TestCase
             'payments.plorea.no/payments/session' => Http::response([
                 'sessionData' => 'AbData',
                 'environment' => 'test',
+                'payer@example.com' => 'x',
             ]),
         ]);
 
-        $this->expectException(PloreaException::class);
-        $this->expectExceptionMessage('without a session id');
+        try {
+            Plorea::payByLink()->session('pl_123');
+        } catch (PloreaException $e) {
+            $this->assertStringContainsString('without a session id', $e->getMessage());
+            // Response keys can hold customer data; the message must not list them.
+            $this->assertStringNotContainsString('payer@example.com', $e->getMessage());
 
-        Plorea::payByLink()->session('pl_123');
+            return;
+        }
+
+        $this->fail('Expected a PloreaException.');
     }
 }
