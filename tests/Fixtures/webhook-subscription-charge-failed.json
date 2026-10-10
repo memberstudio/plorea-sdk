@@ -1,0 +1,21 @@
+{
+    "eventId": "evt_00000000000000000000000000000003",
+    "createdAt": "2026-10-06T20:34:59.157Z",
+    "tenantId": "test-tenant",
+    "type": "subscription.charge_failed",
+    "data": {
+        "subscriptionId": "sub_test_golden",
+        "chargeId": "chg_test_golden_3",
+        "reference": "sub_test_golden-chg_test_golden_3",
+        "customerId": "golden-customer-001",
+        "shopperReference": "golden-shopper-001",
+        "externalId": "GOLDEN-EXT-001",
+        "amount": {
+            "value": 29900,
+            "currency": "NOK"
+        },
+        "failureReason": "PaymentDetail not found",
+        "retryCount": 1,
+        "environment": "test"
+    }
+}

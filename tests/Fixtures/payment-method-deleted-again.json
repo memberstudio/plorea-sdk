@@ -1,0 +1,7 @@
+{
+    "paymentMethodId": "pm_test_golden_method",
+    "tenantId": "test-tenant",
+    "status": "cancelled",
+    "alreadyCancelled": true,
+    "updatedAt": "2026-10-06T09:49:58.709Z"
+}

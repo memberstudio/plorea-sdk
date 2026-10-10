@@ -50,7 +50,7 @@ $subscription = Plorea::subscriptions()
     ->merchant(orgNr: '999999999', name: 'Acme Gym AS', email: 'billing@acme.example')
     ->save();
 
-$subscription->merchantOrgNr;   // "999999999" — on the create response only
+$subscription->merchantOrgNr;   // "999999999" — also returned by find() and forExternalId()
 ```
 
 Every charge on the subscription, scheduled or manual, is settled to that
@@ -61,9 +61,10 @@ own. Name and email are optional and used for KYC communication.
   `merchantOrgNr` (not the name or email); an organisation number that is not
   nine digits is a `ValidationException` (`400`) at create; the first
   scheduled charge authorises as usual.
-- **Not returned on reads:** `find()`, `forExternalId()` and `charges()` do not
-  carry the organisation number (2026-09-21). Persist it yourself when you
-  create the subscription.
+- **Returned on reads since 2026-09-22:** `find()` and `forExternalId()` carry
+  the organisation number (not the name or email). `charges()` returns only
+  the charge items, which do not. Still persist it when you create the
+  subscription: your own record is what tells you which company to expect.
 - **Stated by Plorea, not observed:** KYC for a company Plorea has not seen
   starts on the first charge; settlement splits apply from that same charge;
   charge webhooks carry the organisation number. A subscription created
@@ -95,8 +96,10 @@ isActive()`, never on `isActive()` alone.
 | --- | --- | --- |
 | `trialing` | `isTrialing()` | In trial, nothing charged yet |
 | `active` | `isActive()` | Billing on schedule |
+| `paused` | `isPaused()` | Billing paused; `nextChargeAt` cleared — see [below](#pause-and-resume) |
 | `canceled` | `isCanceled()` | Cancelled (US spelling) — access runs to `accessEndsAt` |
-| `payment_failed` | `hasPaymentFailure()` | Modelled, **never observed** — see [below](#the-dunning-gap) |
+| `past_due` | `isPastDue()` | A scheduled charge failed and Plorea is retrying it — see [below](#the-dunning-gap) |
+| `payment_failed` | `hasPaymentFailure()` | Documented by Plorea, **never observed** |
 
 Use the helpers or `is('...')`, never a bare string comparison.
 
@@ -124,6 +127,67 @@ Plorea::subscriptions()->update($subscription->id)
 
 Only the fields you set are sent. The interval cannot be changed — cancel and
 create a new subscription for that.
+
+## Pause and resume
+
+Recommended by Plorea and captured in the test environment on 2026-10-01.
+Scheduler races, in-flight charges, retries and the later billing anchor still
+require verification in the consuming integration.
+
+```php
+$paused = Plorea::subscriptions()->pause($subscription->id);
+$resumed = Plorea::subscriptions()->resume($subscription->id, $nextChargeAt);
+```
+
+Both use `PATCH subscriptions/{id}`. Pause sends `status: paused`, which
+clears `nextChargeAt`; the card, the last charge and the amounts are kept, and
+`accessEndsAt` stays null. Resume sends `status: active` and an explicit
+`nextChargeAt` in the same request, and the response echoes the date. The date
+is serialized as UTC with milliseconds. The caller owns its value; the SDK does
+not infer paid entitlement or choose a date.
+
+What Plorea refuses (each a 400, `ValidationException`):
+
+- pausing anything but an `active` subscription — a trial included ("Cannot
+  change status from trialing to paused");
+- resuming anything but a `paused` subscription;
+- resuming with a date in the past ("nextChargeAt cannot be in the past") —
+  the subscription stays paused, so to bill now pass a moment a little ahead.
+
+To move the next charge without changing the status, use
+`update($id)->nextChargeAt($date)->save()`. It works on a paused subscription
+(it stays paused) and on a trial — but on a trial only `nextChargeAt` moves,
+`trialEndsAt` keeps its old value.
+
+**Open — no charge was seen after resume.** On three resumed test
+subscriptions the scheduler had not charged 3, 16 and 41 minutes after the
+resume date, and each stayed `active` with the lapsed `nextChargeAt`. Raised
+with Plorea 2026-10-01. Until it is settled, check after a resume date that the
+charge landed — `needingAttention()` reports the subscription as overdue once
+the grace period passes.
+
+The fluent equivalents are `update($id)->pause()->save()` and
+`update($id)->resumeAt($nextChargeAt)->save()`. Calling `pause()` after
+`resumeAt()` on the same builder removes the previously set charge date.
+
+Persist the original billing boundary before pausing, read back provider state
+after uncertain responses, and schedule recovery for failed resumes. Your application chooses the date under its own entitlement rules; for example,
+it may shift the saved boundary by the paused duration. Do not use cancellation/reactivation to implement this pause.
+A paused subscription is excluded from `isOverdue()` even if its response has
+a stale date. Pausing removes the subscription from `needingAttention()`, so track any
+existing debt separately in your app. Check status and charge history before
+pausing; this does not resolve debt or establish that in-flight charges stop.
+
+Only resume a subscription confirmed as `isPaused()`. Transitions from canceled,
+trialing or paused are refused; pausing while past_due and combined updates
+with amount/card changes are unverified. Use `reactivate()` for cancellation recovery.
+Do not blindly retry writes: a delayed resume replay could restore an old charge
+date after the scheduler has advanced it. Persist intent and reconcile readback
+and charges before deciding whether another write is needed.
+
+`Plorea::fake()` returns the pause/resume response but does not persist PATCH
+state for later reads. Use explicit stateful stubs for `find()` and list requests
+when testing a consuming app's recovery and readback lifecycle.
 
 ## Cancel
 
@@ -254,12 +318,19 @@ not-active payment method return **400**, not 402.
 
 Read this before building retry logic.
 
-- There is **no webhook for a failed scheduler charge**. Plorea confirmed on
-  2026-09-09 that failures are poll-only.
-- `payment_failed`, a populated `failureReason`, and a non-zero `retryCount`
-  are all modelled from Plorea's documentation but have **never been
-  observed** — no test-environment card can store successfully and then
-  decline. See [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
+- A failed scheduler charge emits `subscription.charge_failed` →
+  `SubscriptionChargeFailed` (captured 2026-10-01 and 2026-10-06, though
+  Plorea had said failures were poll-only). A delivery is never retried, so
+  the event speeds dunning up; polling is still what guarantees it.
+- A failed scheduled charge turns the subscription **`past_due`** (captured
+  from production 2026-10-01). `retryCount` counts the failed attempts,
+  `failureReason` carries the provider's message, `lastChargeAt` stays at the
+  last *successful* charge, and `nextChargeAt` moves to the retry —
+  `retryPolicy.retryIntervalDays` later, up to `retryPolicy.maxRetries`
+  attempts. The charge appears in `charges()` with `status: failed`.
+- What happens after the last retry is **not yet observed**. The documented
+  `payment_failed` status has never been seen. See
+  [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
 
 So dunning must poll, and must not assume the shape of what it finds.
 `needingAttention()` is the polling half:
@@ -270,24 +341,26 @@ foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $s
     $latest = Plorea::subscriptions()->charges($subscription->id)->first();
 
     if ($latest?->isAuthorised() !== true) {
-        // Prompt for a new card. Do not branch on failureReason — it is null
-        // even for a genuine refusal.
+        // Prompt for a new card. Do not branch on failureReason — it is the
+        // provider's free-text message, not a stable code.
     }
 }
 ```
 
-It returns a subscription when either test fires:
+It returns a subscription when any test fires:
 
 | Test | Basis |
 | --- | --- |
-| `hasPaymentFailure()` — status is `payment_failed` | Modelled from Plorea's documentation, **never observed** |
+| `isPastDue()` — status is `past_due` | Captured from production 2026-10-01 |
+| `hasPaymentFailure()` — status is `payment_failed` | Documented by Plorea, **never observed** |
 | `isOverdue()` — `nextChargeAt` is more than an hour in the past | Derived from fields captured on the wire |
 
-The second test is the one carrying the weight. Plorea's scheduler charges
-within seconds of `nextChargeAt` and moves the date forward as it does, so a
-date still in the past means the cycle did not complete — whatever Plorea ends
-up calling the status. If the documented failure shape turns out to be wrong,
-the overdue check still fires.
+The tests are independent. A `past_due` subscription is **not** overdue: its
+`nextChargeAt` has already moved to the retry, so only the status gives it
+away. The overdue test covers a cycle that stalled without any failure status —
+Plorea's scheduler charges within seconds of `nextChargeAt` and moves the date
+forward as it does, so a date still in the past means the cycle did not
+complete.
 
 Tune the grace period for your billing cadence, and pass a fixed clock in tests:
 
@@ -327,7 +400,8 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
         ->first()?->extendAccessTo($subscription->nextChargeAt);  // idempotently
 });
 
-// 4. Poll on a schedule — for failures, which never arrive as webhooks.
+// 4. Start dunning on SubscriptionChargeFailed, and poll needingAttention()
+//    on a schedule — a lost webhook is never redelivered.
 
 // 5. On cancellation, keep access until accessEndsAt (or now, if it is null).
 ```

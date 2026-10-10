@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
+use MemberFlow\Plorea\Events\SubscriptionChargeFailed;
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 use MemberFlow\Plorea\Events\WebhookReceived;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -229,6 +230,66 @@ class WebhookTest extends TestCase
         Event::assertNotDispatched(PaymentStatusUpdated::class);
     }
 
+    public function test_it_handles_a_real_failed_subscription_charge_webhook(): void
+    {
+        Event::fake([WebhookReceived::class, SubscriptionChargeFailed::class, SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
+
+        $payload = $this->fixture('webhook-subscription-charge-failed');
+
+        $this->postSignedWebhook($payload)
+            ->assertOk()
+            ->assertSee('[accepted]');
+
+        Event::assertDispatched(WebhookReceived::class, fn (WebhookReceived $event): bool => $event->payload === $payload);
+        Event::assertDispatched(
+            SubscriptionChargeFailed::class,
+            fn (SubscriptionChargeFailed $event): bool => $event->subscriptionId === 'sub_test_golden'
+                && $event->chargeId === 'chg_test_golden_3'
+                && $event->reference === 'sub_test_golden-chg_test_golden_3'
+                && $event->externalId === 'GOLDEN-EXT-001'
+                && $event->failureReason === 'PaymentDetail not found'
+                && $event->retryCount === 1
+                && $event->eventId === 'evt_00000000000000000000000000000003'
+                && $event->type === 'subscription.charge_failed',
+        );
+
+        // Same reasoning as the success event: the reference belongs to a
+        // scheduler charge, which the payment status endpoint cannot resolve.
+        Event::assertNotDispatched(SubscriptionChargeSucceeded::class);
+        Event::assertNotDispatched(PaymentStatusUpdated::class);
+    }
+
+    public function test_a_failed_charge_without_a_reason_or_retry_count_still_dispatches(): void
+    {
+        Event::fake([SubscriptionChargeFailed::class]);
+
+        $this->postSignedWebhook([
+            'type' => 'subscription.charge_failed',
+            'data' => ['subscriptionId' => 'sub_test_golden', 'failureReason' => '', 'retryCount' => '1'],
+        ])->assertOk();
+
+        Event::assertDispatched(
+            SubscriptionChargeFailed::class,
+            fn (SubscriptionChargeFailed $event): bool => $event->subscriptionId === 'sub_test_golden'
+                && $event->failureReason === null
+                && $event->retryCount === null
+                && $event->chargeId === null,
+        );
+    }
+
+    public function test_it_ignores_a_failed_charge_payload_without_a_subscription_id(): void
+    {
+        Event::fake([WebhookReceived::class, SubscriptionChargeFailed::class]);
+
+        $this->postSignedWebhook([
+            'type' => 'subscription.charge_failed',
+            'data' => ['chargeId' => 'chg_test_golden_3'],
+        ])->assertOk();
+
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertNotDispatched(SubscriptionChargeFailed::class);
+    }
+
     public function test_a_manual_subscription_charge_arrives_as_a_payment_webhook(): void
     {
         Event::fake([SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
@@ -248,11 +309,12 @@ class WebhookTest extends TestCase
 
     public function test_it_acknowledges_unknown_subscription_event_types_without_guessing(): void
     {
-        Event::fake([WebhookReceived::class, SubscriptionChargeSucceeded::class, PaymentStatusUpdated::class]);
+        Event::fake([WebhookReceived::class, SubscriptionChargeSucceeded::class, SubscriptionChargeFailed::class, PaymentStatusUpdated::class]);
 
-        // Only subscription.charge_succeeded has been observed live. Any
-        // other subscription type reaches consumers through WebhookReceived
-        // alone rather than through an event built on a guessed shape.
+        // Only subscription.charge_succeeded and subscription.charge_failed
+        // have been observed live. Any other subscription type reaches
+        // consumers through WebhookReceived alone rather than through an
+        // event built on a guessed shape.
         $this->postSignedWebhook([
             'type' => 'subscription.canceled',
             'data' => ['subscriptionId' => 'sub_test_golden', 'reference' => 'sub_test_golden-chg_test_golden_2'],
@@ -260,6 +322,7 @@ class WebhookTest extends TestCase
 
         Event::assertDispatched(WebhookReceived::class);
         Event::assertNotDispatched(SubscriptionChargeSucceeded::class);
+        Event::assertNotDispatched(SubscriptionChargeFailed::class);
         Event::assertNotDispatched(PaymentStatusUpdated::class);
     }
 

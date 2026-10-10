@@ -50,10 +50,10 @@ Full documentation lives in [`docs/`](docs/README.md).
 | --- | --- |
 | [Getting started](docs/getting-started.md) | Installation, the full configuration reference, the facade |
 | [Payments](docs/payments.md) | Payment links, `firstOrCreate`, status, refunds, cancellations |
-| [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in |
+| [Payment methods](docs/payment-methods.md) | Storing cards — hosted redirect and Adyen Drop-in, deleting them |
 | [Embedded and native checkout](docs/checkout.md) | Drop-in on your domain or in an iOS / Android app |
 | [Going live](docs/going-live.md) | The production checklist |
-| [Subscriptions](docs/subscriptions.md) | Create, trials, update, cancel, reactivate, charges, dunning |
+| [Subscriptions](docs/subscriptions.md) | Create, trials, update, pause/resume, cancel, reactivate, charges, dunning |
 | [Webhooks](docs/webhooks.md) | Signature verification, the event catalogue, what is poll-only |
 | [Testing](docs/testing.md) | `Plorea::fake()`, stubs, assertions |
 | [Error handling](docs/errors.md) | Exceptions, status mapping, retries and idempotency |
@@ -79,9 +79,10 @@ dead one, and throws `PaymentAlreadyPaidException` for a settled reference.
 → [Payments](docs/payments.md#reuse-or-create-firstorcreate)
 
 **Webhooks are pings, not truth.** Re-fetch authoritative state in every
-listener. Delivery is best-effort, and several important transitions — card
-setup, cancellation, reactivation, and a **failed** recurring charge — emit no
-webhook at all. If you need dunning, poll `subscriptions()->needingAttention()`.
+listener. Delivery is best-effort and never retried, and card setup,
+cancellation and reactivation emit no webhook at all. A failed recurring charge
+raises `SubscriptionChargeFailed`, but for dunning still poll
+`subscriptions()->needingAttention()`.
 Deduplicate on `$event->eventId`, never on the `x-plorea-event-id` header — the
 signature covers the body alone.
 → [Webhooks](docs/webhooks.md#what-is-not-sent)

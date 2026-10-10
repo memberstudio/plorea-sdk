@@ -1,0 +1,25 @@
+{
+    "subscriptionId": "sub_test_golden",
+    "tenantId": "test-tenant",
+    "customerId": null,
+    "externalId": "GOLDEN-EXT-PAUSE-001",
+    "title": "Golden fixture pause plan",
+    "description": null,
+    "amount": {
+        "value": 100,
+        "currency": "NOK"
+    },
+    "quantity": null,
+    "interval": {
+        "count": 1,
+        "unit": "month"
+    },
+    "trialEndsAt": null,
+    "nextChargeAt": null,
+    "status": "paused",
+    "vatRate": null,
+    "vatAmount": null,
+    "paymentMethodId": "pm_test_golden_method",
+    "storedPaymentMethodId": "TESTSTORED000001",
+    "updatedAt": "2026-10-01T21:05:03.507Z"
+}

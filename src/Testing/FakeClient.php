@@ -70,6 +70,11 @@ class FakeClient implements Client
         return $this->record(new RecordedRequest('patch', $uri, $this->withPlatform($payload)));
     }
 
+    public function delete(string $uri, array $payload = []): array
+    {
+        return $this->record(new RecordedRequest('delete', $uri, $this->withPlatform($payload)));
+    }
+
     /**
      * PloreaClient stamps the configured platform onto every request, so the
      * fake does too — an assertion that passes here has to describe a

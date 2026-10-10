@@ -109,4 +109,13 @@ final readonly class PaymentMethod
     {
         return $this->is('failed');
     }
+
+    /**
+     * Whether the payment method was deleted. A cancelled method is never
+     * charged again and cannot be put on a subscription.
+     */
+    public function isCancelled(): bool
+    {
+        return $this->is('cancelled');
+    }
 }

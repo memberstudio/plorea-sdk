@@ -62,9 +62,9 @@ $membership->update(['plorea_subscription_id' => $subscription->id]);
   `->merchant(orgNr: ..., name: ..., email: ...)` — always the client's
   organisation number, never your own. Every charge on the subscription is
   settled to that company, and Plorea starts KYC on the first charge for a
-  company it has not seen. The create response returns `merchantOrgNr`; reads
-  (`find()`, `forExternalId()`, `charges()`) do not, so store it on your own
-  record. Not nine digits is a `ValidationException`. One stored card can back
+  company it has not seen. The create response, `find()` and `forExternalId()`
+  return `merchantOrgNr` (charge items do not); still store it on your own
+  record when you create. Not nine digits is a `ValidationException`. One stored card can back
   subscriptions for different companies under the same tenant.
 - **Guard against creating it twice.** Write the local record before calling
   Plorea. If the call times out or the request is repeated, look before you
@@ -129,11 +129,12 @@ foreach (Plorea::subscriptions()->needingAttention($externalId) as $subscription
 }
 ```
 
-`needingAttention()` returns a subscription that reports `payment_failed` **or**
-whose `nextChargeAt` is more than an hour past (`graceMinutes:` to tune). Build
-on the overdue half. `payment_failed`, `failureReason` and `retryCount` are
-modelled from documentation and have not been observed, because no test card
-stores successfully and then declines. Do not branch on a failure reason.
+`needingAttention()` returns a subscription that reports `past_due` (or the
+documented, never-observed `payment_failed`) **or** whose `nextChargeAt` is more
+than an hour past (`graceMinutes:` to tune). A failed scheduled charge turns
+the subscription `past_due` (`isPastDue()`): `retryCount` counts the failures,
+`failureReason` holds the provider's message, and `nextChargeAt` moves to the
+retry, so it is not overdue. Do not branch on a failure reason.
 
 The same job should also settle anything the webhook missed: a pending entity
 whose latest charge is authorised gets activated here.
@@ -152,9 +153,21 @@ Plorea::subscriptions()->update($id)->paymentMethod($newMethod->id)->save(); // 
 - Only the fields you set are sent.
 - **The interval cannot be changed.** Moving between monthly and yearly is a
   cancel plus a new subscription; mind the period already paid for.
-- The SDK has no pause call. Model a pause in your own app (for example cancel, and
-  start again with a trial until the resume date) and test what it does to
-  `accessEndsAt`.
+- Pause with `subscriptions()->pause($id)`; resume with `resume($id, $nextChargeAt)`.
+  Pause clears `nextChargeAt` and keeps the card. Only `active` ⇄ `paused` is
+  allowed: pausing a trial is a 400 (move its date with
+  `update($id)->nextChargeAt()` instead), and a past resume date is a 400.
+  Persist the original billing boundary first and choose the resume date under
+  your application's entitlement rules. Only resume a confirmed `isPaused()`
+  subscription. Reconcile uncertain writes before retrying; a late replay can
+  restore an old date after a charge. Track existing debt separately because
+  paused subscriptions disappear from `needingAttention()`.
+  Captured in test 2026-10-01. No charge has yet been seen after a resume
+  (open with Plorea): verify the charge lands, and rely on
+  `needingAttention()` to flag it once overdue. Verify in-flight charges,
+  retries, future billing anchors, past_due pauses and combined updates before
+  rollout. For recovery tests, use stateful
+  stubs: the default fake does not persist subscription PATCH state to reads.
 - Proration is yours to compute. A one-off difference can be taken with a manual
   `charge($id, amount: ..., reason: ...)`; a declined manual charge throws
   `ChargeFailedException` (402).

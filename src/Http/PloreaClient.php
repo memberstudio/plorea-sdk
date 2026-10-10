@@ -44,6 +44,11 @@ final readonly class PloreaClient implements Client
         return $this->send('patch', $uri, $this->withPlatform($payload));
     }
 
+    public function delete(string $uri, array $payload = []): array
+    {
+        return $this->send('delete', $uri, $this->withPlatform($payload));
+    }
+
     /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>

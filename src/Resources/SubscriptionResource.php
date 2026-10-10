@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Resources;
 
+use DateTimeInterface;
 use Illuminate\Support\Collection;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
@@ -71,6 +72,34 @@ class SubscriptionResource extends Resource
     }
 
     /**
+     * Pause billing. Plorea clears nextChargeAt and its scheduler skips the
+     * subscription; the stored payment method and charge history are kept.
+     *
+     * Captured 2026-10-01 (test): only an active subscription can be paused.
+     * A trialing, canceled or already paused one is refused with 400
+     * (ValidationException), e.g. "Cannot change status from trialing to
+     * paused". To hold a trial, move its date with update()->nextChargeAt().
+     */
+    public function pause(string $subscriptionId): Subscription
+    {
+        return $this->update($subscriptionId)->pause()->save();
+    }
+
+    /**
+     * Resume a paused subscription with the caller's explicit billing date.
+     *
+     * Captured 2026-10-01 (test): the response echoes nextChargeAt exactly
+     * as sent. A date in the past is refused with 400 ("nextChargeAt cannot
+     * be in the past") and the subscription stays paused, so to bill now
+     * pass a moment a little ahead. Only a paused subscription can be
+     * resumed; anything else is refused with 400.
+     */
+    public function resume(string $subscriptionId, DateTimeInterface $nextChargeAt): Subscription
+    {
+        return $this->update($subscriptionId)->resumeAt($nextChargeAt)->save();
+    }
+
+    /**
      * Subscriptions matching an external reference (e.g. a workspace ID).
      *
      * The response is {externalId, count, items} with no cursor, page or
@@ -104,18 +133,18 @@ class SubscriptionResource extends Resource
      * Subscriptions for an external reference that look like they need a
      * human — the polling half of dunning.
      *
-     * A failed scheduler charge emits no webhook (confirmed by Plorea
-     * 2026-09-09), so the only way to notice one is to ask. Run this on a
-     * schedule for each of your billed entities.
+     * A failed scheduler charge does emit subscription.charge_failed
+     * (captured 2026-10-01), but a lost delivery is never redelivered and a
+     * stalled cycle emits nothing, so run this on a schedule for each of
+     * your billed entities as well.
      *
-     * A subscription is returned when it reports the payment_failed status,
-     * or when its nextChargeAt is more than $graceMinutes in the past. The
-     * second test is the one that carries the weight: payment_failed is
-     * modelled from Plorea's documentation and has never been observed,
-     * because no test card can store successfully and then decline, while an
-     * overdue nextChargeAt is derived from fields captured on the wire. If
-     * Plorea's failure shape turns out to differ from the documentation, the
-     * overdue check still fires.
+     * A subscription is returned when it reports past_due (a failed charge
+     * Plorea is retrying, captured from production 2026-10-01) or
+     * payment_failed (documented, never observed), or when its nextChargeAt
+     * is more than $graceMinutes in the past. The checks are independent: a
+     * past_due subscription has its nextChargeAt moved to the retry, so it is
+     * not overdue, and the overdue check catches a cycle that stalled without
+     * any failure status.
      *
      * This tells you which subscriptions to look at, not what went wrong.
      * Read charges() for that — a scheduler charge cannot be resolved
@@ -127,7 +156,7 @@ class SubscriptionResource extends Resource
      *
      *     if ($latest?->isAuthorised() !== true) {
      *         // Prompt for a new card. Do not branch on failureReason — it
-     *         // is null even for a genuine refusal.
+     *         // is the provider's free-text message, not a stable code.
      *     }
      * }
      * ```
@@ -140,7 +169,8 @@ class SubscriptionResource extends Resource
         int $graceMinutes = 60,
     ): Collection {
         return $this->forExternalId($externalId, $tenantId)
-            ->filter(fn (Subscription $subscription): bool => $subscription->hasPaymentFailure()
+            ->filter(fn (Subscription $subscription): bool => $subscription->isPastDue()
+                || $subscription->hasPaymentFailure()
                 || $subscription->isOverdue($graceMinutes))
             ->values();
     }
@@ -175,7 +205,8 @@ class SubscriptionResource extends Resource
      *
      * The response is {subscriptionId, items} — no count and no paging keys
      * of any kind, so a truncated history would be indistinguishable from a
-     * complete one. The longest capture holds two items. Treat a long-lived
+     * complete one. A subscription with a merchant adds merchantOrgNr to the
+     * envelope (not to the items); read it from find() instead. The longest capture holds two items. Treat a long-lived
      * monthly subscription's history as unverified territory.
      *
      * @return Collection<int, SubscriptionCharge>

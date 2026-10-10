@@ -20,7 +20,7 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 - `PLOREA_WEBHOOK_VERIFY` true/unset. `false` lets anyone post fake events.
 - Webhook path excluded from CSRF, or every delivery is a 419.
 - Listeners queued, deduplicating on `$event->eventId` (not the header), re-fetching state rather than trusting payloads.
-- A scheduled backstop polls open payments, pending card setups and `subscriptions()->needingAttention()` — card setup, cancel, reactivate and failed scheduler charges emit nothing.
+- A scheduled backstop polls open payments, pending card setups and `subscriptions()->needingAttention()` — card setup, cancel and reactivate emit nothing, and a lost `subscription.charge_failed` is never redelivered.
 
 ## Merchants
 - `merchantOrgNr` is always the invoice issuer's, never your own.

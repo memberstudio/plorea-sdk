@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MemberFlow\Plorea\Tests\Feature;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
@@ -12,6 +13,7 @@ use MemberFlow\Plorea\Enums\Channel;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\AuthenticationException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
+use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
 use MemberFlow\Plorea\Exceptions\ValidationException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -369,6 +371,95 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($method->consentAt);
     }
 
+    /**
+     * Captured 2026-10-06 in test. DELETE answers with a slim body, not the
+     * full payment method: no card, no recurring type, and the UK spelling
+     * `cancelled` where subscriptions say `canceled`.
+     */
+    public function test_it_parses_a_real_payment_method_delete_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-deleted')),
+        ]);
+
+        $cancellation = Plorea::paymentMethods()->delete('pm_test_golden_method');
+
+        $this->assertSame('pm_test_golden_method', $cancellation->paymentMethodId);
+        $this->assertTrue($cancellation->isCancelled());
+        $this->assertSame('cancelled', $cancellation->status);
+        $this->assertSame('active', $cancellation->previousStatus);
+        $this->assertFalse($cancellation->alreadyCancelled);
+        $this->assertSame('2026-10-06 09:49:58', $cancellation->cancelledAt?->utc()->format('Y-m-d H:i:s'));
+        $this->assertArrayNotHasKey('cardLast4', $cancellation->raw);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    }
+
+    /**
+     * Captured 2026-10-06 in test: deleting an already cancelled method is a
+     * 200, not an error, with `alreadyCancelled` and no `cancelledAt`.
+     */
+    public function test_it_parses_a_real_repeated_payment_method_delete_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-deleted-again')),
+        ]);
+
+        $cancellation = Plorea::paymentMethods()->delete('pm_test_golden_method');
+
+        $this->assertTrue($cancellation->isCancelled());
+        $this->assertTrue($cancellation->alreadyCancelled);
+        $this->assertNull($cancellation->previousStatus);
+        $this->assertNull($cancellation->cancelledAt);
+        $this->assertSame('2026-10-06 09:49:58', $cancellation->updatedAt?->utc()->format('Y-m-d H:i:s'));
+    }
+
+    /**
+     * Captured 2026-10-06 in test: a trialing subscription blocks the delete
+     * just like an active one, and the method stays active.
+     */
+    public function test_it_maps_a_real_payment_method_in_use_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method' => Http::response($this->fixture('payment-method-delete-in-use'), 400),
+        ]);
+
+        try {
+            Plorea::paymentMethods()->delete('pm_test_golden_method');
+            $this->fail('Expected PaymentMethodInUseException.');
+        } catch (PaymentMethodInUseException $caught) {
+            $this->assertInstanceOf(ValidationException::class, $caught);
+            $this->assertSame(400, $caught->status);
+            $this->assertSame(['sub_test_golden_trialing'], $caught->activeSubscriptionIds());
+            $this->assertSame([[
+                'subscriptionId' => 'sub_test_golden_trialing',
+                'status' => 'trialing',
+                'nextChargeAt' => '2026-10-13T09:49:57+00:00',
+                'title' => 'Golden membership',
+            ]], $caught->activeSubscriptions());
+        }
+    }
+
+    /**
+     * Captured 2026-10-06 in test: a deleted method is still readable, with
+     * its stored card id and card details intact. There is no `cancelledAt`
+     * on the read; `updatedAt` is the cancellation time.
+     */
+    public function test_it_parses_a_real_cancelled_payment_method_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_test_golden_method?*' => Http::response($this->fixture('payment-method-cancelled')),
+        ]);
+
+        $method = Plorea::paymentMethods()->find('pm_test_golden_method');
+
+        $this->assertTrue($method->isCancelled());
+        $this->assertFalse($method->isActive());
+        $this->assertSame('TESTSTORED000001', $method->storedPaymentMethodId);
+        $this->assertSame('1111', $method->cardLast4);
+        $this->assertArrayNotHasKey('cancelledAt', $method->raw);
+        $this->assertSame('2026-10-06 09:49:58', $method->updatedAt?->utc()->format('Y-m-d H:i:s'));
+    }
+
     public function test_it_parses_a_real_subscription_created_response(): void
     {
         Http::fake([
@@ -550,7 +641,8 @@ class GoldenFixturesTest extends TestCase
         // hasMore key either, so there is nothing in the response that would
         // reveal a truncated history. A capture from a subscription with a
         // long history is what would settle it; see the pagination note in
-        // docs/api-behaviour.md.
+        // docs/api-behaviour.md. This capture predates merchant routing; a
+        // subscription with a merchant adds merchantOrgNr to the envelope.
         $this->assertSame(['subscriptionId', 'items'], array_keys($this->fixture('subscription-charges')));
     }
 
@@ -704,6 +796,124 @@ class GoldenFixturesTest extends TestCase
         }
     }
 
+    /**
+     * Captured 2026-10-01 (test environment). Pausing an active subscription
+     * answers with the PATCH projection — no charge history fields — and
+     * clears nextChargeAt. A follow-up read shows the last charge is kept and
+     * accessEndsAt stays null: a pause is not a cancellation.
+     */
+    public function test_it_parses_a_real_pause_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden?*' => Http::response($this->fixture('subscription-paused-find')),
+            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-paused')),
+        ]);
+
+        $paused = Plorea::subscriptions()->pause('sub_test_golden');
+
+        $this->assertTrue($paused->isPaused());
+        $this->assertFalse($paused->isActive());
+        $this->assertNull($paused->nextChargeAt);
+        $this->assertArrayHasKey('nextChargeAt', $paused->raw);
+        $this->assertSame('pm_test_golden_method', $paused->paymentMethodId);
+        $this->assertNull($paused->lastChargeAt);
+        $this->assertArrayNotHasKey('lastChargeAt', $paused->raw);
+
+        $found = Plorea::subscriptions()->find('sub_test_golden');
+
+        $this->assertTrue($found->isPaused());
+        $this->assertNull($found->nextChargeAt);
+        $this->assertSame('2026-10-01 21:04:58', $found->lastChargeAt?->utc()->format('Y-m-d H:i:s'));
+        $this->assertNull($found->accessEndsAt);
+        $this->assertNull($found->canceledAt);
+        $this->assertArrayNotHasKey('pausedAt', $found->raw);
+        $this->assertFalse($found->isOverdue());
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === ['status' => 'paused', 'platform' => 'memberflow']);
+    }
+
+    /**
+     * Captured 2026-10-01 (test environment). Resuming answers with the
+     * subscription active and nextChargeAt exactly as sent.
+     */
+    public function test_it_parses_a_real_resume_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response($this->fixture('subscription-resumed')),
+        ]);
+
+        $resumed = Plorea::subscriptions()->resume('sub_test_golden', CarbonImmutable::parse('2026-10-01T23:10:40.684+02:00'));
+
+        $this->assertTrue($resumed->isActive());
+        $this->assertSame('2026-10-01T21:10:40.684Z', $resumed->raw['nextChargeAt']);
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === ['status' => 'active', 'nextChargeAt' => '2026-10-01T21:10:40.684Z', 'platform' => 'memberflow']);
+    }
+
+    public function test_it_maps_a_real_pause_on_a_trialing_subscription_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_trial' => Http::response(
+                $this->fixture('subscription-pause-trialing-refused'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-10-01. Only active -> paused and paused -> active are
+        // allowed; a trialing (or canceled) subscription answers with an
+        // empty allowedTransitions list.
+        try {
+            Plorea::subscriptions()->pause('sub_test_golden_trial');
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('Cannot change status from trialing to paused', $caught->getMessage());
+            $this->assertSame('trialing', $caught->response?->json('currentStatus'));
+            $this->assertSame([], $caught->response?->json('allowedTransitions'));
+        }
+    }
+
+    public function test_it_maps_a_real_resume_with_a_past_date_to_a_validation_error(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden' => Http::response(
+                $this->fixture('subscription-resume-past-date'),
+                400,
+            ),
+        ]);
+
+        // Captured 2026-10-01. A past nextChargeAt is refused rather than
+        // charged at once, and the subscription stays paused.
+        try {
+            Plorea::subscriptions()->resume('sub_test_golden', CarbonImmutable::parse('2026-10-01T21:00:04.842Z'));
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertSame('nextChargeAt cannot be in the past', $caught->getMessage());
+            $this->assertSame(400, $caught->status);
+        }
+    }
+
+    /**
+     * Captured 2026-10-01 (test environment). Moving the date on a trialing
+     * subscription moves nextChargeAt only: trialEndsAt keeps its value, so
+     * the two no longer match.
+     */
+    public function test_it_parses_a_real_next_charge_move_on_a_trialing_subscription(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_trial' => Http::response($this->fixture('subscription-next-charge-moved-trialing')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->update('sub_test_golden_trial')
+            ->nextChargeAt(CarbonImmutable::parse('2026-10-21T21:04:20.684Z'))
+            ->save();
+
+        $this->assertTrue($subscription->isTrialing());
+        $this->assertSame('2026-10-21 21:04:20', $subscription->nextChargeAt?->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-08 21:04:19', $subscription->trialEndsAt?->utc()->format('Y-m-d H:i:s'));
+    }
+
     public function test_it_maps_a_real_reactivate_on_active_subscription_to_a_validation_error(): void
     {
         Http::fake([
@@ -826,6 +1036,39 @@ class GoldenFixturesTest extends TestCase
         $this->assertTrue($subscription->isTrialing());
     }
 
+    /**
+     * Captured 2026-09-22 from a trial subscription created with a merchant:
+     * reads now carry the organisation number that on 2026-09-21 only the
+     * create response returned.
+     */
+    public function test_reads_return_the_merchant_organisation_number(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_merchant/charges*' => Http::response($this->fixture('subscription-charges-merchant')),
+            'payments.plorea.no/subscriptions/sub_test_golden_merchant*' => Http::response($this->fixture('subscription-merchant')),
+            'payments.plorea.no/subscriptions?externalId=GOLDEN-EXT-MERCHANT-002*' => Http::response($this->fixture('subscription-list-merchant')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->find('sub_test_golden_merchant');
+
+        $this->assertSame('999999999', $subscription->merchantOrgNr);
+        $this->assertArrayNotHasKey('merchantName', $subscription->raw);
+        $this->assertArrayNotHasKey('merchantEmail', $subscription->raw);
+
+        $listed = Plorea::subscriptions()->forExternalId('GOLDEN-EXT-MERCHANT-002');
+
+        $this->assertSame('999999999', $listed->first()?->merchantOrgNr);
+
+        // The charge history carries it once, on the envelope rather than on
+        // each item, and charges() returns only the items — read it from the
+        // subscription instead.
+        $this->assertSame(
+            ['subscriptionId', 'merchantOrgNr', 'items'],
+            array_keys($this->fixture('subscription-charges-merchant')),
+        );
+        $this->assertCount(0, Plorea::subscriptions()->charges('sub_test_golden_merchant'));
+    }
+
     public function test_it_parses_a_real_trialing_subscription_response(): void
     {
         Http::fake([
@@ -842,6 +1085,36 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($subscription->lastPaymentReference);
         $this->assertNull($subscription->accessEndsAt);
         $this->assertSame(0, $subscription->retryCount);
+    }
+
+    /**
+     * Captured 2026-10-01 from production: a monthly subscription whose first
+     * scheduled charge failed. Plorea reports past_due, counts the failure in
+     * retryCount, and moves nextChargeAt to the retry one day later.
+     */
+    public function test_it_parses_a_real_past_due_subscription_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_test_golden_past_due?*' => Http::response($this->fixture('subscription-past-due')),
+        ]);
+
+        $subscription = Plorea::subscriptions()->find('sub_test_golden_past_due');
+
+        $this->assertTrue($subscription->isPastDue());
+        $this->assertFalse($subscription->isActive());
+        $this->assertFalse($subscription->isCanceled());
+        $this->assertFalse($subscription->hasPaymentFailure());
+
+        $this->assertSame(1, $subscription->retryCount);
+        $this->assertSame('PaymentDetail not found', $subscription->failureReason);
+        $this->assertNull($subscription->lastChargeAt);
+        $this->assertNotNull($subscription->lastPaymentReference);
+        $this->assertNotNull($subscription->customerId);
+
+        // nextChargeAt is the retry, so the subscription is not overdue —
+        // only the status says something went wrong.
+        $this->assertSame('2026-10-02 12:44:58', $subscription->nextChargeAt?->format('Y-m-d H:i:s'));
+        $this->assertFalse($subscription->isOverdue(now: CarbonImmutable::parse('2026-10-01T16:00:00Z')));
     }
 
     public function test_a_canceled_trial_has_no_access_end_date(): void

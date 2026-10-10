@@ -327,13 +327,42 @@ Branch on `status` alone.
 A request missing two required fields answers with a list of **all five**.
 Never parse a Plorea validation message.
 
+### ✅ Delete — captured 2026-10-06 (test)
+
+`DELETE payment-methods/{id}` moves the method to `cancelled` (UK spelling;
+subscriptions say `canceled`). Fixtures `payment-method-deleted.json`,
+`payment-method-deleted-again.json`, `payment-method-delete-in-use.json`,
+`payment-method-cancelled.json`.
+
+- **200:** `{paymentMethodId, tenantId, customerId, shopperReference,
+  environment, status: "cancelled", previousStatus, cancelledAt, updatedAt}`.
+  A slim body: no card details and no recurring type.
+- **Repeat:** 200 `{paymentMethodId, tenantId, status, alreadyCancelled: true,
+  updatedAt}`. No `previousStatus`, no `cancelledAt`.
+- **In use:** 400 `{error, paymentMethodId, activeSubscriptionIds,
+  activeSubscriptions: [{subscriptionId, status, nextChargeAt, title}]}`. A
+  `trialing` subscription blocks it too, and the method stays `active`.
+- **Unknown id:** 404 `"Payment method not found"`.
+- **Read after delete:** the full method, `status: "cancelled"`,
+  `storedPaymentMethodId` and card details unchanged, no `cancelledAt` key.
+- **Subscription on a cancelled method:** 400 `"Payment method is not active"`.
+- **A sibling sharing the stored card** (same shopper, same
+  `storedPaymentMethodId`) still reads `active` and **can still be charged**:
+  a manual charge on a new subscription on the sibling was `Authorised`
+  (test, 2026-10-06, after the delete). Production is unobserved.
+
+Until 2026-10-05 the route was missing in API Gateway: every DELETE answered a
+bare 404 `{"message":"Not Found"}`, the same as a non-existent path. That body
+means "route missing", not "method missing".
+
 ---
 
 ## Subscriptions
 
-### ✅ Statuses: `active`, `trialing`, `canceled` — 2026-09-04 / 2026-09-07
+### ✅ Statuses: `active`, `trialing`, `canceled` — 2026-09-04 / 2026-09-07; `past_due`, `paused` — 2026-10-01
 
-US spelling. `trialing` is a distinct fourth state, not a flavour of active.
+US spelling. `trialing` is a distinct state, not a flavour of active. `past_due`
+is what a failed scheduled charge produces — see below.
 
 ### ✅ Billing starts immediately
 
@@ -357,9 +386,20 @@ create response echoes nothing. An organisation number that is not nine digits
 returns `400` — "Invalid merchantOrgNr — must be 9 digits". The first scheduled
 charge on such a subscription authorised normally.
 
-`GET subscriptions/{id}`, `GET subscriptions` and the items from
-`GET subscriptions/{id}/charges` do **not** return the field. Keep your own
-record of which company a subscription bills for.
+On that date, `GET subscriptions/{id}`, `GET subscriptions` and the items from
+`GET subscriptions/{id}/charges` did **not** return the field. That changed the
+next day — see below.
+
+### ✅ `merchantOrgNr` on subscription reads — 2026-09-22
+
+Plorea added the field to reads. Captured on a trial subscription created with
+a merchant: `GET subscriptions/{id}` returns `merchantOrgNr`
+(`subscription-merchant.json`), and so does each item of `GET subscriptions`
+(`subscription-list-merchant.json`). `GET subscriptions/{id}/charges` carries
+it once, on the envelope — `{subscriptionId, merchantOrgNr, items}` — not on
+each charge (`subscription-charges-merchant.json`). A subscription created
+without a merchant returns the key as `null`. The name and email are still not
+returned anywhere.
 
 ### 📋 What `merchantOrgNr` does on a subscription — Plorea, 2026-09-21
 
@@ -383,6 +423,70 @@ way.
 `resultCode`. History items from `charges()` report the settled
 `status: "authorised"` with `reason: "manual_charge" | "scheduled_charge"`.
 A charge's payment reference is `{subscriptionId}-{chargeId}`.
+
+### ✅ A failed scheduled charge: `past_due` — captured 2026-10-01 (production)
+
+Seen on a live monthly subscription whose first scheduled charge failed
+because the stored card could not be found by the provider. The subscription
+read back:
+
+- `status: "past_due"`, `retryCount: 1`;
+- `failureReason` populated with the provider's message (`"PaymentDetail not found"`);
+- `lastChargeAt` unchanged (null, as nothing had ever succeeded) and
+  `lastPaymentReference` set to the failed charge's `{subscriptionId}-{chargeId}`;
+- `nextChargeAt` moved to the failure time plus `retryPolicy.retryIntervalDays`
+  (one day with the default `{maxRetries: 3, retryIntervalDays: 1}`);
+- `customerId` populated — the first time it was seen non-null.
+
+The `charges()` item reported `status: "failed"`, `reason: "scheduled_charge"`,
+`retryNumber: 0` and the same `failureReason`. No webhook was sent.
+
+Because `nextChargeAt` moves forward, a `past_due` subscription is **not**
+overdue — `needingAttention()` checks the status as well. What happens after the
+last retry (a terminal status, or `canceled`) is not yet observed.
+
+Fixture: `subscription-past-due.json`.
+
+### ✅ Pause and resume — captured 2026-10-01 (test)
+
+Recommended by Plorea on 2026-10-01: `PATCH subscriptions/{id}` with
+`{"status": "paused"}`, and `{"status": "active", "nextChargeAt": "..."}` to
+resume. Probed the same evening on fresh 1 NOK monthly subscriptions:
+
+| Request | Result |
+| --- | --- |
+| pause an `active` subscription | 200, `status: "paused"`, `nextChargeAt: null` |
+| read it back | `lastChargeAt`, card and amounts kept; `accessEndsAt`, `canceledAt` null; no `pausedAt` key |
+| pause a `trialing` one | 400 "Cannot change status from trialing to paused", `allowedTransitions: []` |
+| pause a `paused` one | 400, `allowedTransitions: ["active"]` |
+| pause a `canceled` one | 400, `allowedTransitions: []` |
+| `status: "frozen"` | 400 "status can only be set to active or paused" |
+| `nextChargeAt` alone on a `paused` one | 200, still `paused`, date set |
+| `nextChargeAt` alone on a `trialing` one | 200, still `trialing`; `trialEndsAt` unchanged |
+| resume with no date (none set) | 400 "nextChargeAt is required when reactivating a paused subscription" |
+| resume with no date (one set while paused) | 200, `active`, keeps that date |
+| resume with a past date | 400 "nextChargeAt cannot be in the past"; stays `paused` |
+| resume with a future date | 200, `active`, `nextChargeAt` exactly as sent |
+| resume an `active` one | 400, `allowedTransitions: ["paused"]` |
+
+Both PATCH responses are the short update projection (no charge history
+fields). A paused subscription is returned by the list endpoint, with and
+without a `status=paused` filter.
+
+**❓ Open: no charge was seen after resume.** Three subscriptions, each with
+one settled charge, were paused and resumed with `nextChargeAt` two minutes
+ahead. None was charged — checked 3, 16 and 41 minutes after the date — and
+each stayed `active` with the lapsed date. Reactivate lag was 7 s to 4.5 min,
+so this is longer than any scheduler delay seen before. Raised with Plorea
+2026-10-01. `isOverdue()` reports this state after the grace period.
+
+Unobserved: whether a webhook fires on pause or resume (the catalogue says
+nothing does), and production.
+
+Fixtures: `subscription-paused.json`, `subscription-paused-find.json`,
+`subscription-resumed.json`, `subscription-pause-trialing-refused.json`,
+`subscription-resume-past-date.json`,
+`subscription-next-charge-moved-trialing.json`.
 
 ### ✅ Not-chargeable returns 400, not 402 — 2026-09-04
 
@@ -534,10 +638,22 @@ payment above.
 
 Fixture: `webhook-payment-failed.json`.
 
-### 📋 Nothing is emitted for setup, cancel, reactivate, or a failed charge
+### 📋 Nothing is emitted for setup, cancel or reactivate
 
-Confirmed by Plorea 2026-09-09. These transitions are poll-only. A failed
-recurring charge never announces itself.
+Confirmed by Plorea 2026-09-09. These transitions are poll-only. Plorea said
+the same of a failed scheduler charge, but see below.
+
+### ✅ `subscription.charge_failed` — captured 2026-10-01 and 2026-10-06 (test)
+
+Three deliveries, identical shape: `data: {subscriptionId, chargeId,
+reference, customerId, shopperReference, externalId, amount: {value,
+currency}, failureReason, retryCount, environment}`. No `pspReference`, no
+`nextChargeAt`. All three were `"PaymentDetail not found"` with `retryCount:
+1` — the stored card behind the method was gone. Not in Plorea's catalogue.
+
+Unobserved: one per retry or only the first, the last retry, and a real
+decline. Deliveries are never redelivered, so keep polling.
+Fixture: `webhook-subscription-charge-failed.json`.
 
 ### ✅ Signature verification proven end to end — 2026-09-09
 
@@ -576,8 +692,11 @@ break verification while the payload still looks valid.
 independently. The reasoning below is why, so you do not have to repeat it.
 
 The blocked shapes are: the 402 `ChargeFailedException` body, a
-`payment_failed` subscription, a populated `failureReason` or non-zero
-`retryCount`, and any `subscription.charge_failed` webhook.
+`payment_failed` subscription and the state after the last retry. The
+`subscription.charge_failed` webhook was captured from a method whose card was
+gone (see above), not from a decline. A failed scheduled charge itself —
+`past_due`, a populated `failureReason`, a non-zero `retryCount` — was captured
+in production on 2026-10-01 (see above); it still cannot be produced in test.
 
 Why it cannot be done:
 
@@ -608,7 +727,7 @@ successfully and declines on a later charge, or by exposing
 `POST subscriptions/{id}/charge`. Both have been requested.
 
 Consequently: the fake's 402 stub and the `payment_failed` status are modelled
-from Plorea's documentation, not from an observation. Write dunning code that
+from Plorea's documentation, not from an observation; `past_due` is observed. Write dunning code that
 tolerates a shape slightly different from what the SDK models — branch on
 `status`, and do not require `failureReason` to be present.
 

@@ -7,7 +7,10 @@ namespace MemberFlow\Plorea\Tests\Feature;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Enums\RecurringType;
+use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
+use MemberFlow\Plorea\Exceptions\ValidationException;
 use MemberFlow\Plorea\Facades\Plorea;
+use MemberFlow\Plorea\Testing\RecordedRequest;
 use MemberFlow\Plorea\Tests\TestCase;
 
 class PaymentMethodResourceTest extends TestCase
@@ -72,6 +75,84 @@ class PaymentMethodResourceTest extends TestCase
             && $request->data()['doneId'] === 'done_usr_1');
     }
 
+    public function test_it_sends_the_merchant_on_a_drop_in_session(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'sessionId' => 'CS123',
+                'sessionData' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->merchant('999999999', 'Example Gym AS')
+            ->session();
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup/session'
+            && $request->data()['merchantOrgNr'] === '999999999'
+            && $request->data()['merchantName'] === 'Example Gym AS');
+    }
+
+    public function test_a_drop_in_session_merchant_without_a_name_sends_no_name(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'sessionId' => 'CS123',
+                'sessionData' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->merchant('999999999')
+            ->session();
+
+        Http::assertSent(fn (Request $request): bool => $request->data()['merchantOrgNr'] === '999999999'
+            && ! array_key_exists('merchantName', $request->data()));
+    }
+
+    public function test_the_hosted_setup_sends_the_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->merchant('999999999', 'Example Gym AS')
+            ->create();
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/payment-methods/setup'
+            && $request->data()['merchantOrgNr'] === '999999999'
+            && $request->data()['merchantName'] === 'Example Gym AS');
+    }
+
+    public function test_a_drop_in_session_without_a_merchant_sends_no_merchant(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/setup/session' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'sessionId' => 'CS123',
+                'sessionData' => 'AbData',
+                'status' => 'pending_setup',
+            ], 201),
+        ]);
+
+        Plorea::paymentMethods()
+            ->setup('customer-1', RecurringType::Subscription, 'https://app.test/return')
+            ->session();
+
+        Http::assertSent(fn (Request $request): bool => ! array_key_exists('merchantOrgNr', $request->data()));
+    }
+
     public function test_it_finds_a_payment_method(): void
     {
         Http::fake([
@@ -88,5 +169,69 @@ class PaymentMethodResourceTest extends TestCase
 
         $this->assertTrue($method->isActive());
         $this->assertSame('0004', $method->cardLast4);
+    }
+
+    public function test_it_deletes_a_payment_method(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_123' => Http::response([
+                'paymentMethodId' => 'pm_123',
+                'status' => 'cancelled',
+                'previousStatus' => 'active',
+                'cancelledAt' => '2026-10-06T09:49:58.709Z',
+            ]),
+        ]);
+
+        $cancellation = Plorea::paymentMethods()->delete('pm_123');
+
+        $this->assertTrue($cancellation->isCancelled());
+        $this->assertSame('active', $cancellation->previousStatus);
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+            && $request->url() === 'https://payments.plorea.no/payment-methods/pm_123'
+            && $request->data() === ['platform' => 'memberflow']);
+    }
+
+    public function test_a_plain_bad_request_is_not_mistaken_for_a_method_in_use(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_123' => Http::response(['error' => 'Invalid payment method id'], 400),
+        ]);
+
+        try {
+            Plorea::paymentMethods()->delete('pm_123');
+            $this->fail('Expected ValidationException.');
+        } catch (ValidationException $caught) {
+            $this->assertNotInstanceOf(PaymentMethodInUseException::class, $caught);
+        }
+    }
+
+    public function test_the_fake_cancels_and_then_reports_already_cancelled(): void
+    {
+        Plorea::fake();
+
+        $first = Plorea::paymentMethods()->delete('pm_123');
+        $again = Plorea::paymentMethods()->delete('pm_123');
+        $read = Plorea::paymentMethods()->find('pm_123');
+
+        $this->assertFalse($first->alreadyCancelled);
+        $this->assertSame('active', $first->previousStatus);
+        $this->assertTrue($again->alreadyCancelled);
+        $this->assertNull($again->cancelledAt);
+        $this->assertTrue($read->isCancelled());
+        $this->assertTrue(Plorea::paymentMethods()->find('pm_other')->isActive());
+        Plorea::assertSent(fn (RecordedRequest $request): bool => $request->matches('DELETE payment-methods/pm_123'));
+    }
+
+    public function test_a_failed_fake_delete_does_not_cancel_the_method(): void
+    {
+        Plorea::fake(['DELETE payment-methods/*' => new ValidationException('Payment method is attached to active subscriptions', 400)]);
+
+        try {
+            Plorea::paymentMethods()->delete('pm_123');
+        } catch (ValidationException) {
+        }
+
+        $this->assertTrue(Plorea::paymentMethods()->find('pm_123')->isActive());
     }
 }

@@ -2,6 +2,120 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## v0.3.11 - 2026-10-07
+
+### Added
+
+- `Events\SubscriptionChargeFailed` for the `subscription.charge_failed`
+  webhook: `subscriptionId`, `chargeId`, `reference`, `externalId`,
+  `failureReason`, `retryCount`, `payload`, `eventId`, `type`. It does not
+  also raise `PaymentStatusUpdated`.
+
+Plorea had said a failed scheduler charge emits nothing, and the type is not in
+their catalogue, but three deliveries were captured in the test environment on
+2026-10-01 and 2026-10-06 (`failureReason` "PaymentDetail not found",
+`retryCount` 1), with a golden fixture. Keep polling `needingAttention()`:
+deliveries are never redelivered.
+
+## v0.3.10 - 2026-10-06
+
+### Added
+
+- `Plorea::paymentMethods()->delete($id)` cancels a stored payment method and
+  returns a `PaymentMethodCancellation` (`status`, `previousStatus`,
+  `alreadyCancelled`, `cancelledAt`). A repeat call succeeds with
+  `alreadyCancelled`.
+- `PaymentMethodInUseException` (extends `ValidationException`) when
+  subscriptions, trialing ones included, still use the method;
+  `activeSubscriptionIds()` and `activeSubscriptions()` list them.
+- `PaymentMethod::isCancelled()`.
+- `Client::delete()`. **Custom `Client` implementations must add it.**
+- The fake answers `DELETE payment-methods/{id}`, and reads the method back
+  as `cancelled` afterwards.
+
+Captured in the test environment 2026-10-06, with golden fixtures.
+
+## v0.3.9 - 2026-10-02
+
+### Added
+
+- Native subscription `pause()` and `resume($id, $nextChargeAt)`, plus fluent
+  `pause()` / `resumeAt()` / `nextChargeAt()` updates. Dates are sent in UTC.
+- `Subscription::isPaused()`; intentional pauses are excluded from overdue checks
+  and `needingAttention()`. Existing debt must remain tracked by the application.
+
+Captured in the test environment 2026-10-01, with golden fixtures. A charge
+after resume has not yet been observed; see `docs/api-behaviour.md`.
+
+## v0.3.8 - 2026-10-01
+
+### Added
+
+- **`Subscription::isPastDue()`** for the `past_due` status, captured from
+  production: a failed scheduled charge turns the subscription `past_due`,
+  sets `retryCount` and `failureReason`, and moves `nextChargeAt` to the retry.
+
+### Changed
+
+- **`subscriptions()->needingAttention()` now also returns `past_due`
+  subscriptions.** Before, it missed them: their `nextChargeAt` is the retry,
+  so they are never overdue.
+
+## v0.3.7 - 2026-09-30
+
+### Changed
+
+- **`paymentMethods()->setup(...)->merchant($orgNr, $name)` is now also sent
+  by the hosted `create()`**, not only by the Drop-in session, as Plorea
+  confirmed the hosted endpoint accepts it. Calls without `merchant()` send
+  nothing new.
+
+## v0.3.6 - 2026-09-30
+
+### Added
+
+- **`paymentMethods()->setup(...)->merchant($orgNr, $name)`** now also sends
+  `merchantName` on the Drop-in card setup session, as Plorea asked. The name
+  is optional; `merchant($orgNr)` keeps working unchanged.
+
+## v0.3.5 - 2026-09-29
+
+### Added
+
+- **`paymentMethods()->setup(...)->merchant($orgNr)`** sends `merchantOrgNr`
+  on the Drop-in card setup session, so the 3D Secure challenge shows the
+  company the card is saved for instead of the platform. The hosted `create()`
+  flow does not send it. Nothing breaks: without `merchant()`, nothing new is
+  sent.
+
+## v0.3.4 - 2026-09-28
+
+### Fixed
+
+- **The fake now sends `merchantOrgNr: null`** on reads of a subscription
+  created without a merchant, instead of leaving the key out, matching the API
+  since 2026-09-22.
+- **The Boost guideline no longer says reads omit `merchantOrgNr`.** It has
+  been returned by `find()` and the list since v0.3.3.
+
+## v0.3.3 - 2026-09-22
+
+Plorea now returns `merchantOrgNr` when a subscription is read, verified
+against the test environment the day it shipped. No code change was needed to
+read it: `Subscription::$merchantOrgNr` was already hydrated from any
+response. Nothing breaks.
+
+### Changed
+
+- **`find()` and `forExternalId()` now carry `Subscription::$merchantOrgNr`**
+  for a subscription created with a merchant. The charge history carries it on
+  its envelope only; `charges()` still returns just the items.
+- **`Plorea::fake()` echoes the organisation number on reads** of a
+  subscription it created with one, as the API does. A test that asserted
+  null on a read after `->merchant()` will now see the number.
+- Docs, rules and the subscriptions skill describe the new read behaviour.
+  Storing the organisation number on your own record is still recommended.
+
 ## v0.3.2 - 2026-09-21
 
 Subscriptions can name the company that receives the money, verified against

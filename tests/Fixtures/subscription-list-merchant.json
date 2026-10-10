@@ -1,0 +1,33 @@
+{
+    "externalId": "GOLDEN-EXT-MERCHANT-002",
+    "count": 1,
+    "items": [
+        {
+            "subscriptionId": "sub_test_golden_merchant",
+            "tenantId": "test-tenant",
+            "customerId": null,
+            "paymentMethodId": "pm_test_golden_method",
+            "recurringType": "Subscription",
+            "amount": {
+                "value": 1000,
+                "currency": "NOK"
+            },
+            "quantity": null,
+            "interval": {
+                "unit": "month",
+                "count": 1
+            },
+            "trialEndsAt": "2026-10-12T21:51:37+00:00",
+            "nextChargeAt": "2026-10-12T21:51:37+00:00",
+            "status": "trialing",
+            "externalId": "GOLDEN-EXT-MERCHANT-002",
+            "title": "Golden fixture merchant plan",
+            "description": null,
+            "merchantOrgNr": "999999999",
+            "canceledAt": null,
+            "cancelReason": null,
+            "createdAt": "2026-09-22T21:51:38.973Z",
+            "updatedAt": "2026-09-22T21:51:38.973Z"
+        }
+    ]
+}

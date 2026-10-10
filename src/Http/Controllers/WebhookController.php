@@ -8,6 +8,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
+use MemberFlow\Plorea\Events\SubscriptionChargeFailed;
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 use MemberFlow\Plorea\Events\WebhookReceived;
 
@@ -27,14 +28,15 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * "payment.authorised", "payment.failed" and
  * "subscription.charge_succeeded" have been captured from the wire; only
  * "payment.refunded" is still routed on the shared envelope rather than a
- * captured body.
+ * captured body. "subscription.charge_failed" is outside that catalogue
+ * but was captured 2026-10-01 and 2026-10-06, and raises
+ * SubscriptionChargeFailed.
  *
- * Nothing is emitted for card setup, cancel, reactivate, or a *failed*
- * scheduler charge — those transitions are poll-only, via
- * paymentMethods()->find(), subscriptions()->find() and
- * payments()->status(). Every delivery also dispatches the catch-all
- * WebhookReceived, which is how consumers handle types this controller
- * does not know about.
+ * Nothing is emitted for card setup, cancel or reactivate — those
+ * transitions are poll-only, via paymentMethods()->find(),
+ * subscriptions()->find() and payments()->status(). Every delivery also
+ * dispatches the catch-all WebhookReceived, which is how consumers handle
+ * types this controller does not know about.
  *
  * Every event carries the delivery's eventId and type, read from the
  * *body*. Plorea duplicates both in the x-plorea-event-id and x-plorea-event
@@ -91,8 +93,8 @@ class WebhookController
      * 2026-09-04 and 404 "Payment not found" when retested against a fresh
      * authorised charge on 2026-09-09. Manual charges do resolve there.
      *
-     * "subscription.charge_succeeded" is the only subscription type in
-     * Plorea's catalogue, so any other subscription type reaches consumers
+     * Only "subscription.charge_succeeded" and "subscription.charge_failed"
+     * have been captured, so any other subscription type reaches consumers
      * through WebhookReceived alone rather than through an event built on
      * a guessed shape.
      *
@@ -100,7 +102,7 @@ class WebhookController
      */
     protected function dispatchSubscriptionEvent(string $type, array $payload, ?string $eventId): void
     {
-        if ($type !== 'subscription.charge_succeeded') {
+        if ($type !== 'subscription.charge_succeeded' && $type !== 'subscription.charge_failed') {
             return;
         }
 
@@ -112,11 +114,33 @@ class WebhookController
             return;
         }
 
+        $chargeId = $this->stringOrNull($data['chargeId'] ?? null);
+        $reference = $this->stringOrNull($data['reference'] ?? null);
+        $externalId = $this->stringOrNull($data['externalId'] ?? null);
+
+        if ($type === 'subscription.charge_failed') {
+            $retryCount = $data['retryCount'] ?? null;
+
+            $this->events->dispatch(new SubscriptionChargeFailed(
+                $subscriptionId,
+                $chargeId,
+                $reference,
+                $externalId,
+                $this->stringOrNull($data['failureReason'] ?? null),
+                is_int($retryCount) ? $retryCount : null,
+                $payload,
+                $eventId,
+                $type,
+            ));
+
+            return;
+        }
+
         $this->events->dispatch(new SubscriptionChargeSucceeded(
             $subscriptionId,
-            $this->stringOrNull($data['chargeId'] ?? null),
-            $this->stringOrNull($data['reference'] ?? null),
-            $this->stringOrNull($data['externalId'] ?? null),
+            $chargeId,
+            $reference,
+            $externalId,
             $payload,
             $eventId,
             $type,
