@@ -107,6 +107,12 @@ Cancelling during a trial returns **`accessEndsAt: null`** — it is derived fro
 the last charge, and there is none. Treat null as "access ends now", not
 "never ends".
 
+Trial end is charged — VERIFIED 2026-10-11 (test), but ~22 min late: the
+scheduler first pushed `nextChargeAt` +17 min with no charge and no
+`failureReason`, then charged. The new `nextChargeAt` is the pushed time + 1
+interval, so the anchor drifts by the delay. Read `nextChargeAt` back; never
+compute the next period from `trialEndsAt`.
+
 `CardOnFile` / `UnscheduledCardOnFile` are echoed back verbatim on setup.
 
 ## `reactivate()` no longer double-bills — FIXED by Plorea, verified 2026-09-09
@@ -203,6 +209,11 @@ Those shapes are modelled from documentation, not observed — write dunning cod
 that tolerates a slightly different shape. The first failure itself (`past_due`,
 `retryCount`, `failureReason`) was CAPTURED in production 2026-10-01; it still
 cannot be produced in test.
+
+**The test-key list shows live subscriptions** (no environment filter, seen
+2026-10-11), including live `payment_failed` ones. Check the payment method's
+`environment` before any write in an experiment. `payment_failed` recovery
+(PATCH amount/date, `resume`) is still UNOBSERVED in test.
 
 ## Native pause — CAPTURED 2026-10-01 (test)
 
