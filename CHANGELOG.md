@@ -32,6 +32,11 @@ No behaviour changes. Docs, rules and docblocks record field findings from
 - `paymentMethods()->delete()` does not deactivate the stored card at Adyen
   today (per Plorea). Once Plorea changes that, deleting one of two methods
   sharing a `storedPaymentMethodId` may break the other.
+- Trial end is charged in test, about 22 minutes late (2026-10-11). The
+  scheduler first moved `nextChargeAt` 17 minutes forward without a charge,
+  and the next period follows the delay. Read `nextChargeAt` back.
+- The subscription list with the test key also returns live subscriptions.
+  Check the payment method's `environment` before a write in an experiment.
 
 ### Changed
 
