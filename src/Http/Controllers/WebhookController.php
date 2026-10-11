@@ -29,8 +29,11 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * "subscription.charge_succeeded" have been captured from the wire; only
  * "payment.refunded" is still routed on the shared envelope rather than a
  * captured body. "subscription.charge_failed" is outside that catalogue
- * but was captured 2026-10-01 and 2026-10-06, and raises
- * SubscriptionChargeFailed.
+ * but has been observed since 2026-10-01, and raises
+ * SubscriptionChargeFailed. Live subscription.* deliveries arrived at
+ * the test URL labelled environment "test" until 2026-10-09 (observed
+ * 2026-10-08; Plorea states it is fixed). Do not add an environment
+ * filter here: it would drop them if the routing regresses.
  *
  * Nothing is emitted for card setup, cancel or reactivate — those
  * transitions are poll-only, via paymentMethods()->find(),

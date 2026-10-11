@@ -98,7 +98,7 @@ sequenceDiagram
       </dl>
 
       <h2>Event catalogue</h2>
-      <p>Plorea confirmed four event types. More are planned, so accept and log types you do not know. <span class="badge stated">Stated by Plorea</span> A fifth type, <code>subscription.charge_failed</code>, is not in Plorea's catalogue but was captured in test. <span class="badge verified">Verified</span></p>
+      <p>Plorea confirmed four event types. More are planned, so accept and log types you do not know. <span class="badge stated">Stated by Plorea</span> A fifth type, <code>subscription.charge_failed</code>, is not in Plorea's catalogue but is delivered. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Sent when</th><th>Evidence</th></tr></thead>
@@ -242,8 +242,9 @@ sequenceDiagram
   }
 }</code></pre>
       <ul>
-        <li>Plorea had said a failed scheduler charge sends nothing. Three deliveries were captured in test anyway, all with the same shape. <span class="badge verified">Verified</span></li>
-        <li>All three had <code>"PaymentDetail not found"</code> and <code>retryCount: 1</code>: the stored card behind the method was gone. A real card decline is not observed. <span class="badge unobserved">Unobserved</span></li>
+        <li>Plorea had said a failed scheduler charge sends nothing. Deliveries arrived anyway, from 2026-10-01 to 2026-10-08, all with the same shape. One arrives per failed attempt, the last one included (<code>retryCount</code> 1, 2, 3). <span class="badge verified">Verified</span></li>
+        <li>These were production charges, but Plorea delivered them to the test URL with <code>environment: "test"</code> (2026-10-08). Plorea states that the routing is fixed since 2026-10-09. <span class="badge stated">Stated by Plorea</span> We have not verified the fix. Do not filter <code>subscription.*</code> deliveries on <code>environment</code>, and keep polling. <span class="badge open">Open question</span></li>
+        <li>All had <code>"PaymentDetail not found"</code>. Plorea's scheduler had charged production subscriptions against Adyen's test environment, where the cards do not exist. Plorea fixed this on 2026-10-09. It was an incident, not a card problem. A real card decline is not observed. <span class="badge unobserved">Unobserved</span></li>
         <li>Whether each retry sends one, and whether the last retry sends one, is not observed. <span class="badge unobserved">Unobserved</span></li>
         <li><code>failureReason</code> is the provider's free text. Show it. Never branch on it.</li>
         <li>Read the retry date from <code>GET /subscriptions/{id}</code>. The payload does not carry it.</li>

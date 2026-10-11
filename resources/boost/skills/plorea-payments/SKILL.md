@@ -169,7 +169,7 @@ well:
 
 ```php
 foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
-    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+    $latest = Plorea::subscriptions()->charges($subscription->id)->sortByDesc('createdAt')->first();
 
     if ($latest?->isAuthorised() !== true) {
         // prompt for a new card — do not branch on failureReason, it is

@@ -2,6 +2,42 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Docs
+
+No behaviour changes. Docs, rules and docblocks record field findings from
+2026-10-06 to 2026-10-09, not covered by v0.4.0:
+
+- `PaymentStatus::isPaid()` means "authorised by Adyen". `authorised` is the
+  only success status ever observed; `paid` never has been. Capture is not
+  observable through the API.
+- A partial or full refund on an `authorised` payment stays a refund, not a
+  cancel (test, 2026-10-09). `refund_requested` means accepted, not settled.
+- Live `subscription.*` webhooks arrived at the test URL, labelled
+  `environment: "test"`, until 2026-10-09. The `subscription.charge_failed`
+  deliveries from v0.3.11 were live events, not test events. Plorea states
+  the routing is fixed; not yet verified. Keep polling `needingAttention()`.
+- One `subscription.charge_failed` arrives per failed attempt, the last one
+  included (`retryCount` 1, 2, 3; production, 2026-10-01 to 2026-10-08).
+- `charges()` is not reliably newest first. Sort by `createdAt`.
+- In production, the first charge of a no-trial subscription came 15–25
+  minutes after create, on the scheduler's next run.
+- Incident, fixed 2026-10-09: every live scheduled charge failed with
+  "PaymentDetail not found" from 2026-10-01 to 2026-10-09. Per Plorea, the
+  scheduler charged live subscriptions against Adyen's test environment.
+- A retry reset by Plorea sets `retryCount` 0 and moves the billing anchor to
+  the new charge time (observed live). The API has no call for it.
+- Plorea may pause subscriptions while they debug (per Plorea).
+- `paymentMethods()->delete()` does not deactivate the stored card at Adyen
+  today (per Plorea). Once Plorea changes that, deleting one of two methods
+  sharing a `storedPaymentMethodId` may break the other.
+
+### Changed
+
+- The fixture `payment-status-paid.json` is now `payment-status-authorised.json`
+  (test-only; its content is unchanged).
+
 ## v0.4.0 - 2026-10-11
 
 ### Breaking

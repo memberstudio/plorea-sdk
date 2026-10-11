@@ -116,7 +116,7 @@ Idempotent-Replayed: true</code></pre>
       <h2>Subscriptions</h2>
 
       <h3 id="failed-charge-webhook-and-payment-failed">2. Failed charge webhook and <code>payment_failed</code></h3>
-      <p><span class="badge verified">Partly delivered 2026-10-01</span> Plorea now sends <code>subscription.charge_failed</code>. It was captured three times in test (2026-10-01 and 2026-10-06), each time for a stored card that was gone. A failed scheduled charge also moves the subscription to <code>past_due</code>, with <code>failureReason</code> and <code>retryCount</code> filled. <span class="badge verified">Verified in production 2026-10-01</span></p>
+      <p><span class="badge verified">Partly delivered 2026-10-01</span> Plorea now sends <code>subscription.charge_failed</code>. Deliveries arrived from 2026-10-01 to 2026-10-08, one per failed attempt. All were caused by a Plorea incident, fixed 2026-10-09, not by a card decline. A failed scheduled charge also moves the subscription to <code>past_due</code>, with <code>failureReason</code> and <code>retryCount</code> filled. <span class="badge verified">Verified in production 2026-10-01</span></p>
       <p><strong>What is still open.</strong></p>
       <ul>
         <li>The event is not in Plorea's webhook catalogue.</li>

@@ -1668,7 +1668,7 @@ const charge = await res.json();</code></pre></div>
       <!-- ============================================================ -->
       <h2 id="list-subscription-charges">List subscription charges</h2>
       <div class="endpoint"><span class="method get">GET</span><code>/subscriptions/{subscriptionId}/charges?platform=acme</code></div>
-      <p>Lists every charge of a subscription, scheduled and manual, newest first. This is the only way to read the outcome of a scheduled charge. Guide: <a href="dunning.html">Failed charges and dunning</a>.</p>
+      <p>Lists every charge of a subscription, scheduled and manual, failed attempts included. The order is not reliable: sort by <code>createdAt</code>. This is the only way to read the outcome of a scheduled charge. Guide: <a href="dunning.html">Failed charges and dunning</a>.</p>
 
       <h4>Request</h4>
       <div class="tabs">

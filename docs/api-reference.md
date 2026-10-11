@@ -37,7 +37,9 @@ All classes live under `MemberFlow\Plorea\`.
 | `refund(string $reference, string $modificationReference, Amount\|int\|null $amount = null, ?string $reason = null)` | `Data\Refund` |
 | `cancel(string $reference, string $modificationReference)` | `Data\PaymentCancellation` |
 
-`refund()` refunds the full amount when `$amount` is omitted.
+`refund()` refunds the full amount when `$amount` is omitted. A partial refund
+works, and a refund on an `authorised` payment stays a refund (verified
+2026-10-09, test).
 
 ### `PaymentMethodResource` — `Plorea::paymentMethods()`
 
@@ -63,7 +65,7 @@ All classes live under `MemberFlow\Plorea\`.
 | `cancel(string $subscriptionId, ?string $reason = null)` | `Data\SubscriptionCancellation` |
 | `reactivate(string $subscriptionId)` | `Data\Subscription` |
 
-`charges()` is newest-first. `charge()` charges the subscription amount when
+`charges()` is not reliably ordered — sort by `createdAt`. `charge()` charges the subscription amount when
 `$amount` is omitted. `needingAttention()` is the polling half of dunning — see
 [the dunning gap](subscriptions.md#the-dunning-gap). Neither list method has
 been observed to paginate, and neither sends paging parameters; see
@@ -210,7 +212,7 @@ signal), `$raw`.
 
 | Helper | True for |
 | --- | --- |
-| `isPaid()` | `authorised`, `paid` |
+| `isPaid()` | `authorised`, `paid` — authorised by Adyen. `authorised` is the only success state observed; `paid` never has been. Capture is not observable |
 | `isAuthorised()` | `authorised` |
 | `isOpen()` | `created`, `pending`, `active` |
 | `isRefundRequested()` | `refund_requested` |

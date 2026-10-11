@@ -436,7 +436,7 @@ stateDiagram-v2
       </div>
 
       <h3>Charge history item</h3>
-      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code> newest first. With a merchant, the envelope also has <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
+      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code>. The order is not reliable: a production read on 2026-10-08 was not newest first. Sort by <code>createdAt</code>. With a merchant, the envelope also has <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
@@ -555,7 +555,7 @@ stateDiagram-v2
             <tr><td><code>payment.failed</code></td><td>A payment is declined. Never <code>payment.refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>A scheduled charge succeeded.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>subscription.charge_failed</code></td><td>A scheduled charge failed. Not in Plorea's catalogue, but captured in test on 2026-10-01 and 2026-10-06. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td>A scheduled charge failed. Not in Plorea's catalogue, but delivered since 2026-10-01, one per failed attempt. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</td><td><span class="badge verified">Verified</span></td></tr>
           </tbody>
         </table>
       </div>

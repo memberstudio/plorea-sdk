@@ -161,6 +161,12 @@ try {
 - **A sibling stays active.** Another method for the same shopper may share
   the stored card (`storedPaymentMethodId`). It still reads `active` after the
   delete and can still be charged (seen in the test environment).
+- **Adyen keeps the card.** The delete cancels only the Plorea method; the
+  stored card or token at Adyen stays active (stated by Plorea 2026-10-09).
+  Plorea plans to deactivate it as well. Once they do, deleting one of two
+  methods that share a `storedPaymentMethodId` may break the other. Confirm
+  with Plorea before you delete a method whose stored id an active method
+  shares.
 - **It cannot be reused.** Creating a subscription on it is a 400, "Payment
   method is not active".
 - **Spelling:** payment methods say `cancelled`; subscriptions say `canceled`.

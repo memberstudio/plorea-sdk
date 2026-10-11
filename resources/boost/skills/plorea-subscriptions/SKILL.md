@@ -88,7 +88,7 @@ $existing = Plorea::subscriptions()->forExternalId((string) $membership->id)->fi
 Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
     // dedupe on $event->eventId
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
-    $charge = Plorea::subscriptions()->charges($subscription->id)->first();
+    $charge = Plorea::subscriptions()->charges($subscription->id)->sortByDesc('createdAt')->first();
 
     if ($charge?->isAuthorised()) {
         Membership::find($event->externalId)
@@ -124,7 +124,7 @@ card setup. Schedule a job, per billed entity:
 
 ```php
 foreach (Plorea::subscriptions()->needingAttention($externalId) as $subscription) {
-    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+    $latest = Plorea::subscriptions()->charges($subscription->id)->sortByDesc('createdAt')->first();
 
     if ($latest?->isAuthorised() !== true) {
         // start your dunning: notify, grace period, ask for a new card

@@ -614,19 +614,19 @@ try {
 
       <h2 id="charge-history">Charge history</h2>
       <div class="endpoint"><span class="method get">GET</span><code>/subscriptions/{subscriptionId}/charges</code></div>
-      <p>The charge history is the record of what Plorea billed. It lists scheduled and manual charges, newest first. Poll it to learn the outcome of a scheduled charge. <span class="badge verified">Verified</span></p>
+      <p>The charge history is the record of what Plorea billed. It lists scheduled and manual charges, failed attempts included. The order is not reliable, so sort by <code>createdAt</code> before you take the latest. Poll it to learn the outcome of a scheduled charge. <span class="badge verified">Verified</span></p>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/subscriptions/sub_test_golden/charges?platform=acme" \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
   -H "X-Environment: test"</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$charges = Plorea::subscriptions()-&gt;charges('sub_test_golden'); // Collection&lt;SubscriptionCharge&gt;
 
-$latest = $charges-&gt;first();
+$latest = $charges-&gt;sortByDesc('createdAt')-&gt;first(); // the order is not reliable
 $latest-&gt;isAuthorised();  // true
 $latest-&gt;reason;          // "scheduled_charge" | "manual_charge"
 $latest-&gt;retryNumber;     // 0</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const { items } = await plorea('GET', 'subscriptions/sub_test_golden/charges?platform=acme');
-const latest = items[0];</code></pre></div>
+const latest = [...items].sort((a, b) =&gt; b.createdAt.localeCompare(a.createdAt))[0];</code></pre></div>
       </div>
       <pre data-title="200 OK"><code class="lang-json">{
   "subscriptionId": "sub_test_golden",

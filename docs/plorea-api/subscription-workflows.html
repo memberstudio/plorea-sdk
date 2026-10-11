@@ -36,7 +36,7 @@
             <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>Charges the stored card now. It does not move the schedule of later charges in a way you control.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST /subscriptions/{id}/cancel</code></td><td>Stops future charges. Returns <code>accessEndsAt</code> = last charge + one interval.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST /subscriptions/{id}/reactivate</code></td><td>Restarts a canceled subscription. Sets <code>nextChargeAt</code> to last charge + one interval. Does not charge twice.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>GET /subscriptions/{id}/charges</code></td><td>Lists the charges, newest first. The only reliable record of scheduled billing.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>GET /subscriptions/{id}/charges</code></td><td>Lists the charges, failed attempts included. Sort by <code>createdAt</code>: the order is not reliable. The only reliable record of scheduled billing.</td><td><span class="badge verified">Verified</span></td></tr>
           </tbody>
         </table>
       </div>

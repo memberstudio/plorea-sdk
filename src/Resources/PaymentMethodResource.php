@@ -63,7 +63,9 @@ class PaymentMethodResource extends Resource
      *
      * Another payment method for the same shopper can share its
      * `storedPaymentMethodId`; it stays `active` and can still be charged
-     * (observed in the test environment).
+     * (observed in the test environment). Per Plorea (2026-10-09) the
+     * stored card at Adyen is not deactivated today; once Plorea changes
+     * that, a delete may break such a sibling.
      *
      * @throws PaymentMethodInUseException When subscriptions, trialing
      *                                     ones included, still use it.

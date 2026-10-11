@@ -129,7 +129,7 @@ foreach ($flagged as $subscription) {
 
     // Overdue: the cycle stalled without a failure status.
     $missedAt = $subscription-&gt;nextChargeAt;
-    $latest = Plorea::subscriptions()-&gt;charges($subscription-&gt;id)-&gt;first();
+    $latest = Plorea::subscriptions()-&gt;charges($subscription-&gt;id)-&gt;sortByDesc('createdAt')-&gt;first();
 
     // An older success must not hide the missed renewal.
     $covered = $latest?-&gt;isAuthorised() === true
@@ -177,7 +177,8 @@ for (const s of list.items) {
 
   // An older success must not hide the missed renewal.
   const missedAt = s.nextChargeAt ? new Date(s.nextChargeAt).getTime() : null;
-  const latest = items[0];
+  // The order is not reliable: take the newest by createdAt.
+  const latest = [...items].sort((a, b) =&gt; b.createdAt.localeCompare(a.createdAt))[0];
   const covered =
     latest?.status === 'authorised' &amp;&amp;
     missedAt !== null &amp;&amp;

@@ -31,9 +31,10 @@ Intervals: `BillingInterval::daily()`, `weekly()`, `monthly()`, `yearly()`,
 each taking an optional count — `BillingInterval::monthly(3)` is quarterly.
 
 **Billing should start at once.** The create response already carries the first
-`nextChargeAt`. Without a trial, the scheduler should charge the card at once.
-A no-trial signup was charged at once in production on 2026-10-10
-(**Verified** in production). In test on 2026-10-06, new subscriptions without a
+`nextChargeAt`. Without a trial, the scheduler should charge the card on its next run.
+In production that came 15–25 minutes after create (7 of 7, 2026-10; the
+scheduler runs about every 5 minutes), and again on 2026-10-10 (**Verified** in
+production). In test on 2026-10-06, new subscriptions without a
 trial were not charged: the scheduler kept moving `nextChargeAt` 15 to 20
 minutes forward (**Open question**). Always confirm the first charge in
 `charges()`.
@@ -283,13 +284,19 @@ request, `resultCode` is the acquirer's. Read `resultCode` for the money.
 ### History
 
 ```php
-$charges = Plorea::subscriptions()->charges($subscription->id);  // Collection<SubscriptionCharge>, newest first
+$charges = Plorea::subscriptions()->charges($subscription->id);  // Collection<SubscriptionCharge>, not reliably ordered
+$latest = $charges->sortByDesc('createdAt')->first();
 
-$charges->first()->status;   // "authorised"
-$charges->first()->reason;   // "scheduled_charge" | "manual_charge"
-$charges->first()->amount;
-$charges->first()->retryNumber;
+$latest->status;        // "authorised" | "failed"
+$latest->reason;        // "scheduled_charge" | "manual_charge"
+$latest->amount;
+$latest->retryNumber;   // 0 on the first attempt, 1, 2 on retries
 ```
+
+Sort by `createdAt` yourself. The test capture came back newest first, but a
+live read on 2026-10-08 returned the 2nd, 3rd, then 1st attempt. Failed
+attempts are listed too, with `status: failed`, a `pspReference` and a
+`failureReason` (observed live 2026-10).
 
 `charges()` is the authoritative record of scheduled billing. **Poll it.**
 
@@ -336,9 +343,14 @@ not-active payment method return **400**, not 402.
 Read this before building retry logic.
 
 - A failed scheduler charge emits `subscription.charge_failed` →
-  `SubscriptionChargeFailed` (captured 2026-10-01 and 2026-10-06, though
-  Plorea had said failures were poll-only). A delivery is never retried, so
-  the event speeds dunning up; polling is still what guarantees it.
+  `SubscriptionChargeFailed`, one per attempt (observed 2026-10-01 to
+  2026-10-08, though Plorea had said failures were poll-only). A delivery is
+  never retried, so the event speeds dunning up; polling is still what
+  guarantees it.
+- **Live `subscription.*` webhooks went to the test URL** until 2026-10-09,
+  labelled `environment: "test"`. Plorea states the routing is fixed; this is
+  not yet verified on the wire. See
+  [Webhooks](webhooks.md#live-subscription-webhooks-went-to-the-test-url).
 - A failed scheduled charge turns the subscription **`past_due`** (captured
   from production 2026-10-01). `retryCount` counts the failed attempts,
   `failureReason` carries the provider's message, `lastChargeAt` stays at the
@@ -357,8 +369,12 @@ Read this before building retry logic.
   `reactivate()` is verified only from `canceled` (400 "Only canceled
   subscriptions can be reactivated"). Plorea reset one subscription by hand:
   `active`, `retryCount` 0, charged at once, billing anchor moved. The API has
-  no call for that reset. See
+  no call for that reset. After it, `nextChargeAt` is one interval after the
+  new charge, so the billing day can move (observed live 2026-10-09). See
   [Verified API behaviour](api-behaviour.md#what-cannot-be-reproduced-in-test).
+- Plorea may pause a subscription while they debug, without notice (stated
+  2026-10-09). A `paused` subscription you did not pause is worth a question
+  to Plorea.
 
 So dunning must poll, and must not assume the shape of what it finds.
 `needingAttention()` is the polling half:
@@ -366,7 +382,9 @@ So dunning must poll, and must not assume the shape of what it finds.
 ```php
 // Scheduled, e.g. hourly, per billed entity.
 foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
-    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+    $latest = Plorea::subscriptions()->charges($subscription->id)
+        ->sortByDesc('createdAt')
+        ->first();
 
     if ($latest?->isAuthorised() !== true) {
         // Prompt for a new card. Do not branch on failureReason — it is the
@@ -386,18 +404,20 @@ It returns a subscription when any test fires:
 The tests are independent. A `past_due` subscription is **not** overdue: its
 `nextChargeAt` has already moved to the retry, so only the status gives it
 away. The overdue test covers a cycle that stalled without any failure status —
-Plorea's scheduler charges within seconds to a few minutes of a natural
-`nextChargeAt` and moves the date forward as it does, so a date still in the
-past means the cycle did not complete. A date you moved yourself on an `active`
-subscription has not been charged so far (**Open question**), so it also shows
-as overdue.
+Plorea's scheduler charges within minutes of a natural `nextChargeAt`
+(seconds in test, up to about 25 minutes in production) and moves the date
+forward as it does, so a date still in the past means the cycle did not
+complete. Keep the grace period above 25 minutes in production, or a new
+subscription can show as overdue before its first charge. A date you moved
+yourself on an `active` subscription has not been charged so far (**Open
+question**), so it also shows as overdue.
 
 Tune the grace period for your billing cadence, and pass a fixed clock in tests:
 
 ```php
-Plorea::subscriptions()->needingAttention($externalId, graceMinutes: 15);
+Plorea::subscriptions()->needingAttention($externalId, graceMinutes: 30);
 
-$subscription->isOverdue(graceMinutes: 15, now: $this->knownTime);
+$subscription->isOverdue(graceMinutes: 30, now: $this->knownTime);
 ```
 
 A canceled subscription is never overdue — it keeps whatever `nextChargeAt` it
