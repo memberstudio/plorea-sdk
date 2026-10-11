@@ -237,6 +237,7 @@ await db.memberships.update(456, { ploreaSubscriptionId: subscription.subscripti
 
       <h2 id="trials">Trials</h2>
       <p>Send <code>trialEndsAt</code> to delay the first charge. The subscription starts as <code>trialing</code>. <code>nextChargeAt</code> is exactly <code>trialEndsAt</code>. Nothing is charged before that time. <span class="badge verified">Verified</span></p>
+      <p>At trial end the charge can come late. In one test on 2026-10-11, the scheduler first moved <code>nextChargeAt</code> 17 minutes forward, with no charge and no <code>failureReason</code>. The charge came about 22 minutes after <code>trialEndsAt</code>. The next <code>nextChargeAt</code> was the moved time plus one interval, so the billing day shifted by the delay. <span class="badge verified">Verified</span> in test, once. Read <code>nextChargeAt</code> back after the charge. Do not compute the next period from <code>trialEndsAt</code>.</p>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
