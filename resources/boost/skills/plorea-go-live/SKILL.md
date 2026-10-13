@@ -11,7 +11,7 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 
 ## Credentials
 - Live API key from Plorea, only in production env; rotate it if it has ever been in chat, a ticket or a log.
-- `PLOREA_ENVIRONMENT=live` — it **defaults to `test`**, so unset means production traffic hits test.
+- `PLOREA_ENVIRONMENT=live` — it **defaults to `test`**. Since 2026-10-13 the key sets the environment and a header that does not match it returns `403`, so a live (`plr_live_`) key with the variable unset fails on every call.
 - `PLOREA_TENANT_ID` for production; `PLOREA_PLATFORM` set to your own identifier (no default).
 
 ## Webhooks

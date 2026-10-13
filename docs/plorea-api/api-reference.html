@@ -30,15 +30,15 @@
 
       <h3 id="base-url">Base URL</h3>
       <pre data-title="Base URL"><code class="lang-plaintext">https://payments.plorea.no</code></pre>
-      <p>Test and live share the host. The <code>X-Environment</code> header selects the Adyen account.</p>
+      <p>Test and live share the host. Since 2026-10-13 the API key sets the environment. <span class="badge stated">Stated by Plorea</span></p>
 
       <h3 id="request-headers">Request headers</h3>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Header</th><th>Value</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer plr_test_FAKE…</code></td><td>Your API key. Plorea issues it. Test keys start with <code>plr_test_</code>.</td></tr>
-            <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> | <code>live</code></td><td>Selects the Adyen credentials. A refund without this header goes to <strong>live</strong> credentials and fails with <code>401</code> <code>"errorType": "security"</code>. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer plr_test_FAKE…</code></td><td>Your API key. Plorea issues it. Test keys start with <code>plr_test_</code>, live keys with <code>plr_live_</code>.</td></tr>
+            <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> | <code>live</code></td><td>Must match the key. A mismatch returns <code>403</code>. Without the header, Plorea uses the key's environment. <span class="badge stated">Stated by Plorea</span> 2026-10-13. Before that date, a refund without the header went to <strong>live</strong> credentials and failed with <code>401</code> <code>"errorType": "security"</code>. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>On <code>POST</code> and <code>PATCH</code>.</td></tr>
             <tr><td><code>Accept</code></td><td><code>application/json</code></td><td>Recommended on every request.</td></tr>
           </tbody>
@@ -353,7 +353,7 @@ const payment = await res.json();</code></pre></div>
 
       <div class="callout danger">
         <p class="callout-title">Send X-Environment: test</p>
-        <p>Without the header, this endpoint uses the live Adyen credentials. A test key then fails with <code>401</code> and <code>"errorType": "security"</code>. The error looks like a bad key. <span class="badge verified">Verified</span></p>
+        <p>Before 2026-10-13, this endpoint used the live Adyen credentials without the header. A test key then failed with <code>401</code> and <code>"errorType": "security"</code>. <span class="badge verified">Verified</span> Plorea states that a missing header now uses the key's environment. Not re-tested on refund. Keep sending it.</p>
       </div>
 
       <h4>Body parameters</h4>
@@ -429,7 +429,7 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
         <thead><tr><th>Status</th><th>When</th></tr></thead>
         <tbody>
           <tr><td><code>400</code></td><td>Missing field, or the payment cannot be refunded.</td></tr>
-          <tr><td><code>401</code></td><td>Bad key, or <code>X-Environment</code> missing (live credentials used).</td></tr>
+          <tr><td><code>401</code></td><td>Bad key. Before 2026-10-13 also a missing <code>X-Environment</code> (live credentials used).</td></tr>
           <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
         </tbody>
       </table></div>

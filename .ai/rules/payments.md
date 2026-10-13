@@ -329,7 +329,20 @@ refunded to `refund_requested`; the originally failing payment cancelled to
 Still **UNOBSERVED**: an Android Drop-in on a device, a live client key, and a
 live `environment` value.
 
+## The API key sets the environment — stated by Plorea, 2026-10-13
+
+A `plr_test_` key reaches test, a `plr_live_` key reaches live. An
+`X-Environment` that does not match the key returns `403`
+(`AuthenticationException`); an ID from the other environment returns `404`
+(observed in production 2026-10-13). The SDK still sends the header from
+`plorea.environment` (default `test`), so a live key needs
+`PLOREA_ENVIRONMENT=live`. **Do not stop sending the header**, and do not guess
+the environment from the key prefix without a maintainer decision.
+
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
+
+Superseded as stated by Plorea on 2026-10-13: a missing header now uses the
+key's environment. Not re-tested on refund. The section below is the history.
 
 `POST payments/refund` sent without the `X-Environment` header routes to
 Plorea's **live** Adyen credentials and answers a bare `401` with

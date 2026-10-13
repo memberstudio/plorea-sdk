@@ -91,25 +91,29 @@ flowchart TB
         <li>Reads do not return the merchant on subscriptions, and the link-create response does not echo it. Keep your own record. <span class="badge verified">Verified</span></li>
       </ul>
 
-      <h2>Environments</h2>
-      <p>Test and live share one host, <code>https://payments.plorea.no</code>. The <code>X-Environment</code> header selects the Adyen account behind the call.</p>
+      <h2 id="environments">Environments</h2>
+      <p>Test and live share one host, <code>https://payments.plorea.no</code>. Since 2026-10-13 the API key sets the environment: a <code>plr_test_</code> key reaches test, a <code>plr_live_</code> key reaches live. <span class="badge stated">Stated by Plorea</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th></th><th>Test</th><th>Live</th></tr></thead>
           <tbody>
             <tr><td>Header</td><td><code>X-Environment: test</code></td><td><code>X-Environment: live</code></td></tr>
-            <tr><td>API key</td><td>Starts with <code>plr_test_</code></td><td>A separate live key from Plorea</td></tr>
+            <tr><td>API key</td><td>Starts with <code>plr_test_</code></td><td>Starts with <code>plr_live_</code>. A separate key from Plorea.</td></tr>
             <tr><td>Money</td><td>None. Adyen test cards only.</td><td>Real cards, real payouts</td></tr>
-            <tr><td><code>environment</code> in responses</td><td><code>test</code> <span class="badge verified">Verified</span></td><td><code>live</code> <span class="badge unobserved">Not observed</span></td></tr>
+            <tr><td><code>environment</code> in responses</td><td><code>test</code> <span class="badge verified">Verified</span></td><td><code>live</code> <span class="badge verified">Verified</span> 2026-10-13, on <code>GET /subscriptions/{id}</code> in production</td></tr>
+            <tr><td><code>X-Environment</code> that does not match the key</td><td colspan="2"><code>403</code> <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td>An ID from the other environment</td><td colspan="2"><code>404</code> <span class="badge verified">Verified</span> 2026-10-13, with a live subscription read through a test key</td></tr>
+            <tr><td>Lists</td><td colspan="2">Only the key's environment. <span class="badge stated">Stated by Plorea</span> Until 2026-10-13, <code>GET /subscriptions</code> with a test key also listed live subscriptions.</td></tr>
             <tr><td>Webhook URL</td><td colspan="2">One URL per environment, on request. Not the default. <span class="badge stated">Stated by Plorea</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout danger">
-        <p class="callout-title">A missing header can reach live</p>
-        <p>Most endpoints default to test when the header is missing. <code>POST /payments/refund</code> does not: it routes to the live credentials and answers <code>401</code> with <code>"errorType": "security"</code>. The error looks like a bad key. Send <code>X-Environment</code> on every request, from one place in your code. <span class="badge verified">Verified</span></p>
+        <p class="callout-title">A wrong header now fails with 403</p>
+        <p>Plorea states that a request without <code>X-Environment</code> now uses the key's environment, and that a header that does not match the key returns <code>403</code>. A live key with <code>X-Environment: test</code> therefore fails on every call. Set the header from the same config as the key. <span class="badge stated">Stated by Plorea</span> 2026-10-13</p>
+        <p>Before 2026-10-13, most endpoints defaulted to test without the header, but <code>POST /payments/refund</code> routed to the live credentials and answered <code>401</code> with <code>"errorType": "security"</code>. <span class="badge verified">Verified</span> 2026-09-10. The refund case has not been re-tested since.</p>
       </div>
-      <p>Payment, payment-method and session responses and webhooks carry <code>environment</code>. Subscription responses and error bodies do not. Keep the environment of each request in your own context. Check it in your webhook handler. Drop events whose environment does not match the server that receives them.</p>
+      <p>Payment, payment-method and session responses and webhooks carry <code>environment</code>. Since 2026-10-13, <code>GET</code> on subscriptions does too. <span class="badge verified">Verified</span> Error bodies do not. Keep the environment of each request in your own context. Check it in your webhook handler. Drop events whose environment does not match the server that receives them.</p>
 
       <h2>Amounts and currency</h2>
       <p>All amounts are integers in minor units. For NOK, that is øre. There is no decimal form anywhere in the API. <span class="badge verified">Verified</span></p>

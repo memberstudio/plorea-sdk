@@ -273,7 +273,7 @@ Idempotent-Replayed: true</code></pre>
       <ul>
         <li><strong>Consistent spelling.</strong> Payments use <code>cancelled</code>, subscriptions use <code>canceled</code>. Pick one, or document both.</li>
         <li><strong>Consistent metadata.</strong> An empty <code>metadata</code> returns <code>[]</code>, not <code>{}</code>. Return an object.</li>
-        <li><strong>Environment default.</strong> A missing <code>X-Environment</code> on refund uses live credentials. Reject a request with no header, or default to test everywhere.</li>
+        <li><strong>Environment default.</strong> <span class="badge stated">Delivered 2026-10-13</span> The API key now sets the environment. A missing header uses the key's environment, and a header that does not match the key returns <code>403</code>.</li>
         <li><strong>Native 3-D Secure.</strong> <span class="badge stated">Promised by Plorea</span> Request native 3DS2 on iOS and Android sessions.</li>
         <li><strong>KYC visibility.</strong> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link.</li>
       </ul>

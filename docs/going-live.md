@@ -8,8 +8,9 @@ is something that has either failed silently or cost real money when missed.
 - [ ] **A live API key.** Ask Plorea for one; do not reuse the test key in
       production. Store it only in your production environment.
 - [ ] **`PLOREA_ENVIRONMENT=live`.** It is sent as `X-Environment` on every
-      request, and it defaults to `test`, so an unset variable sends
-      production traffic to test.
+      request, and it defaults to `test`. Since 2026-10-13 a header that does
+      not match the key returns `403` (stated by Plorea), so a live key with
+      the variable unset fails on every call.
 - [ ] **`PLOREA_TENANT_ID`** set to your production tenant, if Plorea gave you a
       different one.
 - [ ] **`PLOREA_PLATFORM`** set to your own identifier, so Plorea can attribute

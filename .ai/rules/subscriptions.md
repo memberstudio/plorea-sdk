@@ -264,9 +264,13 @@ last retry. All were `"PaymentDetail not found"` (the fixed incident above:
 charges sent to Adyen's test environment), not a decline. A real decline is
 still unobserved, and it still cannot be produced in test.
 
-**The test-key list shows live subscriptions** (no environment filter, seen
-2026-10-11), including live `payment_failed` ones. Check the payment method's
-`environment` before any write in an experiment. `payment_failed` recovery
+**The test-key list showed live subscriptions** (no environment filter, seen
+2026-10-11), including live `payment_failed` ones. Since 2026-10-13 the API key
+sets the environment and lists show only the key's environment (stated by
+Plorea). An ID from the other environment returns `404` (observed in
+production 2026-10-13). Still check `environment` before any write in an
+experiment. `Subscription::$environment` maps it from `GET` responses (added by
+Plorea 2026-10-13; null on older responses). `payment_failed` recovery
 (PATCH amount/date, `resume`) is still UNOBSERVED in test.
 
 ## Native pause — CAPTURED 2026-10-01 (test)

@@ -27,7 +27,7 @@
           <tbody>
             <tr><td>Base URL</td><td><code>https://payments.plorea.no</code> (the same host as live)</td></tr>
             <tr><td>API key</td><td>Starts with <code>plr_test_</code>. Plorea issues it on request.</td></tr>
-            <tr><td><code>X-Environment</code></td><td><code>test</code>. Send it on every request.</td></tr>
+            <tr><td><code>X-Environment</code></td><td><code>test</code>. It must match the key. A mismatch returns <code>403</code>. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td>Hosted pay page</td><td><code>https://pay.plorea.no/{paymentLinkId}</code></td></tr>
             <tr><td><code>environment</code> in responses</td><td><code>"test"</code></td></tr>
             <tr><td>Adyen client key</td><td>Starts with <code>test_</code>. Needed only for embedded checkout. Works only on origins Plorea has whitelisted.</td></tr>
@@ -36,7 +36,7 @@
       </div>
       <div class="callout warning">
         <p class="callout-title">Test and live share one host</p>
-        <p>Only the <code>X-Environment</code> header separates them. Most endpoints default to <code>test</code> when the header is missing, but <code>POST /payments/refund</code> goes to live and fails with <code>401</code>. Always send the header. <span class="badge verified">Verified</span></p>
+        <p>Since 2026-10-13 the API key sets the environment: a <code>plr_test_</code> key reaches test, a <code>plr_live_</code> key reaches live. <span class="badge stated">Stated by Plorea</span> A test key cannot read a live ID: it gets <code>404</code>. <span class="badge verified">Verified</span> 2026-10-13. Before that date, only the <code>X-Environment</code> header separated them, and a test key listed live subscriptions. See <a href="concepts.html#environments">Environments</a>.</p>
       </div>
 
       <h2 id="test-cards">Test cards</h2>
@@ -116,7 +116,7 @@
         <p class="callout-title">Requested from Plorea</p>
         <p>A test card that stores successfully and declines on a later charge, or a passthrough of Adyen's <code>RequestedTestAcquirerResponseCode</code> on <code>POST /subscriptions/{id}/charge</code>. <span class="badge proposal">Proposal</span></p>
       </div>
-      <p>Other items we could not observe in test: a <code>live</code> value of <code>environment</code>, a live client key, an Android Drop-in on a real device, and the final state after a refund settles.</p>
+      <p>Other items we could not observe in test: a live client key, an Android Drop-in on a real device, and the final state after a refund settles.</p>
 
       <h2>Receive webhooks on your laptop</h2>
       <p>Plorea needs a public HTTPS URL. Use a tunnel to forward it to your local server.</p>

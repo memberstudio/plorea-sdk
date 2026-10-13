@@ -29,6 +29,13 @@
 
       <h2 id="2026-10">October 2026</h2>
 
+      <h3 id="2026-10-13">2026-10-13</h3>
+      <ul>
+        <li><strong>The API key sets the environment.</strong> A <code>plr_test_</code> key reaches test and a <code>plr_live_</code> key reaches live. An <code>X-Environment</code> that does not match the key returns <code>403</code>. Without the header, Plorea uses the key's environment. Lists show only the key's environment. <span class="badge stated">Stated by Plorea</span> An ID from the other environment returns <code>404</code>. <span class="badge verified">Verified</span> in production. This replaces the 2026-10-11 note that the test key lists live subscriptions. See <a href="concepts.html#environments">Environments</a>.</li>
+        <li><strong><code>environment</code> on reads.</strong> <code>GET</code> on subscriptions, payment methods and payments returns <code>environment</code>. <span class="badge verified">Verified</span> on a live subscription in production. <span class="badge stated">Stated by Plorea</span> for the rest.</li>
+        <li><strong>SDK:</strong> <code>Subscription</code> reads <code>environment</code>. The SDK sends <code>X-Environment</code> from <code>PLOREA_ENVIRONMENT</code>, which defaults to <code>test</code>. With a live key, set it to <code>live</code>, or every call returns <code>403</code>.</li>
+      </ul>
+
       <h3 id="2026-10-11">2026-10-11</h3>
       <ul>
         <li><strong>Docs:</strong> unverified subscription behaviours are now marked. Moving <code>nextChargeAt</code> on an <code>active</code> subscription that was charged before stores the date, but no charge has ever followed it. This covers a plain <code>PATCH</code> and a pause then resume, with two date formats, over four scheduler runs in test (4 and 5 October). Only <code>trialing</code> subscriptions with a moved date were charged. Reported to Plorea on 5 October, still open. <span class="badge open">Open question</span> Recipes that need it carry a warning. See <a href="subscription-workflows.html#pause-or-freeze">Pause or freeze</a>.</li>

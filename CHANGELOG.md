@@ -4,6 +4,25 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- `Subscription::$environment` (`test` or `live`). Plorea added `environment`
+  to `GET` responses for subscriptions on 2026-10-13. It is `null` on older
+  responses. `PaymentMethod`, `PaymentStatus` and `PaymentLink` already map it.
+
+### Plorea API change (2026-10-13)
+
+The API key now sets the environment: a `plr_test_` key reaches test, a
+`plr_live_` key reaches live. An `X-Environment` that does not match the key
+returns `403` (`AuthenticationException`). Without the header, Plorea uses the
+key's environment. An ID from the other environment returns `404`. Lists show
+only the key's environment. Stated by Plorea; the `404` and the live
+`environment` value were observed in production the same day.
+
+The SDK still sends `X-Environment` from `PLOREA_ENVIRONMENT`, which defaults
+to `test`. **With a live key, set `PLOREA_ENVIRONMENT=live`, or every call
+returns `403`.**
+
 ### Docs
 
 No behaviour changes. Docs, rules and docblocks record field findings from

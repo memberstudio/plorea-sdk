@@ -20,6 +20,7 @@ final readonly class Subscription
      * @param  array<string, mixed>  $metadata
      * @param  array<string, mixed>  $raw
      * @param  ?string  $merchantOrgNr  The company receiving the funds. Returned on create and on reads (2026-09-22); null when the subscription has none.
+     * @param  ?string  $environment  "test" or "live", the environment the API key belongs to. Plorea added it to GET responses on 2026-10-13; null on older responses.
      */
     public function __construct(
         public string $id,
@@ -54,6 +55,7 @@ final readonly class Subscription
         public ?CarbonImmutable $updatedAt,
         public array $raw = [],
         public ?string $merchantOrgNr = null,
+        public ?string $environment = null,
     ) {}
 
     /**
@@ -94,6 +96,7 @@ final readonly class Subscription
             updatedAt: self::date($data['updatedAt'] ?? null),
             raw: $data,
             merchantOrgNr: self::string($data['merchantOrgNr'] ?? null),
+            environment: self::string($data['environment'] ?? null),
         );
     }
 

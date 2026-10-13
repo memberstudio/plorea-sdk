@@ -715,7 +715,31 @@ daily-interval subscription left running accumulates roughly 30 charges a
 month unattended, and its charges can be read once the history is long enough
 to cross any plausible page size.
 
+### 📋 The API key sets the environment — Plorea, 2026-10-13
+
+In production since 2026-10-13 12:07, as Plorea states it:
+
+- A `plr_test_` key reaches test. A `plr_live_` key reaches live.
+- An `X-Environment` header that does not match the key returns `403`. Without
+  the header, Plorea uses the key's environment.
+- An ID from the other environment returns `404`.
+- Lists show only the key's environment. Until then, the test-key list also
+  returned live subscriptions (see the 2026-10-11 re-check above).
+- `GET` on subscriptions, payment methods and payments returns `environment`.
+
+✅ **Observed 2026-10-13, about 12:20 (production, read-only):** a live key read
+a live subscription and got `200` with `environment: "live"`. A test key got
+`404` for the same ID. The `403` on a mismatched header, the empty-header
+default and the list filter are not observed yet.
+
+`PloreaClient` sends `X-Environment` from `plorea.environment`, which defaults
+to `test`. A live key with `PLOREA_ENVIRONMENT` unset therefore gets `403` on
+every call. `Subscription::$environment` maps the new field.
+
 ### ✅ A refund without `X-Environment` hits live credentials — 2026-09-10
+
+> Superseded, as stated by Plorea: since 2026-10-13 a missing header uses the
+> key's environment (see above). Not re-tested on refund.
 
 `POST payments/refund` sent without the `X-Environment` header routes to
 Plorea's **live** Adyen credentials and answers a bare `401` with
@@ -885,9 +909,10 @@ cannot be produced in test.
 
 **Re-checked 2026-10-11:** the test tenant still has no `payment_failed`
 subscription of its own. The list endpoint, called with the test key, also
-returns live subscriptions — two of them `payment_failed` — because it has no
+returned live subscriptions — two of them `payment_failed` — because it had no
 environment filter. Their payment methods report `environment: "live"`, which
-is how to tell them apart. They were not touched. So the recovery of a
+is how to tell them apart. Plorea states that lists show only the key's
+environment since 2026-10-13. They were not touched. So the recovery of a
 `payment_failed` subscription (PATCH amount + `nextChargeAt`, `nextChargeAt`
 alone, `resume`) remains unobserved in test.
 
