@@ -67,7 +67,7 @@ sequenceDiagram
         <table>
           <thead><tr><th>Header</th><th>Value</th><th>Notes</th></tr></thead>
           <tbody>
-            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer &lt;API key&gt;</code></td><td>Test keys start with <code>plr_test_</code>, live keys with <code>plr_live_</code>. Plorea issues keys per integrator. The key sets the environment since 2026-10-13. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer &lt;API key&gt;</code></td><td>Test keys start with <code>plr_test_</code>, live keys with <code>plr_live_</code>. Plorea issues keys per integrator. <span class="badge verified">Verified</span> The key sets the environment since 2026-10-13. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> or <code>live</code></td><td>Must match the key. A mismatch returns <code>403</code>. Without the header, Plorea uses the key's environment. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>On every <code>POST</code> and <code>PATCH</code>.</td></tr>
             <tr><td><code>Accept</code></td><td><code>application/json</code></td><td>Recommended.</td></tr>

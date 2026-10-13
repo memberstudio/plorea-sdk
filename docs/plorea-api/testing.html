@@ -36,7 +36,7 @@
       </div>
       <div class="callout warning">
         <p class="callout-title">Test and live share one host</p>
-        <p>Since 2026-10-13 the API key sets the environment: a <code>plr_test_</code> key reaches test, a <code>plr_live_</code> key reaches live. <span class="badge stated">Stated by Plorea</span> A test key cannot read a live ID: it gets <code>404</code>. <span class="badge verified">Verified</span> 2026-10-13. Before that date, only the <code>X-Environment</code> header separated them, and a test key listed live subscriptions. See <a href="concepts.html#environments">Environments</a>.</p>
+        <p>Since 2026-10-13 the API key sets the environment: a <code>plr_test_</code> key reaches test, a <code>plr_live_</code> key reaches live. <span class="badge stated">Stated by Plorea</span> An ID from the other environment returns <code>404</code>. <span class="badge stated">Stated by Plorea</span> A test key reading a live subscription with <code>GET /subscriptions/{id}</code> got <code>404</code>. <span class="badge verified">Verified</span> 2026-10-13, production. Before that date, only the <code>X-Environment</code> header separated them, and a test key listed live subscriptions. See <a href="concepts.html#environments">Environments</a>.</p>
       </div>
 
       <h2 id="test-cards">Test cards</h2>

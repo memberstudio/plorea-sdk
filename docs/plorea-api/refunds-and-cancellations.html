@@ -75,8 +75,9 @@ flowchart TD
       </div>
 
       <div class="callout danger">
-        <p class="callout-title">Send X-Environment, or you hit live</p>
-        <p>A refund request without the <code>X-Environment</code> header goes to Plorea's <strong>live</strong> Adyen credentials. With a test key, the answer is <code>401</code> with <code>"errorType": "security"</code>. Nothing in the answer says "wrong environment", so it looks like a bad API key. Watch for this when you copy a request into a terminal. <span class="badge verified">Verified</span></p>
+        <p class="callout-title">Send an X-Environment that matches the key</p>
+        <p>Until 2026-10-13, a refund request without the <code>X-Environment</code> header went to Plorea's <strong>live</strong> Adyen credentials. With a test key, the answer was <code>401</code> with <code>"errorType": "security"</code>. Nothing in the answer said "wrong environment", so it looked like a bad API key. <span class="badge verified">Verified</span> 2026-09-10</p>
+        <p>Since 2026-10-13 the API key sets the environment. A missing header uses the key's environment, and a header that does not match the key returns <code>403</code>. <span class="badge stated">Stated by Plorea</span> Not re-tested on refund. Watch for both when you copy a request into a terminal. See <a href="concepts.html#environments">Environments</a>.</p>
       </div>
 
       <div class="tabs">
@@ -270,8 +271,8 @@ stateDiagram-v2
         <table>
           <thead><tr><th>Status</th><th>Body</th><th>Meaning</th></tr></thead>
           <tbody>
-            <tr><td><code>401</code></td><td><code>errorType: "security"</code></td><td>Usually a missing <code>X-Environment</code>. Then a bad key.</td></tr>
-            <tr><td><code>403</code></td><td><code>{"error": "Tenant mismatch"}</code></td><td>The payment belongs to another tenant than your key.</td></tr>
+            <tr><td><code>401</code></td><td><code>errorType: "security"</code></td><td>A bad key. Before 2026-10-13, usually a missing <code>X-Environment</code>.</td></tr>
+            <tr><td><code>403</code></td><td><code>{"error": "Tenant mismatch"}</code></td><td>The payment belongs to another tenant than your key. Since 2026-10-13 also an <code>X-Environment</code> that does not match the key. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>404</code></td><td><code>{"error": "Payment not found", ...}</code></td><td>Unknown reference. Check the environment too.</td></tr>
             <tr><td><code>5xx</code></td><td>varies</td><td>Unknown outcome. Read the status. If your modification reference is not there, escalate to a person. See <a href="#retry-safely">Retry safely</a>.</td></tr>
           </tbody>
