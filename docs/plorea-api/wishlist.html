@@ -50,6 +50,7 @@
             <tr><td>18</td><td><a href="#changelog-and-versioning">Changelog and versioning</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge stated">Answered 2026-10-14</span></td></tr>
             <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge stated">In test 2026-10-14</span></td></tr>
+            <tr><td>21</td><td><a href="#next-charge-date-on-reactivate">Next charge date on reactivate</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -195,6 +196,13 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> Integrators cannot fully check which company a payment pays out to. They must keep their own copy of the merchant name.</p>
       <p><strong>Proposal.</strong> Return <code>merchantOrgNr</code>, <code>merchantName</code> and a KYC state on every read of a payment, link, subscription and charge.</p>
       <pre><code class="lang-json">{ "merchantOrgNr": "999999999", "merchantName": "Acme Gym AS", "merchantKycStatus": "pending" }</code></pre>
+
+      <h3 id="next-charge-date-on-reactivate">21. Next charge date on reactivate</h3>
+      <p><strong>Problem.</strong> <code>POST /subscriptions/{id}/reactivate</code> always sets <code>nextChargeAt</code> to the last charge plus one interval. A <code>nextChargeAt</code> set with <code>PATCH</code> on the canceled subscription is overwritten. The <code>PATCH</code> returned the new date, and the reactivate then set <code>nextChargeAt</code> to the time of the call. The amount from the <code>PATCH</code> was kept. <span class="badge verified">Verified in test 2026-10-14</span> Without an earlier charge, or after a long gap, the result is "now".</p>
+      <p><strong>Impact.</strong> A returning customer is charged at once, not on the agreed date. Reactivate followed by a <code>PATCH</code> leaves a window in which the scheduler can charge. The safe route today is a new subscription with <code>trialEndsAt</code> on the agreed date. That loses the subscription history.</p>
+      <p><strong>Proposal.</strong> Accept <code>nextChargeAt</code> in the reactivate body. Apply the same rules as <code>PATCH</code>: <code>400</code> for a date in the past, and <code>409</code> with <code>paidUntil</code> for a date inside a paid period unless <code>allowEarlyCharge</code> is <code>true</code>. Or keep a future <code>nextChargeAt</code> that was set while the subscription was canceled.</p>
+      <pre><code class="lang-json">POST /subscriptions/sub_test_example/reactivate
+{ "nextChargeAt": "2026-11-01T06:00:00.000Z" }</code></pre>
 
       <h2>Payment methods</h2>
 

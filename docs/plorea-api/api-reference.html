@@ -1841,7 +1841,7 @@ const subscription = await res.json();</code></pre></div>
 }</code></pre>
       <div class="callout warning">
         <p class="callout-title"><code>nextChargeAt</code> can lie in the past</p>
-        <p>The next charge is the last charge plus one interval. <span class="badge verified">Verified</span> If the customer comes back after that date, we expect the scheduler to charge at once. The test covered reactivation inside a paid period only. <span class="badge open">Open question</span> Check <code>accessEndsAt</code> before you reactivate. A long gap is better handled with a new subscription.</p>
+        <p>The next charge is the last charge plus one interval. <span class="badge verified">Verified</span> If the customer comes back after that date, we expect the scheduler to charge at once. The test covered reactivation inside a paid period only. <span class="badge open">Open question</span> A <code>nextChargeAt</code> set with <code>PATCH</code> on the canceled subscription is overwritten. With no earlier charge, reactivate set <code>nextChargeAt</code> to the time of the call. <span class="badge verified">Verified in test 2026-10-14</span> Reactivate takes no date. See <a href="wishlist.html#next-charge-date-on-reactivate">wishlist #21</a>. Check <code>accessEndsAt</code> before you reactivate. A long gap is better handled with a new subscription.</p>
       </div>
       <h4>Errors</h4>
       <div class="table-wrap"><table>
