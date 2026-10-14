@@ -101,8 +101,9 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
   reference: the webhook and the reconciliation job can both see the same charge.
 - Read scheduled charges from `charges()`. A scheduler-created
   `{subId}-{chgId}` reference does not resolve through `payments()->status()`.
-- A **manual** `charge()` raises `PaymentStatusUpdated` instead, and its
-  reference does resolve through `payments()->status()`. Since 2026-10-14,
+- A **manual** `charge()` raised `PaymentStatusUpdated` in captures before
+  2026-10-14, and its reference resolves through `payments()->status()`.
+  Whether `payment.authorised` still comes is unobserved. Since 2026-10-14,
   Plorea states that a manual charge also sends `subscription.charge_succeeded`
   or `subscription.charge_failed` with `reason: "manual_charge"` (not tested by
   us). Check `reason` before you treat the event as a renewal.

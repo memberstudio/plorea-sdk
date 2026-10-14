@@ -136,7 +136,7 @@ sequenceDiagram
   }
 }</code></pre>
 
-      <p>A <strong>manual</strong> subscription charge (<code>POST /subscriptions/{id}/charge</code>) also sends <code>payment.authorised</code>. The reference has the form <code>{subscriptionId}-{chargeId}</code>, <code>orderId</code> holds the subscription's <code>externalId</code>, and the link fields are null. <span class="badge verified">Verified</span></p>
+      <p>A <strong>manual</strong> subscription charge (<code>POST /subscriptions/{id}/charge</code>) also sends <code>payment.authorised</code>. The reference has the form <code>{subscriptionId}-{chargeId}</code>, <code>orderId</code> holds the subscription's <code>externalId</code>, and the link fields are null. <span class="badge verified">Verified</span> before 2026-10-14. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Whether <code>payment.authorised</code> still comes as well is <span class="badge unobserved">Unobserved</span>.</p>
       <pre data-title="payment.authorised — manual subscription charge"><code class="lang-json">{
   "eventId": "evt_00000000000000000000000000000003",
   "createdAt": "2026-09-04T09:55:31.000Z",

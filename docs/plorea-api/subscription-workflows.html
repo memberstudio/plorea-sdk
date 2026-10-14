@@ -330,7 +330,7 @@ Example: 199 kr → 399 kr, 15 of 30 days left
 difference = (39900 − 19900) × 15/30 = 10000 øre (100,00 kr)
 vatAmount  = 10000 × 0.25 / 1.25    =  2000 øre</code></pre>
       <p><code>periodStart</code> is the time of the last charge. Read it from the newest item in <code>GET /subscriptions/{id}/charges</code>, or from <code>lastChargeAt</code> on the subscription.</p>
-      <p>Since 2026-10-14 a late retry no longer moves the period: the next period starts at the end of the previous one, and subscriptions have <code>currentPeriodEnd</code>. <span class="badge stated">Stated by Plorea</span> The field is present on <code>active</code> subscriptions with a charge. <span class="badge verified">Verified</span> in test 2026-10-14. When <code>currentPeriodEnd</code> is present, use <code>currentPeriodEnd</code> minus one interval as <code>periodStart</code>. After a late retry, <code>lastChargeAt</code> is later than the period start and overcharges an upgrade.</p>
+      <p>Since 2026-10-14 a late retry no longer moves the period: the next period starts at the end of the previous one, and subscriptions have <code>currentPeriodEnd</code>. <span class="badge stated">Stated by Plorea</span> The field is present on <code>active</code> subscriptions with a charge. <span class="badge verified">Verified</span> in test 2026-10-14. Use the period end minus one interval as <code>periodStart</code>. On an <code>active</code> subscription with a charge, <code>currentPeriodEnd</code> equals <code>nextChargeAt</code>, so the example below counts back from <code>nextChargeAt</code>. After a late retry, <code>lastChargeAt</code> is later than the period start and overcharges an upgrade.</p>
       <p>Prorate only an <code>active</code> subscription with a valid paid period: <code>lastChargeAt</code> and <code>nextChargeAt</code> are both set, and <code>lastChargeAt &lt; now &lt; nextChargeAt</code>. A <code>trialing</code> subscription has <code>lastChargeAt: null</code>. The customer has paid nothing yet, so there is no difference to charge. For a trial, PATCH the new price only.</p>
 
       <ol class="steps">
@@ -382,8 +382,12 @@ $current = $subscriptions-&gt;find('sub_test_acme_001');
 // $upgrade is your own record of this upgrade (for example an Eloquent model).
 // In the state 'charged' the difference is already paid: skip to the PATCH.
 if ($upgrade-&gt;state !== 'charged') {
-    $periodStart = $current-&gt;lastChargeAt;
+    // Count back one interval from the period end. After a late retry,
+    // lastChargeAt is later than the period start and overcharges.
     $periodEnd = $current-&gt;nextChargeAt;
+    $periodStart = $current-&gt;lastChargeAt !== null &amp;&amp; $periodEnd !== null &amp;&amp; $current-&gt;interval !== null
+        ? $periodEnd-&gt;sub($current-&gt;interval-&gt;unit-&gt;value, $current-&gt;interval-&gt;count)
+        : null;
     $now = now();
 
     // Prorate only an active subscription with a valid paid period.
@@ -1166,7 +1170,7 @@ const accessEndsAt = cancellation.accessEndsAt ?? new Date().toISOString();</cod
         <li><strong>Check if you need to reactivate at all</strong>Only a <code>canceled</code> subscription can be reactivated. An <code>active</code> subscription returns <code>400 "Only canceled subscriptions can be reactivated"</code>. <span class="badge verified">Verified</span> Other statuses, <code>payment_failed</code> included, are untested. <span class="badge unobserved">Unobserved</span></li>
         <li><strong>Check the card</strong>Read <code>GET /payment-methods/{id}</code>. If the card is no longer usable, run <a href="#replace-the-card">Replace the card</a> after you reactivate.</li>
         <li><strong>Reactivate</strong>Call <code>POST /subscriptions/{id}/reactivate</code> with no body other than <code>platform</code>.</li>
-        <li><strong>Read <code>nextChargeAt</code></strong>It is set to last charge + one interval. A reactivate inside the paid period does not charge again. <span class="badge verified">Verified</span> A <code>nextChargeAt</code> set with <code>PATCH</code> before the reactivate is overwritten. With no earlier charge, or after a long gap, the next charge is "now". <span class="badge verified">Verified in test 2026-10-14</span> To restart on an agreed later date, do not reactivate. Create a new subscription with <code>trialEndsAt</code> on that date. See <a href="wishlist.html#next-charge-date-on-reactivate">wishlist #21</a>.</li>
+        <li><strong>Read <code>nextChargeAt</code></strong>It is set to last charge + one interval. A reactivate inside the paid period does not charge again. <span class="badge verified">Verified</span> A <code>nextChargeAt</code> set with <code>PATCH</code> before the reactivate is overwritten. With no earlier charge, the next charge was "now". After a long gap, we expect the same, but that is untested. <span class="badge verified">Verified in test 2026-10-14</span> To restart on an agreed later date, do not reactivate. Create a new subscription with <code>trialEndsAt</code> on that date. See <a href="wishlist.html#next-charge-date-on-reactivate">wishlist #21</a>.</li>
       </ol>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_acme_001/reactivate \
