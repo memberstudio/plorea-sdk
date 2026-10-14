@@ -10,13 +10,14 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | `AuthenticationException` | 401 / 403 — invalid or missing API key, a tenant mismatch, or a request that reached the wrong environment |
 | `ChargeFailedException` | 402 — a subscription charge was declined by the acquirer |
 | `NotFoundException` | 404 — unknown reference or id |
+| `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is a plain `RequestException` |
 | `ServerException` | 5xx — Plorea-side error |
 | `ConnectionException` | The API could not be reached |
 | `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |
 | `PloreaException` | Everything else, including the SDK's own guards |
 
 `ValidationException`, `AuthenticationException`, `ChargeFailedException`,
-`NotFoundException` and `ServerException` all extend `RequestException`, which
+`NotFoundException`, `NextChargeInPaidPeriodException` and `ServerException` all extend `RequestException`, which
 exposes the response:
 
 ```php

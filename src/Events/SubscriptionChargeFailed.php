@@ -34,6 +34,14 @@ namespace MemberFlow\Plorea\Events;
  * $eventId is Plorea's identifier for the delivery and is what you should
  * deduplicate on. Both it and $type come from the request body rather than
  * the headers, because the signature covers the body only.
+ *
+ * $reason is data.reason. Stated by Plorea 2026-10-14: a manual
+ * subscriptions()->charge() now sends this event too, with reason
+ * "manual_charge". Not yet captured; null when the payload has none.
+ * A failure never extends access: after a failed charge, nextChargeAt can
+ * be the next retry, not a paid-through date. Check isManualCharge() to
+ * tell a refused manual charge from a failed renewal before you start
+ * dunning.
  */
 class SubscriptionChargeFailed
 {
@@ -50,5 +58,15 @@ class SubscriptionChargeFailed
         public array $payload,
         public ?string $eventId = null,
         public ?string $type = null,
+        public ?string $reason = null,
     ) {}
+
+    /**
+     * Whether a manual subscriptions()->charge() sent this event, rather than
+     * the scheduler.
+     */
+    public function isManualCharge(): bool
+    {
+        return $this->reason === 'manual_charge';
+    }
 }

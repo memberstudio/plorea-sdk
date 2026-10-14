@@ -92,7 +92,9 @@ lifecycle run below is exactly 3 deliveries.
 - **Stated by Plorea 2026-10-14 (not tested by us):** a manual charge now also
   sends `subscription.charge_succeeded` / `subscription.charge_failed` with
   `reason: "manual_charge"`. Whether `payment.authorised` still comes too is
-  UNOBSERVED. Do not change the dispatch until a capture exists.
+  UNOBSERVED. Do not change the dispatch until a capture exists. The events
+  expose `data.reason` as `$reason` / `isManualCharge()` (null when absent);
+  that reads the payload and does not change the dispatch.
 
 `WebhookController` dispatches `SubscriptionChargeSucceeded` for the former and
 **deliberately does not also dispatch `PaymentStatusUpdated`** — firing both

@@ -134,6 +134,7 @@ class WebhookController
                 $payload,
                 $eventId,
                 $type,
+                $this->stringOrNull($data['reason'] ?? null),
             ));
 
             return;
@@ -147,6 +148,7 @@ class WebhookController
             $payload,
             $eventId,
             $type,
+            $this->stringOrNull($data['reason'] ?? null),
         ));
     }
 

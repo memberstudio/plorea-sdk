@@ -9,6 +9,23 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 - `Subscription::$environment` (`test` or `live`). Plorea added `environment`
   to `GET` responses for subscriptions on 2026-10-13. It is `null` on older
   responses. `PaymentMethod`, `PaymentStatus` and `PaymentLink` already map it.
+- `Subscription::$currentPeriodEnd`, the end of the period the last charge paid
+  for. Verified in test on 2026-10-14: equal to `nextChargeAt` on active,
+  charged subscriptions, and `null` on trialing and canceled ones.
+- `PaymentMethod` card fields from 2026-10-14: `$last4`, `$brand`,
+  `$expiryMonth`, `$expiryYear`, `$fundingSource`, `$walletType`, `$isToken`,
+  `$tokenLast4`, `$physicalCardLast4`, `$physicalCardExpiryMonth` and
+  `$physicalCardExpiryYear`. Show the `physicalCard*` fields to the customer.
+  Verified in test on 2026-10-14. Older methods can have `null` here.
+- `PendingSubscriptionUpdate::allowEarlyCharge()`. A new `nextChargeAt` inside a
+  paid period is refused with `409` and `paidUntil`, thrown as the new
+  `NextChargeInPaidPeriodException` with `paidUntil()`. A `409` without
+  `paidUntil` stays a plain `RequestException`. Stated by Plorea 2026-10-14.
+- `PaymentMethodCancellation::$adyenTokenDisabled`. Stated by Plorea
+  2026-10-14, test only.
+- `$reason` and `isManualCharge()` on `SubscriptionChargeSucceeded` and
+  `SubscriptionChargeFailed`. Stated by Plorea 2026-10-14: a manual charge sends
+  these events with `reason: "manual_charge"`. The dispatch is unchanged.
 
 ### Plorea API change (2026-10-13)
 

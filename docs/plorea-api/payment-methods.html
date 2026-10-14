@@ -306,7 +306,8 @@ res.json({
 if ($method-&gt;isActive()) {
     $member-&gt;update([
         'payment_method_id' =&gt; $method-&gt;id,
-        'card_label' =&gt; "{$method-&gt;cardBrand} •••• {$method-&gt;cardLast4}",
+        // physicalCardLast4 (2026-10-14) is what the customer sees on the card.
+        'card_label' =&gt; "{$method-&gt;cardBrand} •••• ".($method-&gt;physicalCardLast4 ?? $method-&gt;cardLast4),
         'card_expiry' =&gt; $method-&gt;expiryDate, // "03/2030"
     ]);
 } elseif ($method-&gt;hasFailed()) {
@@ -495,7 +496,7 @@ try {
       <div class="callout warning">
         <p class="callout-title">A sibling method can still be charged</p>
         <p>Two payment methods for the same shopper can share one stored card (the same <code>storedPaymentMethodId</code>). A delete cancels only the method you name. In test, the sibling still read <code>active</code> after the delete, and a charge on it was authorised. <span class="badge verified">Verified</span> Production is not observed. To remove a card completely, delete every method that shares its <code>storedPaymentMethodId</code>.</p>
-        <p>Since 2026-10-14, a delete also disables the card at Adyen when no other active method or subscription uses it. The response has <code>adyenTokenDisabled</code>. Test only for now. <span class="badge stated">Stated by Plorea</span></p>
+        <p>Since 2026-10-14, a delete also disables the card at Adyen when no other active method or subscription uses it. The response has <code>adyenTokenDisabled</code>. The PHP SDK reads it as <code>$cancellation-&gt;adyenTokenDisabled</code>. Test only for now. <span class="badge stated">Stated by Plorea</span></p>
       </div>
 
       <h2>Test cards</h2>
