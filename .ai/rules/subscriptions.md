@@ -146,7 +146,8 @@ subscriptions excluded because they keep a stale date.
 
 `past_due` is **not** overdue: Plorea moves `nextChargeAt` to the retry
 (failure + `retryIntervalDays`), so the status check is required — CAPTURED
-2026-10-01. `payment_failed` is documented, never observed. The overdue test
+2026-10-01. `payment_failed` as a status was seen on live subscriptions
+(2026-10-11, read-only); its transitions and recovery are unobserved. The overdue test
 stays **on purpose**, for a cycle that stalls without any failure status;
 `nextChargeAt` is captured. The scheduler charges within
 seconds of the due time and moves the date forward as it does, so a date still

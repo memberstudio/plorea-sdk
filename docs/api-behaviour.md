@@ -753,8 +753,10 @@ successfully and declines on a later charge, or by exposing
 `RequestedTestAcquirerResponseCode` passthrough on
 `POST subscriptions/{id}/charge`. Both have been requested.
 
-Consequently: the fake's 402 stub and the `payment_failed` status are modelled
-from Plorea's documentation, not from an observation; `past_due` is observed. Write dunning code that
+Consequently: the fake's 402 stub and the move into `payment_failed` are modelled
+from Plorea's documentation, not from an observation. `past_due` is observed;
+the `payment_failed` status itself was seen only on live subscriptions, read-only
+(2026-10-11, above). Write dunning code that
 tolerates a shape slightly different from what the SDK models — branch on
 `status`, and do not require `failureReason` to be present.
 
