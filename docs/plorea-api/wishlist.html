@@ -48,8 +48,8 @@
             <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">Partly delivered 2026-09-22</span></td></tr>
             <tr><td>17</td><td><a href="#machine-readable-error-codes">Machine-readable error codes</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>18</td><td><a href="#changelog-and-versioning">Changelog and versioning</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge open">Reported</span></td></tr>
-            <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge stated">Answered 2026-10-14</span></td></tr>
+            <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge stated">In test 2026-10-14</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -178,7 +178,8 @@ Idempotent-Replayed: true</code></pre>
 
       <h3 id="charge-after-resume">19. Charge after resume</h3>
       <p><span class="badge open">Reported to Plorea 2026-10-01</span></p>
-      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span> A plain <code>PATCH</code> of the date on an <code>active</code> subscription that had been charged behaved the same, with two date formats over four scheduler runs (4 and 5 October). Only <code>trialing</code> subscriptions with a moved date were charged. Reported again on 2026-10-05. Still open.</p>
+      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span> A plain <code>PATCH</code> of the date on an <code>active</code> subscription that had been charged behaved the same, with two date formats over four scheduler runs (4 and 5 October). Only <code>trialing</code> subscriptions with a moved date were charged. Reported again on 2026-10-05.</p>
+      <p><strong>Answer, 2026-10-14.</strong> There were two causes. Before 2026-10-05, <code>PATCH</code> ignored <code>nextChargeAt</code>. The scheduler also does not charge the same period twice, so a date inside a paid period waits until the period ends. <code>PATCH</code> now returns <code>409</code> with <code>paidUntil</code> for such a date, and <code>allowEarlyCharge: true</code> charges earlier anyway. <span class="badge stated">Stated by Plorea</span> Our tests moved the date inside the paid month, which fits this answer.</p>
       <p><strong>Impact.</strong> A resumed membership may never bill again. Integrators must watch every resumed subscription for an overdue <code>nextChargeAt</code>.</p>
       <p><strong>Proposal.</strong> Charge a resumed subscription on its <code>nextChargeAt</code>, as for any active subscription. Document the expected scheduler delay.</p>
 
@@ -211,6 +212,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Problem.</strong> Two payment methods can share one stored card: same shopper, same <code>storedPaymentMethodId</code>. After a delete, the sibling still reads <code>active</code>. A manual charge on a new subscription on the sibling was <code>Authorised</code>. <span class="badge verified">Verified in test 2026-10-06</span> Production is unobserved.</p>
       <p><strong>Impact.</strong> A customer who removes a card can still be charged on it. Integrators must find and delete every sibling themselves.</p>
       <p><strong>Proposal.</strong> Disable the stored card at Adyen on delete, and cancel every method that shares it. Or return the sibling IDs in the delete response.</p>
+      <p><strong>Answer, 2026-10-14.</strong> <code>DELETE</code> now disables the stored card at Adyen when no other active payment method or subscription uses it. A shared card stays until every method is deleted. The response has <code>adyenTokenDisabled</code>. Active in test. Live follows later. <span class="badge stated">Stated by Plorea</span></p>
 
       <h2>Webhooks</h2>
 

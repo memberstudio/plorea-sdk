@@ -29,6 +29,18 @@
 
       <h2 id="2026-10">October 2026</h2>
 
+      <h3 id="2026-10-14">2026-10-14</h3>
+      <ul>
+        <li><strong>A moved <code>nextChargeAt</code> is explained.</strong> Before 2026-10-05, <code>PATCH</code> ignored <code>nextChargeAt</code> without an error. The scheduler also does not charge the same period twice: a date inside a paid period waits until the period ends. <span class="badge stated">Stated by Plorea</span> See <a href="wishlist.html#charge-after-resume">Charge after resume</a>.</li>
+        <li><strong><code>PATCH</code> returns <code>409</code> with <code>paidUntil</code></strong> when the new <code>nextChargeAt</code> is inside a paid period. Send <code>allowEarlyCharge: true</code> to charge earlier anyway. <span class="badge stated">Stated by Plorea</span> Tested by Plorea in test.</li>
+        <li><strong>No drift after a retry.</strong> The next period now starts at the end of the previous period. Subscriptions have a new field, <code>currentPeriodEnd</code>. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>The amount can change over time</strong> on a stored card. Plorea sets no technical limit. You must tell the customer in advance, as the card schemes' rules for recurring charges require. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>New card fields on payment methods:</strong> <code>last4</code>, <code>brand</code>, <code>expiryMonth</code>, <code>expiryYear</code>, <code>fundingSource</code>, <code>walletType</code>, <code>isToken</code>, <code>tokenLast4</code>, <code>physicalCardLast4</code>, <code>physicalCardExpiryMonth</code> and <code>physicalCardExpiryYear</code>. Show the <code>physicalCard*</code> fields: the customer knows those digits. Older methods have the fields where Adyen sent the data, so some can be null. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong><code>DELETE</code> disables the stored card at Adyen</strong> when no other active payment method or subscription uses it. A shared card stays until every method that uses it is deleted. The response has <code>adyenTokenDisabled</code>. Test only for now. Plorea turns it on in live later. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Webhooks for manual charges.</strong> <code>POST /subscriptions/{id}/charge</code> sends <code>subscription.charge_succeeded</code> and <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. A charge that is <code>Pending</code> first and refused later sends <code>charge_failed</code> when the refusal comes. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>SDK:</strong> support for these fields follows in a later release.</li>
+      </ul>
+
       <h3 id="2026-10-13">2026-10-13</h3>
       <ul>
         <li><strong>The API key sets the environment.</strong> A <code>plr_test_</code> key reaches test and a <code>plr_live_</code> key reaches live. An <code>X-Environment</code> that does not match the key returns <code>403</code>. Without the header, Plorea uses the key's environment. Lists show only the key's environment. <span class="badge stated">Stated by Plorea</span> An ID from the other environment returns <code>404</code>. <span class="badge stated">Stated by Plorea</span> A test key reading a live subscription with <code>GET /subscriptions/{id}</code> got <code>404</code>. <span class="badge verified">Verified</span> in production. This replaces the 2026-10-11 note that the test key lists live subscriptions. See <a href="concepts.html#environments">Environments</a>.</li>
