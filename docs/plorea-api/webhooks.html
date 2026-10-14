@@ -103,7 +103,7 @@ sequenceDiagram
         <table>
           <thead><tr><th>Type</th><th>Sent when</th><th>Evidence</th></tr></thead>
           <tbody>
-            <tr><td><code>payment.authorised</code></td><td>A payment link, a session payment or a <strong>manual</strong> subscription charge is authorised.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.authorised</code></td><td>A payment link, a session payment or a <strong>manual</strong> subscription charge is authorised. For manual charges: verified before 2026-10-14, <span class="badge unobserved">Unobserved</span> since.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.failed</code></td><td>Adyen declines an authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settles.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>The <strong>scheduler</strong> charges a subscription.</td><td><span class="badge verified">Verified</span></td></tr>

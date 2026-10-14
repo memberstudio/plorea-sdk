@@ -201,7 +201,7 @@
       <h3>Signature verification proven</h3>
       <p><span class="badge verified">Verified 2026-09-09</span> The key is the secret's characters used verbatim, not decoded bytes. A genuine replayed delivery was accepted. The same delivery with a one-byte change was rejected. Any middleware that re-encodes the body before verification breaks it.</p>
       <h3>Subscription deliveries</h3>
-      <p><span class="badge verified">Verified 2026-09-04</span> A scheduled charge sends <code>subscription.charge_succeeded</code>. A manual charge sends <code>payment.authorised</code> with the normal payment shape.</p>
+      <p><span class="badge verified">Verified 2026-09-04</span> A scheduled charge sends <code>subscription.charge_succeeded</code>. A manual charge sends <code>payment.authorised</code> with the normal payment shape. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Whether <code>payment.authorised</code> still comes is <span class="badge unobserved">Unobserved</span>.</p>
       <h3><code>payment.failed</code></h3>
       <p><span class="badge verified">Verified 2026-09-09</span> Arrived about two seconds after the status changed. The type is <code>payment.failed</code> in the header and the body. The body has <code>eventCode: "AUTHORISATION"</code> and <code>success: false</code>, and no reason. <code>data</code> is a strict subset of the payment object.</p>
       <h3><code>subscription.charge_failed</code></h3>

@@ -1649,7 +1649,7 @@ const charge = await res.json();</code></pre></div>
 }</code></pre>
       <ul>
         <li><code>resultCode</code> is Adyen's answer. <code>Authorised</code> means success. <span class="badge verified">Verified</span></li>
-        <li>The payment <code>reference</code> is <code>{subscriptionId}-{chargeId}</code>. It resolves on <a href="#get-payment-status">payment status</a>. A manual charge also sends a <code>payment.authorised</code> webhook. <span class="badge verified">Verified</span></li>
+        <li>The payment <code>reference</code> is <code>{subscriptionId}-{chargeId}</code>. It resolves on <a href="#get-payment-status">payment status</a>. A manual charge also sent a <code>payment.authorised</code> webhook. <span class="badge verified">Verified</span> before 2026-10-14. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Whether <code>payment.authorised</code> still comes is <span class="badge unobserved">Unobserved</span>.</li>
       </ul>
       <h4>Errors</h4>
       <div class="table-wrap"><table>

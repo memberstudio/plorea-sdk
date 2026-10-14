@@ -778,8 +778,11 @@ which the SDK exposes as `$event->eventId`.
 A **scheduler** charge emits `subscription.charge_succeeded` with
 `data: {subscriptionId, chargeId, reference, customerId, shopperReference,
 externalId, amount: {value, currency}, pspReference, nextChargeAt,
-environment}`. A **manual** `charge()` emits `payment.authorised` with the
-ordinary flat payment shape.
+environment}`. A **manual** `charge()` emitted `payment.authorised` with the
+ordinary flat payment shape (captured before 2026-10-14). Since 2026-10-14,
+Plorea states that a manual charge also sends `subscription.charge_succeeded`
+or `subscription.charge_failed` with `reason: "manual_charge"`. Whether
+`payment.authorised` still comes is unobserved.
 
 Webhook registration is manual and **per tenant**. Until 2026-09-21 Plorea
 delivered to the one URL you gave them, with no per-environment routing, so a

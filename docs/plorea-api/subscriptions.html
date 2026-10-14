@@ -787,7 +787,7 @@ if (current.status === 'canceled') {
       <h2>Know when a renewal succeeds</h2>
       <p>Use two signals together.</p>
       <ol class="steps">
-        <li><strong>Webhook</strong>A scheduled charge sends <code>subscription.charge_succeeded</code> with <code>subscriptionId</code>, <code>externalId</code>, <code>amount</code> and the new <code>nextChargeAt</code>. Extend access to <code>nextChargeAt</code>. A manual charge sends <code>payment.authorised</code> instead. <span class="badge verified">Verified</span></li>
+        <li><strong>Webhook</strong>A scheduled charge sends <code>subscription.charge_succeeded</code> with <code>subscriptionId</code>, <code>externalId</code>, <code>amount</code> and the new <code>nextChargeAt</code>. Extend access to <code>nextChargeAt</code>. A manual charge sent <code>payment.authorised</code> instead. <span class="badge verified">Verified</span> before 2026-10-14. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Whether <code>payment.authorised</code> still comes is <span class="badge unobserved">Unobserved</span>. Check <code>reason</code> before you extend access.</li>
         <li><strong>Polling</strong>Plorea does not redeliver failed webhooks. Run a scheduled job that reads each subscription. Look at it if the status is <code>past_due</code>, or if <code>nextChargeAt</code> is more than an hour in the past and the status is not <code>canceled</code> or <code>paused</code>. See <a href="dunning.html">Failed charges and dunning</a>.</li>
       </ol>
       <div class="tabs">
@@ -825,7 +825,7 @@ const needsAttention = overdue || sub.status === 'past_due' || sub.status === 'p
           <thead><tr><th>Action</th><th>Webhook</th></tr></thead>
           <tbody>
             <tr><td>Scheduled charge succeeds</td><td><code>subscription.charge_succeeded</code> <span class="badge verified">Verified</span></td></tr>
-            <tr><td>Manual charge succeeds</td><td><code>payment.authorised</code> <span class="badge verified">Verified</span></td></tr>
+            <tr><td>Manual charge succeeds</td><td><code>payment.authorised</code> <span class="badge verified">Verified</span> before 2026-10-14. Since then <code>subscription.charge_succeeded</code> with <code>reason: "manual_charge"</code> <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td>Scheduled charge fails</td><td><code>subscription.charge_failed</code>, seen in test. Not in Plorea's catalogue, and none arrived for the production failure. <span class="badge verified">Verified</span> in test</td></tr>
             <tr><td>Cancel, reactivate</td><td>None <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td>Pause, resume</td><td>None in the catalogue <span class="badge unobserved">Not observed</span></td></tr>

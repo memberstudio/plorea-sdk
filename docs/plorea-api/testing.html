@@ -79,7 +79,7 @@
         <li><strong>Cancel</strong>Pay a third link and cancel it. Expect <code>cancel_requested</code>.</li>
         <li><strong>Store a card</strong>Run a card setup. Poll <code>GET /payment-methods/{id}</code> until it reads <code>active</code>.</li>
         <li><strong>Subscription</strong>Create a subscription with <code>interval: {unit: "day", count: 1}</code>. The first charge runs at once. The next one runs the following day and sends <code>subscription.charge_succeeded</code>.</li>
-        <li><strong>Manual charge</strong>Charge the subscription. Expect <code>charge_created</code> and a <code>payment.authorised</code> webhook.</li>
+        <li><strong>Manual charge</strong>Charge the subscription. Expect <code>charge_created</code>. Before 2026-10-14 a <code>payment.authorised</code> webhook followed. Since then, also expect <code>subscription.charge_succeeded</code> with <code>reason: "manual_charge"</code> (stated by Plorea). Record which events arrive.</li>
         <li><strong>Cancel and reactivate</strong>Cancel the subscription, then reactivate it. Check that <code>nextChargeAt</code> is one interval after the last charge.</li>
       </ol>
 
