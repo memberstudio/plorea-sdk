@@ -233,6 +233,11 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $event->externalId;  // your own entity id
     $event->eventId;     // deduplicate on this
 
+    // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+    // Extending access to nextChargeAt stays safe: it is idempotent.
+    // Send a renewal receipt or book a renewal only when this is false.
+    $isManualCharge = ($event->payload['data']['reason'] ?? null) === 'manual_charge';
+
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
 
     // Extend access idempotently — ->status, ->nextChargeAt, ->accessEndsAt

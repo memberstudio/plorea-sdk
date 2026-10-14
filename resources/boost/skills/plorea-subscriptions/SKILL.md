@@ -87,6 +87,8 @@ $existing = Plorea::subscriptions()->forExternalId((string) $membership->id)->fi
 ```php
 Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
     // dedupe on $event->eventId
+    // since 2026-10-14 a manual charge lands here too: skip renewal receipts when
+    // ($event->payload['data']['reason'] ?? null) === 'manual_charge'
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
     $charge = Plorea::subscriptions()->charges($subscription->id)->sortByDesc('createdAt')->first();
 

@@ -476,6 +476,11 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $event-&gt;externalId;  // your own entity id
     $event-&gt;eventId;     // deduplicate on this
 
+    // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+    // Extending access to nextChargeAt stays safe: it is idempotent.
+    // Send a renewal receipt or book a renewal only when this is false.
+    $isManualCharge = ($event-&gt;payload['data']['reason'] ?? null) === 'manual_charge';
+
     $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
     // The paid period ends at nextChargeAt. accessEndsAt is null while active.
     if ($subscription-&gt;isActive() &amp;&amp; $subscription-&gt;nextChargeAt !== null) {
@@ -498,6 +503,10 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
     logger()-&gt;info('Plorea webhook', ['type' =&gt; $event-&gt;type, 'id' =&gt; $event-&gt;eventId]);
 });</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">if (event.type === 'subscription.charge_succeeded') {
+  // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+  // Extending access to nextChargeAt stays safe: it is idempotent.
+  // Send a renewal receipt or book a renewal only when this is false.
+  const isManualCharge = event.data.reason === 'manual_charge';
   const { subscriptionId } = event.data;
   const res = await fetch(
     `https://payments.plorea.no/subscriptions/${encodeURIComponent(subscriptionId)}?platform=acme`,

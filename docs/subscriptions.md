@@ -445,6 +445,10 @@ $workspace->update(['plorea_subscription_id' => $subscription->id]);
 
 // 3. Extend access on each successful scheduled charge.
 Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
+    // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+    // Extending access to nextChargeAt stays safe: it is idempotent.
+    // Send a renewal receipt or book a renewal only when this is false.
+    $isManualCharge = ($event->payload['data']['reason'] ?? null) === 'manual_charge';
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
     Workspace::where('plorea_subscription_id', $subscription->id)
         ->first()?->extendAccessTo($subscription->nextChargeAt);  // idempotently

@@ -233,6 +233,8 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
 
     // extend access idempotently — ->status, ->nextChargeAt, ->accessEndsAt
+    // since 2026-10-14 a manual charge lands here too: skip renewal receipts when
+    // ($event->payload['data']['reason'] ?? null) === 'manual_charge'
     // $event->externalId links back to your own entity
 });
 ```
