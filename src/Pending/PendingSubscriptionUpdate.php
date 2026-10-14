@@ -10,6 +10,7 @@ use DateTimeZone;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\Subscription;
+use MemberFlow\Plorea\Exceptions\NextChargeInPaidPeriodException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
 
 /**
@@ -128,7 +129,25 @@ class PendingSubscriptionUpdate
     }
 
     /**
+     * Charge at the new nextChargeAt even when it falls inside a period the
+     * customer has already paid for.
+     *
+     * Stated by Plorea 2026-10-14: without this flag, PATCH refuses such a
+     * date with 409 and paidUntil, thrown as NextChargeInPaidPeriodException.
+     * The scheduler never charges the same period twice. Use the flag only
+     * when the customer agreed to pay again, for example for an upgrade.
+     */
+    public function allowEarlyCharge(): static
+    {
+        $this->changes['allowEarlyCharge'] = true;
+
+        return $this;
+    }
+
+    /**
      * Apply the update.
+     *
+     * @throws NextChargeInPaidPeriodException When nextChargeAt falls inside a paid period without allowEarlyCharge() (stated by Plorea 2026-10-14).
      */
     public function save(): Subscription
     {

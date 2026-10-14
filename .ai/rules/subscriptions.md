@@ -127,7 +127,8 @@ whether a non-nine-digit value is rejected. The fake does not model either.
 - **Stated by Plorea 2026-10-14 (not tested by us):** in **test only**, a delete
   now also disables the card at Adyen when no other active payment method or
   subscription uses it. A shared `storedPaymentMethodId` stays until every
-  method using it is deleted. The response has `adyenTokenDisabled`. Live
+  method using it is deleted. The response has `adyenTokenDisabled`
+  (`PaymentMethodCancellation::$adyenTokenDisabled`, null when absent). Live
   follows later; until Plorea confirms live, assume live still keeps the card.
 - The cancelled method stays readable, card and stored id included. The read
   has no `cancelledAt`; the delete response does.
@@ -312,3 +313,17 @@ Persist the original boundary before the provider clears it. In-flight charges,
 retry cancellation, pausing `past_due`, later billing anchors and combined
 updates (amount/card with status) are unverified. Do not assume a repeated
 resume is safe after the scheduler has advanced the date.
+
+## 2026-10-14 fields in the SDK
+
+- `Subscription::$currentPeriodEnd` — VERIFIED in test 2026-10-14: equal to
+  `nextChargeAt` on active, charged subscriptions; absent on trialing and
+  canceled ones. The fake omits it, because its default subscription has no
+  charge.
+- `PaymentMethod` card fields — VERIFIED in test 2026-10-14 on a read. The
+  months and years are integers. The fake returns them for a plain card.
+- **409 with `paidUntil`** on `PATCH` — Stated by Plorea, not captured.
+  `RequestException::fromResponse()` maps a 409 **only when `paidUntil` is
+  present** to `NextChargeInPaidPeriodException`; any other 409 stays a plain
+  `RequestException`. `allowEarlyCharge()` sends `allowEarlyCharge: true`.
+  Replace the constructed test body with a fixture once a 409 is captured.

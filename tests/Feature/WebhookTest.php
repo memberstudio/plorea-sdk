@@ -220,7 +220,9 @@ class WebhookTest extends TestCase
             fn (SubscriptionChargeSucceeded $event): bool => $event->subscriptionId === 'sub_test_golden'
                 && $event->chargeId === 'chg_test_golden_2'
                 && $event->reference === 'sub_test_golden-chg_test_golden_2'
-                && $event->externalId === 'GOLDEN-EXT-001',
+                && $event->externalId === 'GOLDEN-EXT-001'
+                && $event->reason === null
+                && ! $event->isManualCharge(),
         );
 
         // The payload carries a data.reference, but it belongs to a
@@ -228,6 +230,24 @@ class WebhookTest extends TestCase
         // with a 403 — raising PaymentStatusUpdated would walk listeners
         // straight into that failure.
         Event::assertNotDispatched(PaymentStatusUpdated::class);
+    }
+
+    public function test_it_flags_a_manual_charge_on_subscription_charge_events(): void
+    {
+        // Stated by Plorea on 2026-10-14: a manual charge sends the
+        // subscription events with data.reason "manual_charge". Not captured
+        // yet, so the reason is added to the scheduler captures.
+        Event::fake([SubscriptionChargeSucceeded::class, SubscriptionChargeFailed::class]);
+
+        foreach (['webhook-subscription-charge-succeeded', 'webhook-subscription-charge-failed'] as $fixture) {
+            $payload = $this->fixture($fixture);
+            $payload['data']['reason'] = 'manual_charge';
+
+            $this->postSignedWebhook($payload)->assertOk();
+        }
+
+        Event::assertDispatched(SubscriptionChargeSucceeded::class, fn (SubscriptionChargeSucceeded $event): bool => $event->reason === 'manual_charge' && $event->isManualCharge());
+        Event::assertDispatched(SubscriptionChargeFailed::class, fn (SubscriptionChargeFailed $event): bool => $event->reason === 'manual_charge' && $event->isManualCharge());
     }
 
     public function test_it_handles_a_real_failed_subscription_charge_webhook(): void

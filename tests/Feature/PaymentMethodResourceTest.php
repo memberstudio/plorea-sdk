@@ -193,6 +193,81 @@ class PaymentMethodResourceTest extends TestCase
         $this->assertSame('0004', $method->cardLast4);
     }
 
+    public function test_it_maps_the_card_fields_added_on_2026_10_14(): void
+    {
+        // Verified in test on 2026-10-14 on a read of a Visa test card: every
+        // new field is present, the wallet and token fields are null, and the
+        // older card fields remain. Constructed from that read, not a capture.
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_new?*' => Http::response([
+                'paymentMethodId' => 'pm_new',
+                'status' => 'active',
+                'cardLast4' => '1111',
+                'cardBrand' => 'visa',
+                'expiryDate' => '03/2030',
+                'last4' => '1111',
+                'brand' => 'visa',
+                'expiryMonth' => 3,
+                'expiryYear' => 2030,
+                'fundingSource' => null,
+                'walletType' => null,
+                'isToken' => null,
+                'tokenLast4' => null,
+                'physicalCardLast4' => '1111',
+                'physicalCardExpiryMonth' => 3,
+                'physicalCardExpiryYear' => 2030,
+            ]),
+            'payments.plorea.no/payment-methods/pm_old?*' => Http::response([
+                'paymentMethodId' => 'pm_old',
+                'status' => 'active',
+                'cardLast4' => '0004',
+            ]),
+        ]);
+
+        $method = Plorea::paymentMethods()->find('pm_new');
+
+        $this->assertSame('1111', $method->last4);
+        $this->assertSame('visa', $method->brand);
+        $this->assertSame(3, $method->expiryMonth);
+        $this->assertSame(2030, $method->expiryYear);
+        $this->assertNull($method->fundingSource);
+        $this->assertNull($method->walletType);
+        $this->assertNull($method->isToken);
+        $this->assertNull($method->tokenLast4);
+        $this->assertSame('1111', $method->physicalCardLast4);
+        $this->assertSame(3, $method->physicalCardExpiryMonth);
+        $this->assertSame(2030, $method->physicalCardExpiryYear);
+        $this->assertSame('1111', $method->cardLast4);
+
+        $old = Plorea::paymentMethods()->find('pm_old');
+
+        $this->assertNull($old->last4);
+        $this->assertNull($old->physicalCardLast4);
+        $this->assertSame('0004', $old->cardLast4);
+    }
+
+    public function test_it_reads_whether_a_delete_disabled_the_card_at_adyen(): void
+    {
+        // Stated by Plorea on 2026-10-14, test only: the delete response has
+        // adyenTokenDisabled. Not captured yet, so this pins only the mapping.
+        Http::fake([
+            'payments.plorea.no/payment-methods/pm_new' => Http::response([
+                'paymentMethodId' => 'pm_new',
+                'status' => 'cancelled',
+                'previousStatus' => 'active',
+                'adyenTokenDisabled' => true,
+            ]),
+            'payments.plorea.no/payment-methods/pm_old' => Http::response([
+                'paymentMethodId' => 'pm_old',
+                'status' => 'cancelled',
+                'previousStatus' => 'active',
+            ]),
+        ]);
+
+        $this->assertTrue(Plorea::paymentMethods()->delete('pm_new')->adyenTokenDisabled);
+        $this->assertNull(Plorea::paymentMethods()->delete('pm_old')->adyenTokenDisabled);
+    }
+
     public function test_it_deletes_a_payment_method(): void
     {
         Http::fake([
@@ -242,6 +317,7 @@ class PaymentMethodResourceTest extends TestCase
         $this->assertNull($again->cancelledAt);
         $this->assertTrue($read->isCancelled());
         $this->assertTrue(Plorea::paymentMethods()->find('pm_other')->isActive());
+        $this->assertSame('0004', $read->physicalCardLast4);
         Plorea::assertSent(fn (RecordedRequest $request): bool => $request->matches('DELETE payment-methods/pm_123'));
     }
 

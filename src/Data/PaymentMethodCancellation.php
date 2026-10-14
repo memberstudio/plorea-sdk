@@ -20,6 +20,7 @@ final readonly class PaymentMethodCancellation
 
     /**
      * @param  array<string, mixed>  $raw
+     * @param  ?bool  $adyenTokenDisabled  Whether the delete also disabled the stored card at Adyen. Stated by Plorea 2026-10-14, test only: it does when no other active payment method or subscription uses the card. Not yet observed by us; null when absent. Until Plorea confirms live, assume live keeps the card.
      */
     public function __construct(
         public string $paymentMethodId,
@@ -29,6 +30,7 @@ final readonly class PaymentMethodCancellation
         public ?CarbonImmutable $cancelledAt,
         public ?CarbonImmutable $updatedAt,
         public array $raw = [],
+        public ?bool $adyenTokenDisabled = null,
     ) {}
 
     /**
@@ -44,6 +46,7 @@ final readonly class PaymentMethodCancellation
             cancelledAt: self::date($data['cancelledAt'] ?? null),
             updatedAt: self::date($data['updatedAt'] ?? null),
             raw: $data,
+            adyenTokenDisabled: self::bool($data['adyenTokenDisabled'] ?? null),
         );
     }
 

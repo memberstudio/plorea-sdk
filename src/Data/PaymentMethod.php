@@ -18,6 +18,12 @@ final readonly class PaymentMethod
     /**
      * @param  array<string, mixed>  $metadata
      * @param  array<string, mixed>  $raw
+     * @param  ?string  $last4  The card fields below were added on 2026-10-14. Verified in test that day on a read: all present, and the older cardLast4, cardBrand and expiryDate remain. Methods stored before then have them only where Adyen sent the data, so any can be null.
+     * @param  ?string  $fundingSource  For example "credit" or "debit". Null on a Visa test card.
+     * @param  ?string  $walletType  Set for a wallet such as Apple Pay or Google Pay. Null on a plain card.
+     * @param  ?bool  $isToken  Whether the stored card is a network token. Null on a Visa test card.
+     * @param  ?string  $tokenLast4  The last digits of the network token, which the customer does not recognise.
+     * @param  ?string  $physicalCardLast4  The digits printed on the customer's card. Show these.
      */
     public function __construct(
         public string $id,
@@ -42,6 +48,17 @@ final readonly class PaymentMethod
         public ?CarbonImmutable $createdAt,
         public ?CarbonImmutable $updatedAt,
         public array $raw = [],
+        public ?string $last4 = null,
+        public ?string $brand = null,
+        public ?int $expiryMonth = null,
+        public ?int $expiryYear = null,
+        public ?string $fundingSource = null,
+        public ?string $walletType = null,
+        public ?bool $isToken = null,
+        public ?string $tokenLast4 = null,
+        public ?string $physicalCardLast4 = null,
+        public ?int $physicalCardExpiryMonth = null,
+        public ?int $physicalCardExpiryYear = null,
     ) {}
 
     /**
@@ -72,6 +89,17 @@ final readonly class PaymentMethod
             createdAt: self::date($data['createdAt'] ?? null),
             updatedAt: self::date($data['updatedAt'] ?? null),
             raw: $data,
+            last4: self::string($data['last4'] ?? null),
+            brand: self::string($data['brand'] ?? null),
+            expiryMonth: self::int($data['expiryMonth'] ?? null),
+            expiryYear: self::int($data['expiryYear'] ?? null),
+            fundingSource: self::string($data['fundingSource'] ?? null),
+            walletType: self::string($data['walletType'] ?? null),
+            isToken: self::bool($data['isToken'] ?? null),
+            tokenLast4: self::string($data['tokenLast4'] ?? null),
+            physicalCardLast4: self::string($data['physicalCardLast4'] ?? null),
+            physicalCardExpiryMonth: self::int($data['physicalCardExpiryMonth'] ?? null),
+            physicalCardExpiryYear: self::int($data['physicalCardExpiryYear'] ?? null),
         );
     }
 

@@ -88,7 +88,7 @@ $existing = Plorea::subscriptions()->forExternalId((string) $membership->id)->fi
 Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
     // dedupe on $event->eventId
     // since 2026-10-14 a manual charge lands here too: skip renewal receipts when
-    // ($event->payload['data']['reason'] ?? null) === 'manual_charge'
+    // $event->isManualCharge()
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
     $charge = Plorea::subscriptions()->charges($subscription->id)->sortByDesc('createdAt')->first();
 
@@ -108,7 +108,11 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
   Whether `payment.authorised` still comes is unobserved. Since 2026-10-14,
   Plorea states that a manual charge also sends `subscription.charge_succeeded`
   or `subscription.charge_failed` with `reason: "manual_charge"` (not tested by
-  us). Check `reason` before you treat the event as a renewal.
+  us). Check `$event->isManualCharge()` before you treat the event as a renewal.
+- `update($id)->nextChargeAt($date)->save()` with a date inside a paid period
+  throws `NextChargeInPaidPeriodException` (409, `paidUntil()`). Add
+  `->allowEarlyCharge()` only when the customer agreed to pay again (stated by
+  Plorea 2026-10-14). `$subscription->currentPeriodEnd` is the paid period's end.
 - Do not wait on the webhook alone for the first charge. Poll `charges()` a few
   times after create so the customer sees the result, then leave it to the job.
 

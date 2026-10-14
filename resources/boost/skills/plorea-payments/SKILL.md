@@ -86,6 +86,7 @@ $session = Plorea::paymentMethods()->setup('customer-123', RecurringType::Subscr
 $method = Plorea::paymentMethods()->find($method->id);
 $method->isPendingSetup();  // customer has not finished the flow
 $method->isActive();        // card stored — cardLast4, cardBrand, expiryDate populated
+$method->physicalCardLast4; // since 2026-10-14: the digits on the customer's card; show these
 $method->hasFailed();       // verification refused, no card stored
 ```
 
@@ -234,7 +235,7 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
 
     // extend access idempotently — ->status, ->nextChargeAt, ->accessEndsAt
     // since 2026-10-14 a manual charge lands here too: skip renewal receipts when
-    // ($event->payload['data']['reason'] ?? null) === 'manual_charge'
+    // $event->isManualCharge()
     // $event->externalId links back to your own entity
 });
 ```

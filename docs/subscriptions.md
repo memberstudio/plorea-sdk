@@ -171,6 +171,28 @@ subscription (it stays paused) and on a trial — but on a trial only
 `nextChargeAt` moves, `trialEndsAt` keeps its old value. A trial with a moved
 date was charged on it (**Verified**).
 
+**A date inside a paid period** (stated by Plorea 2026-10-14). The scheduler
+never charges the same period twice, so such a date waits until the period
+ends. A `PATCH` with such a date now answers `409` with `paidUntil`. The SDK
+throws `NextChargeInPaidPeriodException`. Read `paidUntil()`, or charge anyway:
+
+```php
+try {
+    Plorea::subscriptions()->update($id)->nextChargeAt($date)->save();
+} catch (NextChargeInPaidPeriodException $e) {
+    $e->paidUntil();  // the end of the paid period
+}
+
+// Only when the customer agreed to pay again, for example for an upgrade:
+Plorea::subscriptions()->update($id)->nextChargeAt($date)->allowEarlyCharge()->save();
+```
+
+`$subscription->currentPeriodEnd` is the end of the paid period. Plorea starts
+the next period there, so a late retry does not move the billing date (stated
+by Plorea 2026-10-14). On `active`, charged subscriptions it equals
+`nextChargeAt`; it is null on `trialing` and `canceled` ones (verified in test
+2026-10-14).
+
 **Open question — no charge was seen after resume, or after a moved date on an
 `active` subscription.** On three resumed test subscriptions the scheduler had
 not charged 3, 16 and 41 minutes after the resume date, and each stayed
@@ -448,7 +470,7 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
     // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
     // Extending access to nextChargeAt stays safe: it is idempotent.
     // Send a renewal receipt or book a renewal only when this is false.
-    $isManualCharge = ($event->payload['data']['reason'] ?? null) === 'manual_charge';
+    $isManualCharge = $event->isManualCharge();
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
     Workspace::where('plorea_subscription_id', $subscription->id)
         ->first()?->extendAccessTo($subscription->nextChargeAt);  // idempotently

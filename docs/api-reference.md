@@ -146,6 +146,7 @@ sent until the terminal method.
 | `paymentMethod(string $paymentMethodId)` | Must be an `active` method |
 | `pause()` | Set `paused`; omit any previously set resume date |
 | `resumeAt(DateTimeInterface $nextChargeAt)` | Send `active` and the explicit UTC charge date together. The status change is **Verified**. No charge on that date has been seen yet (**Open question**) |
+| `allowEarlyCharge()` | Send `allowEarlyCharge: true`, so a `nextChargeAt` inside a paid period is charged anyway. Without it, Plorea answers 409 → `NextChargeInPaidPeriodException` (**Stated by Plorea** 2026-10-14) |
 | `nextChargeAt(DateTimeInterface $nextChargeAt)` | Store a new next-charge date (UTC) without changing the status. A trial is charged on it (**Verified**). An `active`, already-charged subscription has never been charged on a moved date (**Open question**). Combining it with `amount` is **unverified** |
 | **`save()`** | → `Data\Subscription` |
 
@@ -253,6 +254,9 @@ client.
 | `$storedPaymentMethodId` | Adyen's token — null until `active` |
 | `$setupPspReference` | |
 | `$cardLast4`, `$cardBrand`, `$expiryDate` | Populated once `active` |
+| `$last4`, `$brand`, `$fundingSource`, `$walletType`, `$tokenLast4`, `$physicalCardLast4` | `?string`. Added 2026-10-14; present on a read (**Verified** in test), with the token and wallet fields null on a test Visa. Show `$physicalCardLast4`: the customer knows those digits. `$tokenLast4` belongs to a network token (**Stated by Plorea**) |
+| `$expiryMonth`, `$expiryYear`, `$physicalCardExpiryMonth`, `$physicalCardExpiryYear` | `?int`. Added 2026-10-14 |
+| `$isToken` | `?bool`. Added 2026-10-14. Null on a plain test card (**Verified**); a boolean when set (**Stated by Plorea**) |
 | `$consentAt`, `$expiresAt`, `$createdAt`, `$updatedAt` | `?CarbonImmutable` |
 | `$metadata`, `$raw` | `array` |
 
@@ -268,6 +272,7 @@ Helpers: `isActive()`, `isPendingSetup()`, `hasFailed()`, `isCancelled()`, `is(s
 | `$alreadyCancelled` | `bool` — true when the method was already cancelled |
 | `$cancelledAt` | Null on a repeat call |
 | `$updatedAt` | `?CarbonImmutable` |
+| `$adyenTokenDisabled` | `?bool` — the delete also disabled the stored card at Adyen. Test only (**Stated by Plorea** 2026-10-14); null when absent |
 | `$raw` | `array` |
 
 Helper: `isCancelled()`.
@@ -294,6 +299,7 @@ Helper: `isCancelled()`.
 | `$interval` | `?BillingInterval` |
 | `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| `payment_failed` (seen in production after three failed attempts; the way out is unobserved) |
 | `$trialEndsAt`, `$nextChargeAt`, `$lastChargeAt` | `?CarbonImmutable` |
+| `$currentPeriodEnd` | `?CarbonImmutable` — the end of the paid period. Equals `nextChargeAt` on `active`, charged subscriptions; null on `trialing` and `canceled` ones (**Verified** in test 2026-10-14) |
 | `$lastPaymentReference` | `{subId}-{chgId}` — resolvable as a payment for **manual** charges only |
 | `$retryPolicy`, `$retryCount`, `$failureReason` | Dunning — populated on a `past_due` subscription; see [dunning](subscriptions.md#the-dunning-gap) |
 | `$canceledAt`, `$cancelReason`, `$accessEndsAt` | `accessEndsAt` is null when cancelling a trial |
