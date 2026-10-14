@@ -102,7 +102,10 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
 - Read scheduled charges from `charges()`. A scheduler-created
   `{subId}-{chgId}` reference does not resolve through `payments()->status()`.
 - A **manual** `charge()` raises `PaymentStatusUpdated` instead, and its
-  reference does resolve through `payments()->status()`.
+  reference does resolve through `payments()->status()`. Since 2026-10-14,
+  Plorea states that a manual charge also sends `subscription.charge_succeeded`
+  or `subscription.charge_failed` with `reason: "manual_charge"` (not tested by
+  us). Check `reason` before you treat the event as a renewal.
 - Do not wait on the webhook alone for the first charge. Poll `charges()` a few
   times after create so the customer sees the result, then leave it to the job.
 

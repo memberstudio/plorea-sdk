@@ -1559,7 +1559,7 @@ await patch('sub_test_golden', {
           <tr><td>Resume without a date, none set</td><td><code>400</code> <code>"nextChargeAt is required when reactivating a paused subscription"</code></td></tr>
           <tr><td>Resume without a date, one set while paused</td><td><code>200</code>, <code>active</code>, keeps that date</td></tr>
           <tr><td>Resume with a past date</td><td><code>400</code> <code>{"error": "nextChargeAt cannot be in the past", "received": "…"}</code>. Stays <code>paused</code>.</td></tr>
-          <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, <code>nextChargeAt</code> exactly as sent</td></tr>
+          <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, <code>nextChargeAt</code> exactly as sent. Since 2026-10-14, a date inside a paid period returns <code>409</code> with <code>paidUntil</code>, unless you send <code>allowEarlyCharge: true</code>. <span class="badge stated">Stated by Plorea</span></td></tr>
           <tr><td>Resume an <code>active</code> one</td><td><code>400</code>, <code>allowedTransitions: ["paused"]</code></td></tr>
         </tbody>
       </table></div>

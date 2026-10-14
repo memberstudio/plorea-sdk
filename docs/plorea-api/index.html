@@ -60,7 +60,7 @@ sequenceDiagram
       <p>Read <a href="payment-lifecycle.html">Payment lifecycle and states</a> before you go live. It explains why <code>authorised</code> is the final success state you can see, and when to cancel instead of refund.</p>
 
       <h2>Base URL and authentication</h2>
-      <p>All endpoints live under one host. Test and live use the same host. A header selects the environment.</p>
+      <p>All endpoints live under one host. Test and live use the same host. The API key selects the environment: <code>plr_test_</code> for test, <code>plr_live_</code> for live. <span class="badge stated">Stated by Plorea</span> 2026-10-13. Before that date, the <code>X-Environment</code> header selected it.</p>
       <pre data-title="Base URL"><code class="lang-plaintext">https://payments.plorea.no</code></pre>
 
       <div class="table-wrap">

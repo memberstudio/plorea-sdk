@@ -330,6 +330,7 @@ Example: 199 kr → 399 kr, 15 of 30 days left
 difference = (39900 − 19900) × 15/30 = 10000 øre (100,00 kr)
 vatAmount  = 10000 × 0.25 / 1.25    =  2000 øre</code></pre>
       <p><code>periodStart</code> is the time of the last charge. Read it from the newest item in <code>GET /subscriptions/{id}/charges</code>, or from <code>lastChargeAt</code> on the subscription.</p>
+      <p>Since 2026-10-14 a late retry no longer moves the period: the next period starts at the end of the previous one, and subscriptions have <code>currentPeriodEnd</code>. <span class="badge stated">Stated by Plorea</span> When <code>currentPeriodEnd</code> is present, use <code>currentPeriodEnd</code> minus one interval as <code>periodStart</code>. After a late retry, <code>lastChargeAt</code> is later than the period start and overcharges an upgrade.</p>
       <p>Prorate only an <code>active</code> subscription with a valid paid period: <code>lastChargeAt</code> and <code>nextChargeAt</code> are both set, and <code>lastChargeAt &lt; now &lt; nextChargeAt</code>. A <code>trialing</code> subscription has <code>lastChargeAt: null</code>. The customer has paid nothing yet, so there is no difference to charge. For a trial, PATCH the new price only.</p>
 
       <ol class="steps">
@@ -502,7 +503,7 @@ await upgrade.save({ state: 'done' });</code></pre></div>
       <h3>Pitfalls</h3>
       <ul>
         <li><strong>Read <code>nextChargeAt</code> in the charge response.</strong> The response includes it. Whether a manual charge moves the schedule of later renewals is not confirmed. Compare <code>nextChargeAt</code> before and after the charge. <span class="badge open">Open question</span></li>
-        <li><strong>A manual charge emits <code>payment.authorised</code>,</strong> not <code>subscription.charge_succeeded</code>. Do not treat it as a renewal in your webhook handler. <span class="badge verified">Verified</span></li>
+        <li><strong>A manual charge emits <code>payment.authorised</code>,</strong> not <code>subscription.charge_succeeded</code>. Do not treat it as a renewal in your webhook handler. <span class="badge verified">Verified</span> before 2026-10-14. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Check <code>reason</code> before you book a renewal. Whether <code>payment.authorised</code> still comes as well is <span class="badge unobserved">Unobserved</span>.</li>
         <li><strong>A manual charge reference resolves on <code>GET /payments/status/{reference}</code>.</strong> A scheduler charge reference does not. <span class="badge verified">Verified</span></li>
       </ul>
 
@@ -582,7 +583,7 @@ stateDiagram-v2
             <tr><td><code>nextChargeAt</code> alone on a <code>trialing</code> one</td><td><code>200</code>. It stays <code>trialing</code>. <code>trialEndsAt</code> keeps its old value.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td>Resume with no date, and none set</td><td><code>400</code> "nextChargeAt is required when reactivating a paused subscription"</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td>Resume with a past date</td><td><code>400</code> "nextChargeAt cannot be in the past". It stays <code>paused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, <code>nextChargeAt</code> exactly as sent</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Resume with a future date</td><td><code>200</code>, <code>active</code>, <code>nextChargeAt</code> exactly as sent. Since 2026-10-14, a date inside a period that is already paid returns <code>409</code> with <code>paidUntil</code>, unless you send <code>allowEarlyCharge: true</code>. <span class="badge stated">Stated by Plorea</span></td><td><span class="badge verified">Verified</span> before 2026-10-14</td></tr>
             <tr><td>Resume an <code>active</code> one</td><td><code>400</code>, <code>allowedTransitions: ["paused"]</code></td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td>A webhook for pause or resume</td><td>Plorea's catalogue lists none</td><td><span class="badge unobserved">Not observed</span></td></tr>
           </tbody>
@@ -593,7 +594,7 @@ stateDiagram-v2
         <li><strong>Agree on the resume date</strong>Choose a date on or after the end of the paid period. Store the pause in your database: subscription ID, start and resume date. Plorea keeps no pause record.</li>
         <li><strong>Check the status</strong>Read the subscription. Pause only an <code>active</code> one. To hold a <code>trialing</code> subscription, PATCH <code>nextChargeAt</code> alone to the new date instead.</li>
         <li><strong>Pause</strong>Call <code>PATCH /subscriptions/{id}</code> with <code>status: "paused"</code>. Check that the response says <code>paused</code>. If it does not, stop and keep the subscription as it is.</li>
-        <li><strong>Decide access during the pause</strong>The pause response has no <code>accessEndsAt</code>. If the customer keeps access until the paid period ends, calculate that date yourself: <code>lastChargeAt</code> + one interval.</li>
+        <li><strong>Decide access during the pause</strong>The pause response has no <code>accessEndsAt</code>. If the customer keeps access until the paid period ends, calculate that date yourself: <code>lastChargeAt</code> + one interval. Since 2026-10-14, read <code>currentPeriodEnd</code> instead when it is present. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>Resume on the resume date</strong>Run a job that calls <code>PATCH /subscriptions/{id}</code> with <code>status: "active"</code> and a <code>nextChargeAt</code> in the future. To bill now, send a time a few minutes ahead. Nothing resumes on its own.</li>
         <li><strong>Confirm the first charge</strong>After <code>nextChargeAt</code>, read <code>GET /subscriptions/{id}/charges</code>. Look for a new charge. In test none has ever come on an <code>active</code> subscription. <span class="badge open">Open question</span> If no charge appears, the subscription is overdue. Ask Plorea before you charge by hand: a late scheduler run plus a manual charge bills the customer twice.</li>
       </ol>
