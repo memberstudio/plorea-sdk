@@ -215,7 +215,13 @@ Captured from real deliveries on 2026-09-04:
 | Manual `charge()` | `payment.authorised` | `PaymentStatusUpdated` |
 
 A manual charge produces an ordinary flat payment payload, which is why it
-routes to the payment event.
+routes to the payment event. This mapping is from captures before 2026-10-14.
+Since 2026-10-14, Plorea states that a manual charge also sends
+`subscription.charge_succeeded` or `subscription.charge_failed` with
+`reason: "manual_charge"`. The SDK then dispatches `SubscriptionChargeSucceeded`
+or `SubscriptionChargeFailed` for it. The event has no `reason` property yet:
+read `$event->payload['data']['reason'] ?? null` before you treat it as a
+renewal. Whether `payment.authorised` still comes is unobserved.
 
 ```php
 use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
@@ -226,6 +232,11 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $event->reference;   // "{subId}-{chgId}"
     $event->externalId;  // your own entity id
     $event->eventId;     // deduplicate on this
+
+    // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+    // Extending access to nextChargeAt stays safe: it is idempotent.
+    // Send a renewal receipt or book a renewal only when this is false.
+    $isManualCharge = ($event->payload['data']['reason'] ?? null) === 'manual_charge';
 
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
 

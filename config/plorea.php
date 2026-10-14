@@ -22,7 +22,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | Sent as the X-Environment header on every request. Supported values are
-    | "test" and "live". Plorea defaults to "test" when the header is omitted.
+    | "test" and "live". Since 2026-10-13 the API key sets the environment
+    | (plr_test_ or plr_live_), and a header that does not match the key
+    | returns 403. Set "live" together with a live key.
     |
     */
 

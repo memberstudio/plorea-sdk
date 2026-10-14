@@ -495,6 +495,7 @@ try {
       <div class="callout warning">
         <p class="callout-title">A sibling method can still be charged</p>
         <p>Two payment methods for the same shopper can share one stored card (the same <code>storedPaymentMethodId</code>). A delete cancels only the method you name. In test, the sibling still read <code>active</code> after the delete, and a charge on it was authorised. <span class="badge verified">Verified</span> Production is not observed. To remove a card completely, delete every method that shares its <code>storedPaymentMethodId</code>.</p>
+        <p>Since 2026-10-14, a delete also disables the card at Adyen when no other active method or subscription uses it. The response has <code>adyenTokenDisabled</code>. Test only for now. <span class="badge stated">Stated by Plorea</span></p>
       </div>
 
       <h2>Test cards</h2>
@@ -539,6 +540,7 @@ try {
             <tr><td><code>storedPaymentMethodId</code></td><td class="type">string | null</td><td>Adyen's card token. Null until <code>active</code>. Null forever on <code>failed</code>.</td></tr>
             <tr><td><code>setupPspReference</code></td><td class="type">string | null</td><td>Adyen's PSP reference for the verification. Quote it to Plorea support.</td></tr>
             <tr><td><code>cardLast4</code>, <code>cardBrand</code>, <code>expiryDate</code></td><td class="type">string | null</td><td>Display data, for example <code>1111</code>, <code>visa</code>, <code>03/2030</code>. Set when <code>active</code>.</td></tr>
+            <tr><td><code>last4</code>, <code>brand</code>, <code>expiryMonth</code>, <code>expiryYear</code>, <code>fundingSource</code>, <code>walletType</code>, <code>isToken</code>, <code>tokenLast4</code>, <code>physicalCardLast4</code>, <code>physicalCardExpiryMonth</code>, <code>physicalCardExpiryYear</code></td><td class="type">mixed | null</td><td>Added 2026-10-14. Show the <code>physicalCard*</code> fields: a network token has its own digits, which the customer does not know. Older methods can have nulls. <span class="badge verified">Verified</span> present in test. On a Visa test card, <code>fundingSource</code>, <code>walletType</code>, <code>isToken</code> and <code>tokenLast4</code> were <code>null</code>.</td></tr>
             <tr><td><code>consentAt</code></td><td class="type">datetime | null</td><td>When the customer gave consent. Keep it as proof of the agreement.</td></tr>
             <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>The end of the setup window.</td></tr>
             <tr><td><code>metadata</code></td><td class="type">object</td><td>Your metadata. An empty object is returned as <code>[]</code>.</td></tr>

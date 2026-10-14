@@ -63,6 +63,26 @@ class SubscriptionResourceTest extends TestCase
         ]);
     }
 
+    public function test_it_maps_the_environment_from_a_read(): void
+    {
+        // Stated by Plorea on 2026-10-13: GET subscription responses carry the
+        // environment of the API key. Older responses have no such field.
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_live*' => Http::response([
+                'subscriptionId' => 'sub_live',
+                'status' => 'active',
+                'environment' => 'live',
+            ]),
+            'payments.plorea.no/subscriptions/sub_old*' => Http::response([
+                'subscriptionId' => 'sub_old',
+                'status' => 'active',
+            ]),
+        ]);
+
+        $this->assertSame('live', Plorea::subscriptions()->find('sub_live')->environment);
+        $this->assertNull(Plorea::subscriptions()->find('sub_old')->environment);
+    }
+
     public function test_it_sends_the_merchant_when_creating_a_subscription(): void
     {
         Http::fake([

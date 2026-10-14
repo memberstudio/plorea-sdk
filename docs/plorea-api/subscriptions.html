@@ -405,6 +405,7 @@ $subscription-&gt;amount-&gt;value;  // 29900</code></pre></div>
             <tr><td><code>failureReason</code></td><td class="type">string | null</td><td>The provider's free-text message after a failed charge, for example <code>"PaymentDetail not found"</code>. Show it. Do not branch on it.</td></tr>
             <tr><td><code>canceledAt</code>, <code>cancelReason</code></td><td class="type">datetime, string | null</td><td>Set by cancel.</td></tr>
             <tr><td><code>accessEndsAt</code></td><td class="type">datetime | null</td><td>End of the paid period after cancel. See <a href="#cancel">Cancel</a>.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td><code>test</code> or <code>live</code>, from the API key. On <code>GET</code> since 2026-10-13. The PHP SDK maps it to <code>$subscription-&gt;environment</code>.</td></tr>
             <tr><td><code>merchantOrgNr</code></td><td class="type">string | null</td><td>The company that receives the money. <code>null</code> when the subscription has none. See <a href="#route-the-money-to-a-company">Route the money to a company</a>.</td></tr>
             <tr><td><code>shopperReference</code>, <code>storedPaymentMethodId</code></td><td class="type">string</td><td>Copied from the payment method.</td></tr>
             <tr><td><code>amount</code>, <code>interval</code>, <code>quantity</code>, <code>vatRate</code>, <code>vatAmount</code>, <code>retryPolicy</code>, <code>trialEndsAt</code>, <code>externalId</code>, <code>title</code>, <code>description</code>, <code>metadata</code></td><td class="type">—</td><td>As sent on create or the last update.</td></tr>
@@ -465,7 +466,7 @@ const { count, items } = await plorea('GET', `subscriptions?${qs}`);</code></pre
         <li><code>amount</code>, <code>quantity</code>, <code>vatRate</code>, <code>vatAmount</code> — the price.</li>
         <li><code>paymentMethodId</code> — a new <code>active</code> card. Any other status returns <code>400</code>.</li>
         <li><code>externalId</code>, <code>title</code>, <code>description</code> — your labels.</li>
-        <li><code>nextChargeAt</code> — stores a new date for the next charge. A past date returns <code>400</code>. On a <code>trialing</code> subscription, <code>trialEndsAt</code> keeps its old value, and the moved date was charged. <span class="badge verified">Verified</span> in test. On an <code>active</code> subscription that was charged before, the date is stored but no charge has followed it (4 and 5 October 2026, test). <span class="badge open">Open question</span> Sending <code>amount</code> and <code>nextChargeAt</code> in one update is not tested. <span class="badge unobserved">Unobserved</span></li>
+        <li><code>nextChargeAt</code> — stores a new date for the next charge. A past date returns <code>400</code>. On a <code>trialing</code> subscription, <code>trialEndsAt</code> keeps its old value, and the moved date was charged. <span class="badge verified">Verified</span> in test. On an <code>active</code> subscription that was charged before, the date was stored but no charge followed it (4 and 5 October 2026, test). Since 2026-10-14, a date inside a period that is already paid returns <code>409</code> with <code>paidUntil</code>. Send <code>allowEarlyCharge: true</code> to charge earlier anyway. <span class="badge stated">Stated by Plorea</span> Sending <code>amount</code> and <code>nextChargeAt</code> in one update is not tested. <span class="badge unobserved">Unobserved</span></li>
         <li><code>status</code> — <code>"paused"</code> or <code>"active"</code> only. See <a href="subscription-workflows.html#pause-or-freeze">Pause or freeze</a>. <span class="badge verified">Verified</span> in test</li>
       </ul>
       <p>You <strong>cannot</strong> change <code>interval</code>, <code>trialEndsAt</code> or <code>merchantOrgNr</code>. To change the interval, cancel and create a new subscription. See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
@@ -520,7 +521,7 @@ const { count, items } = await plorea('GET', `subscriptions?${qs}`);</code></pre
 
       <h2 id="manual-charge">Charge now</h2>
       <div class="endpoint"><span class="method post">POST</span><code>/subscriptions/{subscriptionId}/charge</code></div>
-      <p>Charge the stored card now, outside the schedule. Use it for extra seats, one-off fees or a price difference. We expect that a manual charge does not move <code>nextChargeAt</code>, but we have not confirmed it. <span class="badge open">Open question</span></p>
+      <p>Charge the stored card now, outside the schedule. Use it for extra seats, one-off fees or a price difference. We expect that a manual charge does not move <code>nextChargeAt</code>, but we have not confirmed it. <span class="badge open">Open question</span> Since 2026-10-14, a manual charge sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span></p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
@@ -786,13 +787,17 @@ if (current.status === 'canceled') {
       <h2>Know when a renewal succeeds</h2>
       <p>Use two signals together.</p>
       <ol class="steps">
-        <li><strong>Webhook</strong>A scheduled charge sends <code>subscription.charge_succeeded</code> with <code>subscriptionId</code>, <code>externalId</code>, <code>amount</code> and the new <code>nextChargeAt</code>. Extend access to <code>nextChargeAt</code>. A manual charge sends <code>payment.authorised</code> instead. <span class="badge verified">Verified</span></li>
+        <li><strong>Webhook</strong>A scheduled charge sends <code>subscription.charge_succeeded</code> with <code>subscriptionId</code>, <code>externalId</code>, <code>amount</code> and the new <code>nextChargeAt</code>. Extend access to <code>nextChargeAt</code>. A manual charge sent <code>payment.authorised</code> instead. <span class="badge verified">Verified</span> before 2026-10-14. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Whether <code>payment.authorised</code> still comes is <span class="badge unobserved">Unobserved</span>. Extending access to <code>nextChargeAt</code> stays safe, because the call is idempotent. Check <code>reason</code> before you send a renewal receipt or book a renewal.</li>
         <li><strong>Polling</strong>Plorea does not redeliver failed webhooks. Run a scheduled job that reads each subscription. Look at it if the status is <code>past_due</code>, or if <code>nextChargeAt</code> is more than an hour in the past and the status is not <code>canceled</code> or <code>paused</code>. See <a href="dunning.html">Failed charges and dunning</a>.</li>
       </ol>
       <div class="tabs">
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">use MemberFlow\Plorea\Events\SubscriptionChargeSucceeded;
 
 Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
+    // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+    // Extending access to nextChargeAt stays safe: it is idempotent.
+    // Send a renewal receipt or book a renewal only when this is false.
+    $isManualCharge = ($event-&gt;payload['data']['reason'] ?? null) === 'manual_charge';
     $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
 
     Membership::where('plorea_subscription_id', $subscription-&gt;id)
@@ -806,6 +811,10 @@ foreach (Plorea::subscriptions()-&gt;needingAttention('membership-456') as $subs
 }</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">// In your webhook handler, after you verify the signature.
 if (event.type === 'subscription.charge_succeeded') {
+  // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+  // Extending access to nextChargeAt stays safe: it is idempotent.
+  // Send a renewal receipt or book a renewal only when this is false.
+  const isManualCharge = event.data.reason === 'manual_charge';
   await db.memberships.extendAccess(event.data.externalId, event.data.nextChargeAt);
 }
 
@@ -824,7 +833,7 @@ const needsAttention = overdue || sub.status === 'past_due' || sub.status === 'p
           <thead><tr><th>Action</th><th>Webhook</th></tr></thead>
           <tbody>
             <tr><td>Scheduled charge succeeds</td><td><code>subscription.charge_succeeded</code> <span class="badge verified">Verified</span></td></tr>
-            <tr><td>Manual charge succeeds</td><td><code>payment.authorised</code> <span class="badge verified">Verified</span></td></tr>
+            <tr><td>Manual charge succeeds</td><td><code>payment.authorised</code> <span class="badge verified">Verified</span> before 2026-10-14. Since then <code>subscription.charge_succeeded</code> with <code>reason: "manual_charge"</code> <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td>Scheduled charge fails</td><td><code>subscription.charge_failed</code>, seen in test. Not in Plorea's catalogue, and none arrived for the production failure. <span class="badge verified">Verified</span> in test</td></tr>
             <tr><td>Cancel, reactivate</td><td>None <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td>Pause, resume</td><td>None in the catalogue <span class="badge unobserved">Not observed</span></td></tr>

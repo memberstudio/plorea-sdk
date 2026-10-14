@@ -355,6 +355,7 @@ stateDiagram-v2
             <tr><td><code>description</code></td><td class="type">string</td><td>yes</td><td>Display text.</td></tr>
             <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>Decimal, for example <code>0.25</code>.</td></tr>
             <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre. Plorea does not calculate it.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>, from the API key. On <code>GET</code> since 2026-10-13. <span class="badge verified">Verified</span> on one read in production.</td></tr>
             <tr><td><code>merchantOrgNr</code></td><td class="type">string</td><td>yes</td><td>The company that receives the money. Returned on reads since 2026-09-22. Null when none was set. The name and email are never returned. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. Empty comes back as <code>[]</code>.</td></tr>
             <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
@@ -551,7 +552,7 @@ stateDiagram-v2
         <table>
           <thead><tr><th>Type</th><th>When</th><th>Evidence</th></tr></thead>
           <tbody>
-            <tr><td><code>payment.authorised</code></td><td>A payment or a manual subscription charge is authorised.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.authorised</code></td><td>A payment or a manual subscription charge is authorised. For manual charges: verified before 2026-10-14, <span class="badge unobserved">Unobserved</span> since.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.failed</code></td><td>A payment is declined. Never <code>payment.refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>A scheduled charge succeeded.</td><td><span class="badge verified">Verified</span></td></tr>

@@ -103,7 +103,7 @@ sequenceDiagram
         <table>
           <thead><tr><th>Type</th><th>Sent when</th><th>Evidence</th></tr></thead>
           <tbody>
-            <tr><td><code>payment.authorised</code></td><td>A payment link, a session payment or a <strong>manual</strong> subscription charge is authorised.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.authorised</code></td><td>A payment link, a session payment or a <strong>manual</strong> subscription charge is authorised. For manual charges: verified before 2026-10-14, <span class="badge unobserved">Unobserved</span> since.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.failed</code></td><td>Adyen declines an authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settles.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>The <strong>scheduler</strong> charges a subscription.</td><td><span class="badge verified">Verified</span></td></tr>
@@ -136,7 +136,7 @@ sequenceDiagram
   }
 }</code></pre>
 
-      <p>A <strong>manual</strong> subscription charge (<code>POST /subscriptions/{id}/charge</code>) also sends <code>payment.authorised</code>. The reference has the form <code>{subscriptionId}-{chargeId}</code>, <code>orderId</code> holds the subscription's <code>externalId</code>, and the link fields are null. <span class="badge verified">Verified</span></p>
+      <p>A <strong>manual</strong> subscription charge (<code>POST /subscriptions/{id}/charge</code>) also sends <code>payment.authorised</code>. The reference has the form <code>{subscriptionId}-{chargeId}</code>, <code>orderId</code> holds the subscription's <code>externalId</code>, and the link fields are null. <span class="badge verified">Verified</span> before 2026-10-14. Since 2026-10-14, a manual charge also sends <code>subscription.charge_succeeded</code> or <code>subscription.charge_failed</code> with <code>reason: "manual_charge"</code>. <span class="badge stated">Stated by Plorea</span> Whether <code>payment.authorised</code> still comes as well is <span class="badge unobserved">Unobserved</span>.</p>
       <pre data-title="payment.authorised — manual subscription charge"><code class="lang-json">{
   "eventId": "evt_00000000000000000000000000000003",
   "createdAt": "2026-09-04T09:55:31.000Z",
@@ -476,6 +476,11 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $event-&gt;externalId;  // your own entity id
     $event-&gt;eventId;     // deduplicate on this
 
+    // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+    // Extending access to nextChargeAt stays safe: it is idempotent.
+    // Send a renewal receipt or book a renewal only when this is false.
+    $isManualCharge = ($event-&gt;payload['data']['reason'] ?? null) === 'manual_charge';
+
     $subscription = Plorea::subscriptions()-&gt;find($event-&gt;subscriptionId);
     // The paid period ends at nextChargeAt. accessEndsAt is null while active.
     if ($subscription-&gt;isActive() &amp;&amp; $subscription-&gt;nextChargeAt !== null) {
@@ -498,6 +503,10 @@ Event::listen(WebhookReceived::class, function (WebhookReceived $event) {
     logger()-&gt;info('Plorea webhook', ['type' =&gt; $event-&gt;type, 'id' =&gt; $event-&gt;eventId]);
 });</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">if (event.type === 'subscription.charge_succeeded') {
+  // Since 2026-10-14 a manual charge also lands here, with reason "manual_charge".
+  // Extending access to nextChargeAt stays safe: it is idempotent.
+  // Send a renewal receipt or book a renewal only when this is false.
+  const isManualCharge = event.data.reason === 'manual_charge';
   const { subscriptionId } = event.data;
   const res = await fetch(
     `https://payments.plorea.no/subscriptions/${encodeURIComponent(subscriptionId)}?platform=acme`,

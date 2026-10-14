@@ -60,15 +60,15 @@ sequenceDiagram
       <p>Read <a href="payment-lifecycle.html">Payment lifecycle and states</a> before you go live. It explains why <code>authorised</code> is the final success state you can see, and when to cancel instead of refund.</p>
 
       <h2>Base URL and authentication</h2>
-      <p>All endpoints live under one host. Test and live use the same host. A header selects the environment.</p>
+      <p>All endpoints live under one host. Test and live use the same host. The API key selects the environment: <code>plr_test_</code> for test, <code>plr_live_</code> for live. <span class="badge stated">Stated by Plorea</span> 2026-10-13. Before that date, the <code>X-Environment</code> header selected it.</p>
       <pre data-title="Base URL"><code class="lang-plaintext">https://payments.plorea.no</code></pre>
 
       <div class="table-wrap">
         <table>
           <thead><tr><th>Header</th><th>Value</th><th>Notes</th></tr></thead>
           <tbody>
-            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer &lt;API key&gt;</code></td><td>Test keys start with <code>plr_test_</code>. Plorea issues keys per integrator. <span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> or <code>live</code></td><td>Selects the Adyen account. The default is <code>test</code> on most endpoints. <span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>Authorization</code><span class="req">required</span></td><td><code>Bearer &lt;API key&gt;</code></td><td>Test keys start with <code>plr_test_</code>, live keys with <code>plr_live_</code>. Plorea issues keys per integrator. <span class="badge verified">Verified</span> The key sets the environment since 2026-10-13. <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>X-Environment</code><span class="req">send always</span></td><td><code>test</code> or <code>live</code></td><td>Must match the key. A mismatch returns <code>403</code>. Without the header, Plorea uses the key's environment. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>On every <code>POST</code> and <code>PATCH</code>.</td></tr>
             <tr><td><code>Accept</code></td><td><code>application/json</code></td><td>Recommended.</td></tr>
           </tbody>
@@ -76,8 +76,8 @@ sequenceDiagram
       </div>
 
       <div class="callout danger">
-        <p class="callout-title">Always send X-Environment</p>
-        <p>A <code>POST /payments/refund</code> without <code>X-Environment</code> uses the live credentials. With a test key, the call fails with <code>401</code> and <code>"errorType": "security"</code>. Send the header on every request, also on reads. <span class="badge verified">Verified</span></p>
+        <p class="callout-title">Send an X-Environment that matches the key</p>
+        <p>Since 2026-10-13 the API key sets the environment: a <code>plr_test_</code> key reaches test, a <code>plr_live_</code> key reaches live. <span class="badge stated">Stated by Plorea</span> A header that does not match the key returns <code>403</code>. Before that date, a <code>POST /payments/refund</code> without the header used the live credentials and failed with <code>401</code> and <code>"errorType": "security"</code>. <span class="badge verified">Verified</span> 2026-09-10. Send the header from one place in your code, and set it from the same config as the key. See <a href="concepts.html#environments">Environments</a>.</p>
       </div>
 
       <div class="tabs">

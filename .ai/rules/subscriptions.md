@@ -122,12 +122,13 @@ whether a non-nine-digit value is rejected. The fake does not model either.
 - A sibling method sharing the same `storedPaymentMethodId` stays `active`
   and **can still be charged** — a manual charge on it was `Authorised` after
   the delete (CAPTURED 2026-10-06, test). Production unobserved.
-- **Stated by Plorea 2026-10-09:** the delete cancels only the Plorea method.
-  It does **not** deactivate the stored card or token at Adyen today. Plorea
-  says they will change that. **Risk once they do:** two methods can share one
-  `storedPaymentMethodId`, so deleting one may also break the sibling. Before
-  deleting a method that shares its stored id with an active one, confirm with
-  Plorea how the change treats a shared token.
+- **Stated by Plorea 2026-10-09:** the delete cancelled only the Plorea method;
+  the stored card at Adyen stayed active.
+- **Stated by Plorea 2026-10-14 (not tested by us):** in **test only**, a delete
+  now also disables the card at Adyen when no other active payment method or
+  subscription uses it. A shared `storedPaymentMethodId` stays until every
+  method using it is deleted. The response has `adyenTokenDisabled`. Live
+  follows later; until Plorea confirms live, assume live still keeps the card.
 - The cancelled method stays readable, card and stored id included. The read
   has no `cancelledAt`; the delete response does.
 - A bare 404 `{"message":"Not Found"}` is API Gateway's "no such route" (seen
@@ -264,9 +265,13 @@ last retry. All were `"PaymentDetail not found"` (the fixed incident above:
 charges sent to Adyen's test environment), not a decline. A real decline is
 still unobserved, and it still cannot be produced in test.
 
-**The test-key list shows live subscriptions** (no environment filter, seen
-2026-10-11), including live `payment_failed` ones. Check the payment method's
-`environment` before any write in an experiment. `payment_failed` recovery
+**The test-key list showed live subscriptions** (no environment filter, seen
+2026-10-11), including live `payment_failed` ones. Since 2026-10-13 the API key
+sets the environment and lists show only the key's environment (stated by
+Plorea). An ID from the other environment returns `404` (observed in
+production 2026-10-13). Still check `environment` before any write in an
+experiment. `Subscription::$environment` maps it from `GET` responses (added by
+Plorea 2026-10-13; null on older responses). `payment_failed` recovery
 (PATCH amount/date, `resume`) is still UNOBSERVED in test.
 
 ## Native pause — CAPTURED 2026-10-01 (test)

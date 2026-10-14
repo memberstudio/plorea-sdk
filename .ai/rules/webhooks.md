@@ -88,7 +88,11 @@ lifecycle run below is exactly 3 deliveries.
 - A **scheduler** charge emits `subscription.charge_succeeded` with
   `data: {subscriptionId, chargeId, reference, customerId, shopperReference, externalId, amount: {value, currency}, pspReference, nextChargeAt, environment}`.
 - A **manual** `charge()` emits `payment.authorised` with the ordinary flat
-  payment `data` shape (n=1 for the manual case).
+  payment `data` shape (n=1 for the manual case, before 2026-10-14).
+- **Stated by Plorea 2026-10-14 (not tested by us):** a manual charge now also
+  sends `subscription.charge_succeeded` / `subscription.charge_failed` with
+  `reason: "manual_charge"`. Whether `payment.authorised` still comes too is
+  UNOBSERVED. Do not change the dispatch until a capture exists.
 
 `WebhookController` dispatches `SubscriptionChargeSucceeded` for the former and
 **deliberately does not also dispatch `PaymentStatusUpdated`** — firing both

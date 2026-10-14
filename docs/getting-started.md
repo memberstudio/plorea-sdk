@@ -30,9 +30,10 @@ PLOREA_TENANT_ID=your-tenant
 PLOREA_WEBHOOK_SECRET=         # obtain from Plorea — the webhook route rejects everything until this is set
 ```
 
-Test and live are separate keys and separate tenants. Nothing in the SDK
-switches environment for you — `PLOREA_ENVIRONMENT` is sent as the
-`X-Environment` header, and Plorea routes on it.
+Test and live are separate keys and separate tenants. Since 2026-10-13 the key
+sets the environment: a `plr_test_` key reaches test, a `plr_live_` key reaches
+live. The SDK still sends `PLOREA_ENVIRONMENT` as the `X-Environment` header,
+and a header that does not match the key returns `403`. Set both together.
 
 > [!IMPORTANT]
 > Never log, serialise or commit the API key. The SDK strips transfer stats
