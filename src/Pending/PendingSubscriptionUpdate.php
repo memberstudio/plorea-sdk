@@ -10,6 +10,7 @@ use DateTimeZone;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\Subscription;
+use MemberFlow\Plorea\Exceptions\NextChargeInPaidPeriodException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
 
 /**
@@ -76,8 +77,9 @@ class PendingSubscriptionUpdate
     }
 
     /**
-     * Replace the payment method on the subscription. After replacing it on a
-     * payment_failed subscription, call reactivate() to resume billing.
+     * Replace the payment method on the subscription. Leaving payment_failed
+     * is untested: reactivate() is verified only from canceled, and resume
+     * only from paused.
      */
     public function paymentMethod(string $paymentMethodId): static
     {
@@ -110,7 +112,12 @@ class PendingSubscriptionUpdate
      * Captured 2026-10-01 (test): accepted on an active, paused or trialing
      * subscription. A paused subscription stays paused with the date set,
      * and a later resume without a new date keeps it. On a trialing
-     * subscription only nextChargeAt moves; trialEndsAt keeps its value.
+     * subscription only nextChargeAt moves; trialEndsAt keeps its value, and
+     * the moved date was charged.
+     *
+     * Open question: on an active, already-charged subscription the new date
+     * is stored but has never been charged (test, 4-5 October 2026; reported
+     * to Plorea). Changing amount and nextChargeAt in one update is untested.
      */
     public function nextChargeAt(DateTimeInterface $nextChargeAt): static
     {
@@ -122,7 +129,25 @@ class PendingSubscriptionUpdate
     }
 
     /**
+     * Charge at the new nextChargeAt even when it falls inside a period the
+     * customer has already paid for.
+     *
+     * Stated by Plorea 2026-10-14: without this flag, PATCH refuses such a
+     * date with 409 and paidUntil, thrown as NextChargeInPaidPeriodException.
+     * The scheduler never charges the same period twice. Use the flag only
+     * when the customer agreed to pay again, for example for an upgrade.
+     */
+    public function allowEarlyCharge(): static
+    {
+        $this->changes['allowEarlyCharge'] = true;
+
+        return $this;
+    }
+
+    /**
      * Apply the update.
+     *
+     * @throws NextChargeInPaidPeriodException When nextChargeAt falls inside a paid period without allowEarlyCharge() (stated by Plorea 2026-10-14).
      */
     public function save(): Subscription
     {

@@ -211,6 +211,19 @@ final class DefaultFixtures
             'cardLast4' => '0004',
             'cardBrand' => 'mc',
             'expiryDate' => '03/2030',
+            // Card fields added 2026-10-14, as verified in test that day on a
+            // plain card: wallet and token fields are null.
+            'last4' => '0004',
+            'brand' => 'mc',
+            'expiryMonth' => 3,
+            'expiryYear' => 2030,
+            'fundingSource' => null,
+            'walletType' => null,
+            'isToken' => null,
+            'tokenLast4' => null,
+            'physicalCardLast4' => '0004',
+            'physicalCardExpiryMonth' => 3,
+            'physicalCardExpiryYear' => 2030,
         ];
     }
 

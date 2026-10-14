@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Tests\Feature;
 
+use DateTimeImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
 use MemberFlow\Plorea\Data\Subscription;
 use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+use MemberFlow\Plorea\Exceptions\NextChargeInPaidPeriodException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
+use MemberFlow\Plorea\Exceptions\RequestException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Tests\TestCase;
 
@@ -36,7 +39,7 @@ class SubscriptionResourceTest extends TestCase
             ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
             ->externalId('ws_acme_456')
             ->title('Done CRM Pro')
-            ->trialUntil(new \DateTimeImmutable('2026-09-01T00:00:00+00:00'))
+            ->trialUntil(new DateTimeImmutable('2026-09-01T00:00:00+00:00'))
             ->retryPolicy(3, 2)
             ->vat(rate: 0.25, amount: 3980)
             ->save();
@@ -61,6 +64,50 @@ class SubscriptionResourceTest extends TestCase
             'vatAmount' => 3980,
             'platform' => 'memberflow',
         ]);
+    }
+
+    public function test_it_maps_the_environment_from_a_read(): void
+    {
+        // Stated by Plorea on 2026-10-13: GET subscription responses carry the
+        // environment of the API key. Older responses have no such field.
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_live*' => Http::response([
+                'subscriptionId' => 'sub_live',
+                'status' => 'active',
+                'environment' => 'live',
+            ]),
+            'payments.plorea.no/subscriptions/sub_old*' => Http::response([
+                'subscriptionId' => 'sub_old',
+                'status' => 'active',
+            ]),
+        ]);
+
+        $this->assertSame('live', Plorea::subscriptions()->find('sub_live')->environment);
+        $this->assertNull(Plorea::subscriptions()->find('sub_old')->environment);
+    }
+
+    public function test_it_maps_the_current_period_end(): void
+    {
+        // Verified in test on 2026-10-14: present on active, charged
+        // subscriptions, where it equals nextChargeAt; absent on trialing ones.
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_charged*' => Http::response([
+                'subscriptionId' => 'sub_charged',
+                'status' => 'active',
+                'nextChargeAt' => '2026-11-14T08:00:00.000Z',
+                'currentPeriodEnd' => '2026-11-14T08:00:00.000Z',
+            ]),
+            'payments.plorea.no/subscriptions/sub_trial*' => Http::response([
+                'subscriptionId' => 'sub_trial',
+                'status' => 'trialing',
+                'trialEndsAt' => '2026-11-01T00:00:00.000Z',
+            ]),
+        ]);
+
+        $charged = Plorea::subscriptions()->find('sub_charged');
+
+        $this->assertEquals($charged->nextChargeAt, $charged->currentPeriodEnd);
+        $this->assertNull(Plorea::subscriptions()->find('sub_trial')->currentPeriodEnd);
     }
 
     public function test_it_sends_the_merchant_when_creating_a_subscription(): void
@@ -135,6 +182,79 @@ class SubscriptionResourceTest extends TestCase
                 'quantity' => 10,
                 'platform' => 'memberflow',
             ]);
+    }
+
+    public function test_it_sends_allow_early_charge(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_1*' => Http::response([
+                'subscriptionId' => 'sub_1',
+                'status' => 'active',
+                'nextChargeAt' => '2026-11-01T00:00:00.000Z',
+            ]),
+        ]);
+
+        Plorea::subscriptions()->update('sub_1')
+            ->nextChargeAt(new DateTimeImmutable('2026-11-01T00:00:00Z'))
+            ->allowEarlyCharge()
+            ->save();
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === [
+                'nextChargeAt' => '2026-11-01T00:00:00.000Z',
+                'allowEarlyCharge' => true,
+                'platform' => 'memberflow',
+            ]);
+    }
+
+    public function test_a_next_charge_inside_a_paid_period_throws_with_paid_until(): void
+    {
+        // Stated by Plorea on 2026-10-14: PATCH answers 409 with paidUntil.
+        // Not captured yet, so the body below is constructed.
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_1*' => Http::response([
+                'error' => 'nextChargeAt is inside a paid period',
+                'paidUntil' => '2026-11-14T08:00:00.000Z',
+            ], 409),
+        ]);
+
+        try {
+            Plorea::subscriptions()->update('sub_1')
+                ->nextChargeAt(new DateTimeImmutable('2026-11-01T00:00:00Z'))
+                ->save();
+            $this->fail('Expected NextChargeInPaidPeriodException.');
+        } catch (NextChargeInPaidPeriodException $caught) {
+            $this->assertSame(409, $caught->status);
+            $this->assertSame('2026-11-14T08:00:00+00:00', $caught->paidUntil()?->toIso8601String());
+        }
+    }
+
+    public function test_a_409_with_a_null_paid_until_still_names_the_paid_period(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_1*' => Http::response(['error' => 'Conflict', 'paidUntil' => null], 409),
+        ]);
+
+        try {
+            Plorea::subscriptions()->update('sub_1')->nextChargeAt(new DateTimeImmutable('2026-11-01T00:00:00Z'))->save();
+            $this->fail('Expected NextChargeInPaidPeriodException.');
+        } catch (NextChargeInPaidPeriodException $caught) {
+            $this->assertNull($caught->paidUntil());
+        }
+    }
+
+    public function test_a_409_without_paid_until_stays_a_plain_request_exception(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_1*' => Http::response(['error' => 'Conflict'], 409),
+        ]);
+
+        try {
+            Plorea::subscriptions()->update('sub_1')->title('New')->save();
+            $this->fail('Expected RequestException.');
+        } catch (RequestException $caught) {
+            $this->assertNotInstanceOf(NextChargeInPaidPeriodException::class, $caught);
+        }
     }
 
     public function test_an_empty_update_is_rejected_before_sending(): void
@@ -216,7 +336,7 @@ class SubscriptionResourceTest extends TestCase
             'nextChargeAt' => '2026-09-09T12:00:00Z',
         ]);
 
-        $now = new \DateTimeImmutable('2026-09-09T12:30:00+00:00');
+        $now = new DateTimeImmutable('2026-09-09T12:30:00+00:00');
 
         $this->assertFalse($subscription->isOverdue(now: $now));
         $this->assertTrue($subscription->isOverdue(graceMinutes: 10, now: $now));

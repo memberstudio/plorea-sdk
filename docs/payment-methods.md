@@ -80,6 +80,15 @@ $method->storedPaymentMethodId;  // Adyen's token — null until active
 $method->cardLast4;              // "1111"
 $method->cardBrand;              // "visa"
 $method->expiryDate;             // "03/2030"
+
+// Added 2026-10-14. Older methods can have null here.
+$method->physicalCardLast4;      // "1111" — the digits printed on the card; show these
+$method->physicalCardExpiryMonth; // 3
+$method->physicalCardExpiryYear;  // 2030
+$method->fundingSource;          // e.g. "debit"; null on a test Visa
+$method->walletType;             // set for Apple Pay or Google Pay
+$method->isToken;                // network token? null on a test Visa
+$method->tokenLast4;             // the token's digits — the customer does not know them
 $method->consentAt;
 ```
 
@@ -161,6 +170,13 @@ try {
 - **A sibling stays active.** Another method for the same shopper may share
   the stored card (`storedPaymentMethodId`). It still reads `active` after the
   delete and can still be charged (seen in the test environment).
+- **Adyen and the stored card.** Until 2026-10-14, the delete cancelled only
+  the Plorea method, and the stored card at Adyen stayed active (stated by
+  Plorea 2026-10-09). Since 2026-10-14, in **test only**, a delete also
+  disables the card at Adyen when no other active method or subscription uses
+  it. A shared card stays until every method that uses it is deleted. The
+  response has `adyenTokenDisabled` (`$cancellation->adyenTokenDisabled`). Live follows later. Stated by Plorea, not
+  tested by us. In live, the card at Adyen still stays active.
 - **It cannot be reused.** Creating a subscription on it is a 400, "Payment
   method is not active".
 - **Spelling:** payment methods say `cancelled`; subscriptions say `canceled`.

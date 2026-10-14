@@ -110,8 +110,12 @@ final readonly class PaymentStatus
     }
 
     /**
-     * Whether the payment has been completed. Test payments settle on
-     * "authorised" while others report "paid" — both mean money moved.
+     * Whether Adyen authorised the payment.
+     *
+     * "authorised" is the only success state ever observed, in test and
+     * live; "paid" has never been seen and is kept defensively. This does not
+     * mean captured: capture runs automatically through AmendoPOS (stated by
+     * Plorea 2026-09-15) and is not observable through the API.
      */
     public function isPaid(): bool
     {

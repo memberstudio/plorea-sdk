@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""Check the public Plorea API docs (docs/plorea-api) before they ship.
+
+The site is public, so a slip here is a publication, not a typo. Checks:
+
+  privacy  real-looking ids, org numbers, emails, PSP references and hosts
+           (.ai/rules/security.md: describe what was created, never quote it)
+  denylist names and terms that must never appear, read from DOCS_DENYLIST
+           (one term per line). The terms live in a repo secret, because
+           listing them here would publish them.
+  html     unbalanced or mismatched tags
+  links    internal links and #anchors that do not resolve
+  mermaid  writes every diagram to <out>/diagrams.md for `mmdc` to render
+
+Every published file is scanned, raw and with HTML entities decoded. Each
+file is also scanned as one run of letters and digits, with tags,
+punctuation and spaces removed, so a term split by tags or line breaks is
+still found. A symlink is a finding, because the Pages upload follows it.
+
+Usage: bin/check-docs [--mermaid-out DIR] [--require-denylist]
+Exit 1 on any finding. --require-denylist also fails when DOCS_DENYLIST is
+empty, so a missing secret cannot pass as a clean run. Findings print
+file:line and the rule. An output line that contains a denylist term, in any
+case and with any punctuation, prints only the term's number, because CI
+logs of a public repo are public too, and GitHub masks a secret only in its
+exact case.
+"""
+
+import html
+import html.parser
+import os
+import re
+import sys
+import urllib.parse
+
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'plorea-api'))
+HTML_FILES = ('.html', '.htm')
+MARKUP_FILES = HTML_FILES + ('.svg', '.xml')
+
+# Fake values the docs use on purpose. Anything else that looks like the real
+# thing is a finding.
+FAKE_ORG_NR = {'999999999'}
+EMAIL_DOMAINS = ('example.com', 'example.org', 'example.net')
+HOSTS = {
+    'payments.plorea.no', 'pay.plorea.no', 'docs.plorea.no',
+    'docs.adyen.com', 'test.adyen.link', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net',
+    'localhost', '127.0.0.1', 'github.com', 'memberstudio.github.io',
+}
+# Adyen's published test cards, written without spaces. They are 16 digits,
+# so the PSP-reference rule would flag them.
+TEST_CARDS = {'4111111111111111', '4917610000000000', '5555555555554444', '5454545454545454', '4000000000000259'}
+
+PRIVACY = [
+    # Real Plorea ids are a prefix plus 16+ hex characters. Fakes contain
+    # "test" or are zeros plus a short counter, like evt_000…0001.
+    ('plorea-id', re.compile(r'\b(?:sub|pm|chg|pl|cus|evt|PL)_([0-9a-f]{16,})\b')),
+    # Norwegian org numbers are nine digits, also written 123 456 789; only
+    # the documented fake is allowed.
+    ('org-number', re.compile(r'(?<!\d)(?:\d{9}|\d{3}[ \u00a0]\d{3}[ \u00a0]\d{3})(?!\d)')),
+    ('email', re.compile(r'[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})\b')),
+    # Adyen PSP references are 16 upper-case characters; fakes start with TEST.
+    ('psp-reference', re.compile(r'\b(?!TEST)[A-Z0-9]{16}\b')),
+    ('host', re.compile(r'https?://([A-Za-z0-9.-]+)', re.I)),
+]
+
+# Tags that start a new line in the browser. Inline tags (span, b, code, a)
+# add nothing, so Na<b>me</b> renders as one word.
+BLOCK = {
+    'address', 'article', 'aside', 'blockquote', 'br', 'dd', 'div', 'dl', 'dt', 'figcaption',
+    'figure', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main',
+    'nav', 'ol', 'p', 'pre', 'section', 'table', 'td', 'th', 'tr', 'ul', 'text', 'title',
+}
+VOID = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}
+
+
+def slug(text):
+    # Same as slug() in assets/docs.js, which gives headings without an id one.
+    text = re.sub(r'[`\'"’]', '', text.lower())
+    return re.sub(r'^-+|-+$', '', re.sub(r'[^a-z0-9]+', '-', text))
+
+
+def allowed_domain(domain, allowed):
+    domain = domain.lower()
+    return any(domain == d or domain.endswith('.' + d) for d in allowed)
+
+
+class Page(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack, self.errors, self.ids, self.links = [], [], set(), []
+        self.mermaid, self.text, self.headings = [], [], []
+        self._heading, self._in_mermaid, self._doc_depth = None, None, None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in BLOCK:
+            self.text.append('\n')
+        if a.get('id'):
+            self.ids.add(a['id'])
+        if tag == 'a' and a.get('href'):
+            self.links.append((self.getpos()[0], a['href']))
+        if 'doc' in (a.get('class') or '').split() and self._doc_depth is None:
+            self._doc_depth = len(self.stack)
+        # docs.js gives an id only to h2/h3 inside .doc that have none.
+        if tag in ('h2', 'h3') and self._doc_depth is not None:
+            self._heading = (a.get('id'), [])
+        if tag == 'pre' and 'mermaid' in (a.get('class') or '').split():
+            self._in_mermaid = []
+        if tag == 'br' and self._in_mermaid is not None:
+            self._in_mermaid.append('<br/>')
+        if tag not in VOID:
+            self.stack.append((tag, self.getpos()[0]))
+
+    def handle_startendtag(self, tag, attrs):
+        if tag in VOID:
+            self.handle_starttag(tag, attrs)
+        else:
+            self.errors.append((self.getpos()[0], f'self-closed <{tag}/>'))
+
+    def handle_endtag(self, tag):
+        if tag in BLOCK:
+            self.text.append('\n')
+        if tag in VOID:
+            return
+        if tag in ('h2', 'h3') and self._heading is not None:
+            self.headings.append((self._heading[0], ''.join(self._heading[1])))
+            self._heading = None
+        if tag == 'pre' and self._in_mermaid is not None:
+            self.mermaid.append(''.join(self._in_mermaid))
+            self._in_mermaid = None
+        if self.stack and self.stack[-1][0] == tag:
+            self.stack.pop()
+            if self._doc_depth == len(self.stack):
+                self._doc_depth = None
+        else:
+            open_tag = self.stack[-1][0] if self.stack else 'nothing'
+            self.errors.append((self.getpos()[0], f'</{tag}> closes <{open_tag}>'))
+
+    def handle_data(self, data):
+        self.text.append(data)
+        if self._heading is not None:
+            self._heading[1].append(data)
+        if self._in_mermaid is not None:
+            self._in_mermaid.append(data)
+
+    def assign_heading_ids(self):
+        # Mirrors buildToc() in assets/docs.js: an empty slug becomes
+        # "section", and a taken id gets -2, -3, ...
+        used = set()
+        for given, text in self.headings:
+            hid = given
+            if not hid:
+                base = slug(text) or 'section'
+                hid, n = base, 2
+                while hid in used or hid in self.ids:
+                    hid, n = f'{base}-{n}', n + 1
+            used.add(hid)
+            self.ids.add(hid)
+
+
+def term_pattern(term):
+    # Any run of whitespace in a term matches any whitespace, so a term that
+    # wraps onto the next line is still found.
+    words = [re.escape(w) for w in term.split()]
+    return re.compile(r'(?<![a-z0-9])' + r'\s+'.join(words) + r'(?![a-z0-9])')
+
+
+def compact(text):
+    # Letters and digits only: Cobalt<span>Client</span>, Cobalt-Client and
+    # Cobalt\nClient all become cobaltclient.
+    return re.sub(r'[^a-z0-9]', '', text.lower())
+
+
+def main():
+    out = sys.argv[sys.argv.index('--mermaid-out') + 1] if '--mermaid-out' in sys.argv else None
+    denylist = [t.strip().lower() for t in os.environ.get('DOCS_DENYLIST', '').splitlines() if t.strip()]
+    terms = [term_pattern(t) for t in denylist]
+    compact_terms = [compact(t) for t in denylist]
+    findings, pages = [], {}
+
+    def hidden(text):
+        # The numbers of the terms in text, in any case or spelling.
+        flat = compact(urllib.parse.unquote(text))
+        return [str(i) for i, t in enumerate(compact_terms, 1) if t and t in flat]
+
+    def add(name, line, rule, msg):
+        if (name, line, rule, msg) not in findings:
+            findings.append((name, line, rule, msg))
+
+    files = []
+    for dirpath, dirs, names in os.walk(ROOT):
+        for n in dirs + names:
+            path = os.path.join(dirpath, n)
+            if os.path.islink(path):
+                add(os.path.relpath(path, ROOT).replace(os.sep, '/'), 0, 'symlink', 'the Pages upload follows it; copy the file instead')
+            elif n in names:
+                files.append(path)
+    files.sort()
+
+    for path in files:
+        name = os.path.relpath(path, ROOT).replace(os.sep, '/')
+        for i in hidden(name):
+            add(name, 0, 'denylist', f'term #{i} (in the file name)')
+        try:
+            source = open(path, encoding='utf-8').read()
+        except UnicodeDecodeError:
+            continue  # An image or font. Its file name is checked above.
+
+        for n, raw in enumerate(source.splitlines(), 1):
+            for text in {raw, html.unescape(raw)}:
+                for rule, rx in PRIVACY:
+                    for m in rx.finditer(text):
+                        value = m.group(0)
+                        if rule == 'plorea-id' and len(m.group(1).lstrip('0')) <= 4:
+                            continue
+                        if rule == 'org-number' and value.replace(' ', '').replace('\u00a0', '') in FAKE_ORG_NR:
+                            continue
+                        if rule == 'psp-reference' and value in TEST_CARDS:
+                            continue
+                        if rule == 'email' and allowed_domain(m.group(1), EMAIL_DOMAINS):
+                            continue
+                        if rule == 'host' and allowed_domain(m.group(1), HOSTS | {'example.com'}):
+                            continue
+                        add(name, n, rule, value)
+                lower = text.lower()
+                for i, rx in enumerate(terms, 1):
+                    if rx.search(lower):
+                        add(name, n, 'denylist', f'term #{i}')
+
+        rendered = source
+        if name.lower().endswith(MARKUP_FILES):
+            page = Page()
+            page.feed(source)
+            page.close()
+            rendered = ''.join(page.text)
+            # Values split by tags, such as 123<b>456</b>789.
+            for rule, rx in PRIVACY:
+                if rule in ('email', 'org-number'):
+                    for m in rx.finditer(rendered):
+                        value = m.group(0)
+                        if value.replace(' ', '').replace('\u00a0', '') in FAKE_ORG_NR:
+                            continue
+                        if rule == 'email' and allowed_domain(m.group(1), EMAIL_DOMAINS):
+                            continue
+                        if not any(f[0] == name and f[3] == value for f in findings):
+                            add(name, 0, rule, f'{value} (in the rendered text)')
+            if name.lower().endswith(HTML_FILES):
+                page.assign_heading_ids()
+                pages[name] = page
+                for line, msg in page.errors:
+                    add(name, line, 'html', msg)
+                for tag, line in page.stack:
+                    add(name, line, 'html', f'<{tag}> is never closed')
+        # A term split by tags, punctuation or line breaks.
+        reported = {f[3] for f in findings if f[0] == name and f[2] == 'denylist'}
+        for i in hidden(rendered):
+            if f'term #{i}' not in reported:
+                add(name, 0, 'denylist', f'term #{i} (split by tags or line breaks)')
+
+    for name, page in pages.items():
+        for line, href in page.links:
+            if re.match(r'^[a-z][a-z0-9+.-]*:', href, re.I) or href.startswith('//'):
+                continue
+            target, _, anchor = href.partition('#')
+            target = urllib.parse.unquote(target.split('?')[0])
+            anchor = urllib.parse.unquote(anchor)
+            if target.startswith('/'):
+                add(name, line, 'link', f'{href}: use a relative link; the site is not at the domain root')
+                continue
+            if target:
+                target = os.path.normpath(os.path.join(os.path.dirname(name), target)).replace(os.sep, '/')
+            else:
+                target = name
+            if target.startswith('../') or target == '..':
+                add(name, line, 'link', f'{href}: outside the published site')
+            elif target in pages:
+                if anchor and anchor not in pages[target].ids:
+                    add(name, line, 'link', f'{href}: no such anchor')
+            elif target + '/index.html' in pages:
+                continue
+            elif not os.path.isfile(os.path.join(ROOT, target)):
+                add(name, line, 'link', f'{href}: no such file')
+
+    if out:
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, 'diagrams.md'), 'w', encoding='utf-8') as f:
+            for name, page in pages.items():
+                for i, diagram in enumerate(page.mermaid, 1):
+                    f.write(f'<!-- {name} #{i} -->\n```mermaid\n{diagram.strip()}\n```\n\n')
+
+    for name, line, rule, msg in findings:
+        text = f'docs/plorea-api/{name}:{line}: [{rule}] {msg}'
+        if rule != 'denylist' and hidden(text):
+            text = f'docs/plorea-api/(hidden): [{rule}] (hidden: contains term #{", #".join(hidden(text))})'
+        elif hidden(name):
+            text = f'docs/plorea-api/(hidden): [{rule}] {msg}'
+        print(text)
+    if not denylist:
+        if '--require-denylist' in sys.argv:
+            print('error: DOCS_DENYLIST is empty. Set the repo secret; the name check cannot run without it.')
+            findings.append(None)
+        else:
+            print('note: DOCS_DENYLIST is empty, so the name check did not run')
+    diagrams = sum(len(p.mermaid) for p in pages.values())
+    print(f'{len(files)} files, {len(pages)} pages, {diagrams} diagrams, {len(denylist)} denylist terms, {len(findings)} findings')
+    return 1 if findings else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

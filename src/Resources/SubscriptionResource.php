@@ -91,8 +91,16 @@ class SubscriptionResource extends Resource
      * Captured 2026-10-01 (test): the response echoes nextChargeAt exactly
      * as sent. A date in the past is refused with 400 ("nextChargeAt cannot
      * be in the past") and the subscription stays paused, so to bill now
-     * pass a moment a little ahead. Only a paused subscription can be
-     * resumed; anything else is refused with 400.
+     * pass a moment a little ahead. Verified only from paused. An active
+     * subscription is refused with 400; other statuses, payment_failed
+     * included, are untested.
+     *
+     * Open question: no charge has been seen on the resumed date. A moved
+     * nextChargeAt on an active, already-charged subscription is stored but
+     * has never been charged (test, 4-5 October 2026; reported to Plorea).
+     * Do not rely on resume() to restart billing; confirm the charge in
+     * charges(). resume() is verified only from paused, not from
+     * payment_failed.
      */
     public function resume(string $subscriptionId, DateTimeInterface $nextChargeAt): Subscription
     {
@@ -134,13 +142,16 @@ class SubscriptionResource extends Resource
      * human — the polling half of dunning.
      *
      * A failed scheduler charge does emit subscription.charge_failed
-     * (captured 2026-10-01), but a lost delivery is never redelivered and a
-     * stalled cycle emits nothing, so run this on a schedule for each of
-     * your billed entities as well.
+     * (observed 2026-10-01 to 2026-10-08), but a lost delivery is never
+     * redelivered and a stalled cycle emits nothing, so run this on a
+     * schedule for each of your billed entities as well. In live, those
+     * webhooks went to the test URL until 2026-10-09 (Plorea states it is
+     * fixed; not yet verified), so do not drop this poll.
      *
      * A subscription is returned when it reports past_due (a failed charge
      * Plorea is retrying, captured from production 2026-10-01) or
-     * payment_failed (documented, never observed), or when its nextChargeAt
+     * payment_failed (retries ran out; seen in production 6-8 October 2026),
+     * or when its nextChargeAt
      * is more than $graceMinutes in the past. The checks are independent: a
      * past_due subscription has its nextChargeAt moved to the retry, so it is
      * not overdue, and the overdue check catches a cycle that stalled without
@@ -152,7 +163,9 @@ class SubscriptionResource extends Resource
      *
      * ```php
      * foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
-     *     $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+     *     $latest = Plorea::subscriptions()->charges($subscription->id)
+     *         ->sortByDesc('createdAt')
+     *         ->first();
      *
      *     if ($latest?->isAuthorised() !== true) {
      *         // Prompt for a new card. Do not branch on failureReason — it
@@ -201,7 +214,11 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * Recorded charges for a subscription, newest first.
+     * Recorded charges for a subscription, failed attempts included.
+     *
+     * The order is not reliable: the test capture came back newest first,
+     * but a live read on 2026-10-08 did not. Sort by createdAt before you
+     * take the latest charge.
      *
      * The response is {subscriptionId, items} — no count and no paging keys
      * of any kind, so a truncated history would be indistinguishable from a
@@ -235,7 +252,11 @@ class SubscriptionResource extends Resource
     }
 
     /**
-     * Reactivate a canceled subscription. A new charge is scheduled immediately.
+     * Reactivate a canceled subscription. In one test (2026-09-09), Plorea
+     * recomputed nextChargeAt and did not charge the period already paid
+     * during a 10-minute poll. Production is unobserved. Verified only from
+     * canceled. An active subscription is refused with 400; other statuses,
+     * payment_failed included, are untested.
      */
     public function reactivate(string $subscriptionId): Subscription
     {

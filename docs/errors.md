@@ -10,13 +10,14 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | `AuthenticationException` | 401 / 403 — invalid or missing API key, a tenant mismatch, or a request that reached the wrong environment |
 | `ChargeFailedException` | 402 — a subscription charge was declined by the acquirer |
 | `NotFoundException` | 404 — unknown reference or id |
+| `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is a plain `RequestException` |
 | `ServerException` | 5xx — Plorea-side error |
 | `ConnectionException` | The API could not be reached |
 | `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |
 | `PloreaException` | Everything else, including the SDK's own guards |
 
 `ValidationException`, `AuthenticationException`, `ChargeFailedException`,
-`NotFoundException` and `ServerException` all extend `RequestException`, which
+`NotFoundException`, `NextChargeInPaidPeriodException` and `ServerException` all extend `RequestException`, which
 exposes the response:
 
 ```php
@@ -29,15 +30,24 @@ try {
 }
 ```
 
-## A 401 that is not about the API key
+## A 401 or 403 that is not about the API key
 
-Requests carry an `X-Environment` header that tells Plorea which set of Adyen
-credentials to use. Omit it on `POST payments/refund` and the call routes to
-**live** credentials and comes back `401` with `errorType: "security"` —
-nothing in the body suggests the environment is what went wrong, so it reads
-as a bad key (observed 2026-09-10).
+Since 2026-10-13 the API key sets the environment (`plr_test_` or
+`plr_live_`). An `X-Environment` header that does not match the key returns
+`403`, which the SDK throws as `AuthenticationException`. An ID from the other
+environment returns `404` (`NotFoundException`). A live key with
+`PLOREA_ENVIRONMENT` unset sends `test` and gets `403` on every call. Check
+the variable before you rotate the key (stated by Plorea 2026-10-13; the
+cross-environment `404` observed in production the same day).
 
-This cannot happen through the SDK. `PloreaClient` sets the header on every
+Before 2026-10-13, `X-Environment` alone told Plorea which set of Adyen
+credentials to use. Omitting it on `POST payments/refund` routed the call to
+**live** credentials and came back `401` with `errorType: "security"`.
+Nothing in the body suggested the environment was what went wrong, so it read
+as a bad key (observed 2026-09-10). Plorea states that a missing header now
+uses the key's environment. The refund case has not been re-tested.
+
+A missing header cannot happen through the SDK. `PloreaClient` sets the header on every
 request from one place. It is a trap for raw `curl` reproductions, which is
 exactly what you reach for when a 401 has you doubting your key. Check the
 header before you rotate anything.

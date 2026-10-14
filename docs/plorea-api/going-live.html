@@ -35,8 +35,8 @@ flowchart LR
 
       <h2>1. Credentials and environment</h2>
       <ol class="steps">
-        <li><strong>Get a live API key from Plorea</strong>Do not reuse the test key. Store the live key only in the production environment, in a secret store.</li>
-        <li><strong>Send <code>X-Environment: live</code> on every request</strong>Most endpoints default to <code>test</code> when the header is missing. An unset variable therefore sends production traffic to test. <span class="badge verified">Verified</span></li>
+        <li><strong>Get a live API key from Plorea</strong>It starts with <code>plr_live_</code>. A test key cannot reach live data. Store the live key only in the production environment, in a secret store.</li>
+        <li><strong>Send <code>X-Environment: live</code> on every request</strong>Since 2026-10-13 the live key sets the environment, and a header that does not match the key returns <code>403</code>. <span class="badge stated">Stated by Plorea</span> The PHP SDK sends <code>test</code> when <code>PLOREA_ENVIRONMENT</code> is unset, so a live key without the variable fails on every call.</li>
         <li><strong>Set your production tenant ID</strong>If Plorea gave you a different tenant for live.</li>
         <li><strong>Set your <code>platform</code> value</strong>Plorea uses it to attribute your traffic. It has no functional effect. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>Rotate any exposed key</strong>Anyone with the key can create links and refund payments. If the key has been in a chat, a ticket or a log, ask Plorea for a new key before launch.</li>
@@ -115,7 +115,7 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
             <tr><td>Links open past <code>expiresAt</code></td><td>The status never reports <code>expired</code>.</td></tr>
             <tr><td>Card setups in <code>pending_setup</code> past <code>expiresAt</code></td><td>No webhook is sent for setup.</td></tr>
             <tr><td>Subscriptions in <code>past_due</code></td><td>A scheduled charge failed. <code>nextChargeAt</code> moves forward, so the date alone does not show it. The <code>subscription.charge_failed</code> webhook is not redelivered. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
-            <tr><td>Subscriptions with <code>nextChargeAt</code> in the past</td><td>The scheduler did not charge. A resumed subscription was seen in this state. <span class="badge open">Open question</span></td></tr>
+            <tr><td>Subscriptions with <code>nextChargeAt</code> in the past</td><td>The scheduler did not charge. A resumed subscription, or an active one with a moved date, was seen in this state. It is not known why. <span class="badge open">Open question</span></td></tr>
             <tr><td>Refunds in <code>refund_requested</code> for more than a few days</td><td>Settlement is slow, but not that slow.</td></tr>
           </tbody>
         </table>

@@ -167,7 +167,7 @@ $refund-&gt;refundPspReference;            // store it: only this response has i
 Plorea::payments()-&gt;cancel('ORDER-1002', 'ORDER-1002-cancel-1');</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const headers = {
   Authorization: `Bearer ${process.env.PLOREA_API_KEY}`,
-  'X-Environment': 'test', // never omit on refund: it would route to live
+  'X-Environment': 'test', // must match the key; before 2026-10-13 a refund without it went to live
   'Content-Type': 'application/json',
 };
 

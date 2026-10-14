@@ -86,6 +86,7 @@ $session = Plorea::paymentMethods()->setup('customer-123', RecurringType::Subscr
 $method = Plorea::paymentMethods()->find($method->id);
 $method->isPendingSetup();  // customer has not finished the flow
 $method->isActive();        // card stored — cardLast4, cardBrand, expiryDate populated
+$method->physicalCardLast4; // since 2026-10-14: the digits on the customer's card; show these
 $method->hasFailed();       // verification refused, no card stored
 ```
 
@@ -119,8 +120,10 @@ Plorea::subscriptions()->charge($subscription->id, reason: 'extra_seat');
 ```
 
 Plorea owns the billing schedule — your app never triggers the recurring
-charge. Billing starts immediately: `create()` already returns the first
-`nextChargeAt` and the scheduler charges within seconds unless a trial is set.
+charge. Billing should start at once: `create()` already returns the first
+`nextChargeAt`. A no-trial signup was charged at once in production
+(2026-10-10), but not in test on 2026-10-06 (open question), so confirm the
+first charge in `charges()`.
 `reactivate()` sets the subscription active again and recomputes
 `nextChargeAt` — it does not resume the old cadence. It used to charge
 unconditionally, billing the same period twice on cancel-then-reactivate;
@@ -167,7 +170,7 @@ well:
 
 ```php
 foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $subscription) {
-    $latest = Plorea::subscriptions()->charges($subscription->id)->first();
+    $latest = Plorea::subscriptions()->charges($subscription->id)->sortByDesc('createdAt')->first();
 
     if ($latest?->isAuthorised() !== true) {
         // prompt for a new card — do not branch on failureReason, it is
@@ -176,8 +179,9 @@ foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $s
 }
 ```
 
-`needingAttention()` returns a subscription reporting `past_due` (or the
-documented, never-observed `payment_failed`) **or** one whose `nextChargeAt` is
+`needingAttention()` returns a subscription reporting `past_due` or
+`payment_failed` (seen in production after three failed attempts; the way out is
+untested) **or** one whose `nextChargeAt` is
 more than `$graceMinutes` (default 60) in the past. A failed scheduled charge
 turns the subscription `past_due` with `retryCount` and `failureReason` set and
 `nextChargeAt` moved to the retry, so it is not overdue — the status check
@@ -230,6 +234,8 @@ Event::listen(SubscriptionChargeSucceeded::class, function (SubscriptionChargeSu
     $subscription = Plorea::subscriptions()->find($event->subscriptionId);
 
     // extend access idempotently — ->status, ->nextChargeAt, ->accessEndsAt
+    // since 2026-10-14 a manual charge lands here too: skip renewal receipts when
+    // $event->isManualCharge()
     // $event->externalId links back to your own entity
 });
 ```
@@ -267,4 +273,4 @@ The fake mirrors the real API: a reference it has created a link for reports an 
 
 All exceptions extend `MemberFlow\Plorea\Exceptions\PloreaException`: `ValidationException` (400), `AuthenticationException` (401/403), `ChargeFailedException` (402), `NotFoundException` (404), `ServerException` (5xx), `ConnectionException`, `PaymentAlreadyPaidException`. HTTP errors expose `$e->status` and `$e->response?->json()`. Never log the API key or `Authorization` headers.
 
-**A 401 is not always about the key.** The `X-Environment` header selects which Adyen credentials Plorea uses; omit it on `POST payments/refund` and the call routes to **live** credentials and returns `401` with `errorType: "security"`, with nothing in the body pointing at the environment (observed 2026-09-10). The SDK sets the header on every request, so this only bites raw `curl` reproductions — which is exactly what you reach for when a 401 has you doubting your key. Check the header before rotating anything.
+**A 401 or 403 is not always about the key.** Since 2026-10-13 the API key sets the environment (`plr_test_` / `plr_live_`). An `X-Environment` that does not match the key returns `403` (`AuthenticationException`), and an ID from the other environment returns `404`. A live key with `PLOREA_ENVIRONMENT` unset sends `test` and fails on every call. Before 2026-10-13, omitting the header on `POST payments/refund` routed to **live** credentials and returned `401` with `errorType: "security"` (observed 2026-09-10). The SDK sets the header on every request, so this only bites raw `curl` reproductions — which is exactly what you reach for when a 401 has you doubting your key. Check the header before rotating anything.

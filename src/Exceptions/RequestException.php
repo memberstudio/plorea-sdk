@@ -36,6 +36,7 @@ class RequestException extends PloreaException
             $status === 401, $status === 403 => new AuthenticationException($message, $status, $response),
             $status === 402 => new ChargeFailedException($message, $status, $response),
             $status === 404 => new NotFoundException($message, $status, $response),
+            $status === 409 && is_array($response->json()) && array_key_exists('paidUntil', $response->json()) => new NextChargeInPaidPeriodException($message, $status, $response),
             $status >= 500 => new ServerException($message, $status, $response),
             default => new self($message, $status, $response),
         };

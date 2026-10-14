@@ -11,12 +11,20 @@ major-unit constructor, on purpose.
 ## Statuses
 
 - open = `created` | `pending` | `active`
-- paid = `authorised` | `paid` (test payments settle on `authorised`)
+- paid = `authorised` | `paid`. **`authorised` is the only success state ever
+  observed**, in test and live. Live payment-link payments still read
+  `authorised` + `AUTHORISATION` more than two days after payment (2026-10).
+  `paid` has never been seen; `isPaid()` keeps it defensively. `isPaid()`
+  means "authorised by Adyen", not "captured": the API gives no capture signal
+  (see "Capture is automatic" below).
 - **A refused payment reports `failed`, NOT `refused`** (captured 2026-09-09).
   `refused` is a string the API never returns; earlier docs in this repo wrongly
   used it, so any `is('refused')` written from them was dead code.
 - `refund_requested` / `cancel_requested` appear immediately after
   `payments/refund` / `payments/cancel` and persist until the provider settles.
+- **UNOBSERVED:** `captured`, `paid`, the post-settlement `refunded` /
+  `cancelled`, and any chargeback status. Plorea has published no complete
+  status enum. Do not model a state machine on strings nobody has seen.
 - `expired` has **never** been observed live. Judge expiry from the pay-page
   endpoint's computed `expired` flag or the stored `expiresAt`, never the
   status string.
@@ -52,7 +60,43 @@ identifier and no later poll can recover it.
 Status-body keys verified identical across three independent captures
 (2026-09-09): 29 keys, all read by `PaymentStatus`. **`lastRefundStatus` does
 not exist** — a report that it did turned out to be a `jq` null-read of a
-missing key.
+missing key. Bodies seen since 2026-10-06 (test) also carry `refusalReason`
+and `refundedTotal` (minor units). `PaymentStatus` does not type them yet;
+they are in `$raw`. Do not add them without a fixture.
+
+### Partial and full refunds on `authorised` — VERIFIED 2026-10-09 (test)
+
+Run through a consuming app's real refund flow, on payment-link payments that
+read `authorised`:
+
+- **A partial refund works.** 751 kr of a 1 650 kr payment: `refund_requested`,
+  `refundedTotal: 75100`, `lastRefundAmount: 75100`, `lastCancelReference:
+  null`. It was **not** turned into a cancel. Before this, partial refunds were
+  untested.
+- **A full refund on `authorised` is a refund, not a cancel.** 899 kr:
+  `refund_requested`, `refundedTotal` = the full amount, `lastCancelReference:
+  null`.
+- **Reported, not reconciled:** status reads 1–5 minutes later showed the
+  top-level `status` as `authorised` with `webhookEventCode: AUTHORISATION`,
+  and no CAPTURE or REFUND event. On 2026-09-09/19 the top-level status itself
+  flipped to `refund_requested`. One run; re-check before relying on either.
+  Detect a refund from the `lastRefund*` group / `refundedTotal` as well as
+  the status string.
+
+**Settlement is still UNOBSERVED** — the final status, `refundedTotal` after
+settlement, and any REFUND success or failure signal. `refund_requested` means
+accepted, nothing more. A consuming app that books the refund as final at
+that point will show "refunded" even if Adyen later fails the refund and the
+money stays captured. Keep the booking reversible, or mark it "requested".
+
+**A scheduled subscription charge could not be refunded through the API**
+(production, 2026-10-11, one charge tested): `POST payments/refund` with a `{subscriptionId}-{chargeId}`
+reference answers `{"error":"Payment not found"}`, and so does the charge's
+`pspReference`. `POST payments/cancel` on the `authorised` charge also fails. The signup charge is `reason: scheduled_charge` too. Refund it in the Plorea
+portal, then record that refund locally against the original charge (amount,
+portal reference, outcome) so no later refund path refunds it again. Whether
+every scheduled charge behaves this way is open; a manual-charge refund is
+untested. Do not add an SDK path for it until Plorea offers one.
 
 ## No idempotency on duplicate references
 
@@ -133,7 +177,9 @@ platform A/B.
 ## Capture is automatic — there is no capture API
 
 Stated by Plorea 2026-09-15. Capture runs through AmendoPOS, typically minutes
-after authorization. **A manual capture endpoint is on their roadmap and does
+after authorization. **Not observable:** no CAPTURE event has ever been seen.
+Payments read `authorised` + `AUTHORISATION` 1–5 minutes later (test,
+2026-10-09) and more than two days later (live, 2026-10). **A manual capture endpoint is on their roadmap and does
 not exist today**, so do not add a `capture()` method or model a pending-capture
 state. `authorised` is the terminal success state an integrator can observe —
 which is already how `isPaid()` treats it.
@@ -195,6 +241,14 @@ being built at the same time, and the SDK had to be able to ask. What exists:
   tenant, shopper reference and customer id; a consuming app's
   `response()->json($session)` must never ship those to a browser or an app.
   Do not widen `toCheckout()` without that in mind.
+- `PaymentSession` reads `sessionId`/`sessionData` first, then Adyen's
+  `id`/`data`. Plorea's own pay page does the same (2026-09-14, after it
+  logged the response keys to debug). `PaymentMethodSession` reads only
+  `sessionId`/`sessionData`: its response also carries a payment method id,
+  which must never become a session id. No session id throws a
+  `PloreaException`. An empty id must never reach Drop-in. The message names
+  only the fields looked for, never the response keys: keys can hold
+  customer data, and the message ends up in logs.
 
 **Update 2026-09-17, morning — probed against Plorea test. (Card setup is
 superseded below; the rest still holds.)** Both session endpoints
@@ -275,7 +329,20 @@ refunded to `refund_requested`; the originally failing payment cancelled to
 Still **UNOBSERVED**: an Android Drop-in on a device, a live client key, and a
 live `environment` value.
 
+## The API key sets the environment — stated by Plorea, 2026-10-13
+
+A `plr_test_` key reaches test, a `plr_live_` key reaches live. An
+`X-Environment` that does not match the key returns `403`
+(`AuthenticationException`); an ID from the other environment returns `404`
+(observed in production 2026-10-13). The SDK still sends the header from
+`plorea.environment` (default `test`), so a live key needs
+`PLOREA_ENVIRONMENT=live`. **Do not stop sending the header**, and do not guess
+the environment from the key prefix without a maintainer decision.
+
 ## A refund without `X-Environment` hits LIVE credentials — 2026-09-10
+
+Superseded as stated by Plorea on 2026-10-13: a missing header now uses the
+key's environment. Not re-tested on refund. The section below is the history.
 
 `POST payments/refund` sent without the `X-Environment` header routes to
 Plorea's **live** Adyen credentials and answers a bare `401` with

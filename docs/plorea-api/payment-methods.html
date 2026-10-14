@@ -306,7 +306,8 @@ res.json({
 if ($method-&gt;isActive()) {
     $member-&gt;update([
         'payment_method_id' =&gt; $method-&gt;id,
-        'card_label' =&gt; "{$method-&gt;cardBrand} •••• {$method-&gt;cardLast4}",
+        // physicalCardLast4 (2026-10-14) is what the customer sees on the card.
+        'card_label' =&gt; "{$method-&gt;cardBrand} •••• ".($method-&gt;physicalCardLast4 ?? $method-&gt;cardLast4),
         'card_expiry' =&gt; $method-&gt;expiryDate, // "03/2030"
     ]);
 } elseif ($method-&gt;hasFailed()) {
@@ -495,10 +496,28 @@ try {
       <div class="callout warning">
         <p class="callout-title">A sibling method can still be charged</p>
         <p>Two payment methods for the same shopper can share one stored card (the same <code>storedPaymentMethodId</code>). A delete cancels only the method you name. In test, the sibling still read <code>active</code> after the delete, and a charge on it was authorised. <span class="badge verified">Verified</span> Production is not observed. To remove a card completely, delete every method that shares its <code>storedPaymentMethodId</code>.</p>
+        <p>Since 2026-10-14, a delete also disables the card at Adyen when no other active method or subscription uses it. The response has <code>adyenTokenDisabled</code>. The PHP SDK reads it as <code>$cancellation-&gt;adyenTokenDisabled</code>. Test only for now. <span class="badge stated">Stated by Plorea</span></p>
       </div>
 
       <h2>Test cards</h2>
-      <p>Use Adyen's public test cards. <code>4111 1111 1111 1111</code>, expiry <code>03/2030</code>, CVC <code>737</code> stores successfully. <span class="badge verified">Verified</span></p>
+      <p>Use Adyen's public test cards. <code>4111 1111 1111 1111</code>, expiry <code>03/2030</code>, CVC <code>737</code> stores successfully. <span class="badge verified">Verified</span> For more cards and test scenarios, see <a href="testing.html#test-cards">Testing</a> and <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">Adyen's full list</a>.</p>
+
+      <h3 id="common-test-cards">Visa, Mastercard and American Express</h3>
+      <p>These are the most common card brands in Norway. Each brand has one card without 3-D Secure 2 and one card that is enrolled in 3-D Secure 2. Use the enrolled card to test the 3-D Secure challenge. The numbers come from <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">Adyen's test card list</a> (checked 2026-10-10). Only the rows with a badge are tested through Plorea.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Brand</th><th>Card number</th><th>Expiry</th><th>CVC</th><th>3-D Secure 2</th></tr></thead>
+          <tbody>
+            <tr><td>Visa</td><td><code>4111 1111 1111 1111</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Not enrolled. <span class="badge verified">Verified</span></td></tr>
+            <tr><td>Visa</td><td><code>4917 6100 0000 0000</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Enrolled</td></tr>
+            <tr><td>Mastercard</td><td><code>5555 5555 5555 4444</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Not enrolled</td></tr>
+            <tr><td>Mastercard</td><td><code>5454 5454 5454 5454</code></td><td><code>03/2030</code></td><td><code>737</code></td><td>Enrolled</td></tr>
+            <tr><td>American Express</td><td><code>3700 0000 0000 002</code></td><td><code>03/2030</code></td><td><code>7373</code></td><td>Not enrolled</td></tr>
+            <tr><td>American Express</td><td><code>3714 4963 5398 431</code></td><td><code>03/2030</code></td><td><code>7373</code></td><td>Enrolled</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>American Express has a 15-digit number and a four-digit CVC. A card brand works only if the merchant account accepts it. Plorea has not confirmed American Express. <span class="badge open">Open question</span></p>
       <p>To test a failed setup, use Adyen's test triggers, such as the holder name <code>NOT_ENOUGH_BALANCE</code>. The trigger refuses the 1 NOK verification. You get a <code>failed</code> payment method. <span class="badge verified">Verified</span></p>
       <div class="callout warning">
         <p class="callout-title">You cannot store a card that declines later</p>
@@ -522,6 +541,7 @@ try {
             <tr><td><code>storedPaymentMethodId</code></td><td class="type">string | null</td><td>Adyen's card token. Null until <code>active</code>. Null forever on <code>failed</code>.</td></tr>
             <tr><td><code>setupPspReference</code></td><td class="type">string | null</td><td>Adyen's PSP reference for the verification. Quote it to Plorea support.</td></tr>
             <tr><td><code>cardLast4</code>, <code>cardBrand</code>, <code>expiryDate</code></td><td class="type">string | null</td><td>Display data, for example <code>1111</code>, <code>visa</code>, <code>03/2030</code>. Set when <code>active</code>.</td></tr>
+            <tr><td><code>last4</code>, <code>brand</code>, <code>expiryMonth</code>, <code>expiryYear</code>, <code>fundingSource</code>, <code>walletType</code>, <code>isToken</code>, <code>tokenLast4</code>, <code>physicalCardLast4</code>, <code>physicalCardExpiryMonth</code>, <code>physicalCardExpiryYear</code></td><td class="type">mixed | null</td><td>Added 2026-10-14. Show the <code>physicalCard*</code> fields: a network token has its own digits, which the customer does not know. Older methods can have nulls. <span class="badge verified">Verified</span> present in test. On a Visa test card, <code>fundingSource</code>, <code>walletType</code>, <code>isToken</code> and <code>tokenLast4</code> were <code>null</code>.</td></tr>
             <tr><td><code>consentAt</code></td><td class="type">datetime | null</td><td>When the customer gave consent. Keep it as proof of the agreement.</td></tr>
             <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>The end of the setup window.</td></tr>
             <tr><td><code>metadata</code></td><td class="type">object</td><td>Your metadata. An empty object is returned as <code>[]</code>.</td></tr>

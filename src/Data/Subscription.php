@@ -20,6 +20,8 @@ final readonly class Subscription
      * @param  array<string, mixed>  $metadata
      * @param  array<string, mixed>  $raw
      * @param  ?string  $merchantOrgNr  The company receiving the funds. Returned on create and on reads (2026-09-22); null when the subscription has none.
+     * @param  ?string  $environment  "test" or "live", the environment the API key belongs to. Plorea added it to GET responses on 2026-10-13; null on older responses.
+     * @param  ?CarbonImmutable  $currentPeriodEnd  The end of the period the last charge paid for. Plorea starts the next period here, so a late retry does not move the billing date (stated 2026-10-14). Verified in test 2026-10-14: equal to nextChargeAt on active, charged subscriptions; absent on trialing and canceled ones.
      */
     public function __construct(
         public string $id,
@@ -54,6 +56,8 @@ final readonly class Subscription
         public ?CarbonImmutable $updatedAt,
         public array $raw = [],
         public ?string $merchantOrgNr = null,
+        public ?string $environment = null,
+        public ?CarbonImmutable $currentPeriodEnd = null,
     ) {}
 
     /**
@@ -94,6 +98,8 @@ final readonly class Subscription
             updatedAt: self::date($data['updatedAt'] ?? null),
             raw: $data,
             merchantOrgNr: self::string($data['merchantOrgNr'] ?? null),
+            environment: self::string($data['environment'] ?? null),
+            currentPeriodEnd: self::date($data['currentPeriodEnd'] ?? null),
         );
     }
 
@@ -143,8 +149,12 @@ final readonly class Subscription
     /**
      * Whether the subscription reports payment_failed.
      *
-     * Modelled from Plorea's documentation and never observed; the failure
-     * status seen on the wire is past_due (see isPastDue()).
+     * Seen in production 6-8 October 2026, after three failed attempts about
+     * 24 hours apart (retryCount 3, nextChargeAt null). Plorea stops charging
+     * but has not confirmed that as a fixed policy. Earlier failures show as
+     * past_due (see isPastDue()). Not reproduced in test. How a subscription
+     * leaves this status is untested: resume is verified only from paused,
+     * reactivate only from canceled.
      */
     public function hasPaymentFailure(): bool
     {
@@ -154,11 +164,14 @@ final readonly class Subscription
     /**
      * Whether a scheduled charge is late.
      *
-     * Plorea's scheduler charges within seconds of nextChargeAt and moves the
+     * Plorea's scheduler charges within minutes of a natural nextChargeAt
+     * (seconds in test, up to about 25 minutes in production) and moves the
      * date forward as it does, so a nextChargeAt still in the past after the
      * grace period means the cycle did not complete — a decline, a retry in
-     * progress, or a subscription stuck for some other reason. This is
-     * derived entirely from observed fields.
+     * progress, or a subscription stuck for some other reason. A date moved by
+     * hand on an active subscription has not been charged so far (open
+     * question), so it also reads as overdue. This is derived entirely from
+     * observed fields.
      *
      * A failed charge that Plorea is retrying is not overdue: the
      * subscription turns past_due and nextChargeAt moves to the retry. Use

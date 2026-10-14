@@ -57,6 +57,11 @@ class PaymentResource extends Resource
     /**
      * Request a refund for an existing payment.
      *
+     * A partial or full refund on a payment that reads "authorised" is a
+     * refund, not a cancel (verified 2026-10-09, test). "refund_requested"
+     * means accepted: settlement is asynchronous and its final shape is
+     * unobserved, so do not book the refund as final on this response.
+     *
      * @param  string  $modificationReference  Your unique reference for this refund attempt.
      * @param  Amount|int|null  $amount  Refund amount in minor units. Refunds the full payment amount when omitted.
      */

@@ -34,6 +34,11 @@ final readonly class PaymentLink
     ) {}
 
     /**
+     * Plorea's own pay page also reads `orgNr`, `invoiceUrl` and
+     * `status: "expired"`, so accept them too. A missed expiry is the costly
+     * one: the payer would be sent to a dead link. An empty value counts as
+     * missing, so it does not hide a filled alias.
+     *
      * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
@@ -48,12 +53,17 @@ final readonly class PaymentLink
             amount: $value === null ? null : new Amount($value, self::string($data['currency'] ?? null) ?? 'NOK'),
             environment: self::string($data['environment'] ?? null),
             merchantName: self::string($data['merchantName'] ?? null),
-            merchantOrgNr: self::string($data['merchantOrgNr'] ?? null),
+            merchantOrgNr: self::filled($data['merchantOrgNr'] ?? null) ?? self::filled($data['orgNr'] ?? null),
             returnUrl: self::string($data['returnUrl'] ?? null),
-            invoiceUrl: self::string($data['invoice_url'] ?? null),
+            invoiceUrl: self::filled($data['invoice_url'] ?? null) ?? self::filled($data['invoiceUrl'] ?? null),
             expiresAt: self::date($data['expiresAt'] ?? null),
-            expired: self::bool($data['expired'] ?? null) ?? false,
+            expired: self::bool($data['expired'] ?? null) === true || self::string($data['status'] ?? null) === 'expired',
             raw: $data,
         );
+    }
+
+    private static function filled(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
     }
 }

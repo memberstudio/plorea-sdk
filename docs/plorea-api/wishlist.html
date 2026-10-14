@@ -48,8 +48,9 @@
             <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">Partly delivered 2026-09-22</span></td></tr>
             <tr><td>17</td><td><a href="#machine-readable-error-codes">Machine-readable error codes</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>18</td><td><a href="#changelog-and-versioning">Changelog and versioning</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge open">Reported</span></td></tr>
-            <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge stated">Answered 2026-10-14</span></td></tr>
+            <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge stated">In test 2026-10-14</span></td></tr>
+            <tr><td>21</td><td><a href="#next-charge-date-on-reactivate">Next charge date on reactivate</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -116,12 +117,12 @@ Idempotent-Replayed: true</code></pre>
       <h2>Subscriptions</h2>
 
       <h3 id="failed-charge-webhook-and-payment-failed">2. Failed charge webhook and <code>payment_failed</code></h3>
-      <p><span class="badge verified">Partly delivered 2026-10-01</span> Plorea now sends <code>subscription.charge_failed</code>. It was captured three times in test (2026-10-01 and 2026-10-06), each time for a stored card that was gone. A failed scheduled charge also moves the subscription to <code>past_due</code>, with <code>failureReason</code> and <code>retryCount</code> filled. <span class="badge verified">Verified in production 2026-10-01</span></p>
+      <p><span class="badge verified">Partly delivered 2026-10-01</span> Plorea now sends <code>subscription.charge_failed</code>. Deliveries arrived from 2026-10-01 to 2026-10-08, one per failed attempt. All were caused by a Plorea incident, fixed 2026-10-09, not by a card decline. A failed scheduled charge also moves the subscription to <code>past_due</code>, with <code>failureReason</code> and <code>retryCount</code> filled. <span class="badge verified">Verified in production 2026-10-01</span></p>
       <p><strong>What is still open.</strong></p>
       <ul>
         <li>The event is not in Plorea's webhook catalogue.</li>
         <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
-        <li>The state after the last retry is unknown: a terminal status, <code>canceled</code> or <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></li>
+        <li>After three failed attempts, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> How to leave <code>payment_failed</code> is untested, and the API has no call for the reset Plorea did by hand. <span class="badge unobserved">Unobserved</span></li>
         <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
         <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
       </ul>
@@ -164,7 +165,7 @@ Idempotent-Replayed: true</code></pre>
       <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "interval": { "unit": "year", "count": 1 }, "amount": { "value": 299000, "currency": "NOK" }, "effective": "next_charge" }</code></pre>
 
       <h3 id="proration">12. Proration</h3>
-      <p><strong>Problem.</strong> A mid-cycle upgrade has no proration. Integrators compute the difference and send a manual charge. A downgrade needs a refund of a scheduled charge, and it is unclear whether that works.</p>
+      <p><strong>Problem.</strong> A mid-cycle upgrade has no proration. Integrators compute the difference and send a manual charge. A downgrade needs a refund of a scheduled charge, and the API refused one in production.</p>
       <p><strong>Impact.</strong> Every integrator writes the same date and VAT maths.</p>
       <p><strong>Proposal.</strong> An optional <code>proration</code> flag on <code>PATCH</code>, and a preview endpoint.</p>
       <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "amount": { "value": 49900, "currency": "NOK" }, "proration": "charge_now" }</code></pre>
@@ -173,12 +174,13 @@ Idempotent-Replayed: true</code></pre>
       <h3 id="scheduled-charges-on-the-status-endpoint">14. Scheduled charges on the status endpoint</h3>
       <p><span class="badge open">Reported to Plorea</span></p>
       <p><strong>Problem.</strong> The reference of a scheduled charge returns <code>403</code> or <code>404</code> on <code>GET /payments/status</code>. A manual charge reference works.</p>
-      <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge may not be possible.</p>
+      <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge failed through the API in production. It needs the portal.</p>
       <p><strong>Proposal.</strong> Resolve every charge reference on the status endpoint, with <code>platform: "subscription"</code>, as manual charges already do.</p>
 
       <h3 id="charge-after-resume">19. Charge after resume</h3>
       <p><span class="badge open">Reported to Plorea 2026-10-01</span></p>
-      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span></p>
+      <p><strong>Problem.</strong> Three test subscriptions were paused and resumed with <code>nextChargeAt</code> two minutes ahead. None was charged. Each was checked 3, 16 and 41 minutes after the date. Each stayed <code>active</code> with the date in the past. Earlier scheduler lag was 7 seconds to 4.5 minutes. <span class="badge verified">Verified in test</span> A plain <code>PATCH</code> of the date on an <code>active</code> subscription that had been charged behaved the same, with two date formats over four scheduler runs (4 and 5 October). Only <code>trialing</code> subscriptions with a moved date were charged. Reported again on 2026-10-05.</p>
+      <p><strong>Answer, 2026-10-14.</strong> There were two causes. Before 2026-10-05, <code>PATCH</code> ignored <code>nextChargeAt</code>. The scheduler also does not charge the same period twice, so a date inside a paid period waits until the period ends. <code>PATCH</code> now returns <code>409</code> with <code>paidUntil</code> for such a date, and <code>allowEarlyCharge: true</code> charges earlier anyway. <span class="badge stated">Stated by Plorea</span> Our tests moved the date inside the paid month, which fits this answer.</p>
       <p><strong>Impact.</strong> A resumed membership may never bill again. Integrators must watch every resumed subscription for an overdue <code>nextChargeAt</code>.</p>
       <p><strong>Proposal.</strong> Charge a resumed subscription on its <code>nextChargeAt</code>, as for any active subscription. Document the expected scheduler delay.</p>
 
@@ -194,6 +196,13 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> Integrators cannot fully check which company a payment pays out to. They must keep their own copy of the merchant name.</p>
       <p><strong>Proposal.</strong> Return <code>merchantOrgNr</code>, <code>merchantName</code> and a KYC state on every read of a payment, link, subscription and charge.</p>
       <pre><code class="lang-json">{ "merchantOrgNr": "999999999", "merchantName": "Acme Gym AS", "merchantKycStatus": "pending" }</code></pre>
+
+      <h3 id="next-charge-date-on-reactivate">21. Next charge date on reactivate</h3>
+      <p><strong>Problem.</strong> <code>POST /subscriptions/{id}/reactivate</code> always sets <code>nextChargeAt</code> to the last charge plus one interval. A <code>nextChargeAt</code> set with <code>PATCH</code> on the canceled subscription is overwritten. The <code>PATCH</code> returned the new date, and the reactivate then set <code>nextChargeAt</code> to the time of the call. The amount from the <code>PATCH</code> was kept. <span class="badge verified">Verified in test 2026-10-14</span> Without an earlier charge, the result was "now". After a long gap we expect the same. <span class="badge open">Open question</span></p>
+      <p><strong>Impact.</strong> A returning customer is charged at once, not on the agreed date. Reactivate followed by a <code>PATCH</code> leaves a window in which the scheduler can charge. The safe route today is a new subscription with <code>trialEndsAt</code> on the agreed date. That loses the subscription history.</p>
+      <p><strong>Proposal.</strong> Accept <code>nextChargeAt</code> in the reactivate body. Apply the same rules as <code>PATCH</code>: <code>400</code> for a date in the past, and <code>409</code> with <code>paidUntil</code> for a date inside a paid period unless <code>allowEarlyCharge</code> is <code>true</code>. Or keep a future <code>nextChargeAt</code> that was set while the subscription was canceled.</p>
+      <pre><code class="lang-json">POST /subscriptions/sub_test_example/reactivate
+{ "nextChargeAt": "2026-11-01T06:00:00.000Z" }</code></pre>
 
       <h2>Payment methods</h2>
 
@@ -211,6 +220,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Problem.</strong> Two payment methods can share one stored card: same shopper, same <code>storedPaymentMethodId</code>. After a delete, the sibling still reads <code>active</code>. A manual charge on a new subscription on the sibling was <code>Authorised</code>. <span class="badge verified">Verified in test 2026-10-06</span> Production is unobserved.</p>
       <p><strong>Impact.</strong> A customer who removes a card can still be charged on it. Integrators must find and delete every sibling themselves.</p>
       <p><strong>Proposal.</strong> Disable the stored card at Adyen on delete, and cancel every method that shares it. Or return the sibling IDs in the delete response.</p>
+      <p><strong>Answer, 2026-10-14.</strong> <code>DELETE</code> now disables the stored card at Adyen when no other active payment method or subscription uses it. A shared card stays until every method is deleted. The response has <code>adyenTokenDisabled</code>. Active in test. Live follows later. <span class="badge stated">Stated by Plorea</span></p>
 
       <h2>Webhooks</h2>
 
@@ -230,7 +240,7 @@ Idempotent-Replayed: true</code></pre>
 
       <h3 id="sandbox-failure-triggers">4. Sandbox failure triggers</h3>
       <p><strong>Problem.</strong> A failed subscription charge cannot be produced in test. Adyen's decline triggers live on the payment request, and Plorea's scheduler builds that request server-side. <span class="badge unobserved">Not observable in test</span></p>
-      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body, <code>payment_failed</code> and the state after the last retry. The <code>past_due</code> shape was seen once, in production. It cannot be produced in test.</p>
+      <p><strong>Impact.</strong> Dunning code ships untested against real shapes: the <code>402</code> body and the exit from <code>payment_failed</code>. The <code>past_due</code> and <code>payment_failed</code> shapes were seen in production. They cannot be produced in test.</p>
       <p><strong>Proposal.</strong> Either of these works:</p>
       <ul>
         <li>Pass Adyen's <code>RequestedTestAcquirerResponseCode</code> through on manual charges in test.</li>
@@ -273,7 +283,7 @@ Idempotent-Replayed: true</code></pre>
       <ul>
         <li><strong>Consistent spelling.</strong> Payments use <code>cancelled</code>, subscriptions use <code>canceled</code>. Pick one, or document both.</li>
         <li><strong>Consistent metadata.</strong> An empty <code>metadata</code> returns <code>[]</code>, not <code>{}</code>. Return an object.</li>
-        <li><strong>Environment default.</strong> A missing <code>X-Environment</code> on refund uses live credentials. Reject a request with no header, or default to test everywhere.</li>
+        <li><strong>Environment default.</strong> <span class="badge stated">Delivered 2026-10-13</span> The API key now sets the environment. A missing header uses the key's environment, and a header that does not match the key returns <code>403</code>.</li>
         <li><strong>Native 3-D Secure.</strong> <span class="badge stated">Promised by Plorea</span> Request native 3DS2 on iOS and Android sessions.</li>
         <li><strong>KYC visibility.</strong> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link.</li>
       </ul>

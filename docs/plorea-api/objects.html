@@ -191,6 +191,7 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
+      <p><strong>Other field names.</strong> Plorea's own pay page also reads <code>orgNr</code>, <code>shopperEmail</code>, <code>invoiceUrl</code> and <code>status: "expired"</code>. We have never seen them in a response. Read both names, and treat the link as expired when either <code>expired</code> is true or <code>status</code> is <code>"expired"</code>. The SDK does this for <code>orgNr</code>, <code>invoiceUrl</code> and <code>status</code>. It has no email field, so <code>shopperEmail</code> stays in <code>raw</code>. An empty value counts as missing. <span class="badge open">Open question</span></p>
       <pre data-title="Pay page with merchant"><code class="lang-json">{
   "id": "pl_test_example",
   "reference": "order-1002",
@@ -286,6 +287,9 @@ stateDiagram-v2
             <tr><td><code>cardLast4</code></td><td class="type">string</td><td>yes</td><td>Last four digits.</td></tr>
             <tr><td><code>cardBrand</code></td><td class="type">string</td><td>yes</td><td>For example <code>"visa"</code>.</td></tr>
             <tr><td><code>expiryDate</code></td><td class="type">string</td><td>yes</td><td><code>MM/YYYY</code>.</td></tr>
+            <tr><td><code>last4</code>, <code>brand</code>, <code>fundingSource</code>, <code>walletType</code>, <code>tokenLast4</code>, <code>physicalCardLast4</code></td><td class="type">string</td><td>yes</td><td>Added 2026-10-14. Present on a read, with strings for <code>last4</code>, <code>brand</code> and <code>physicalCardLast4</code>, and <code>null</code> for the others on a Visa test card. <span class="badge verified">Verified</span> in test. Show <code>physicalCardLast4</code>: the customer knows those digits. <code>tokenLast4</code> belongs to a network token. <span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>expiryMonth</code>, <code>expiryYear</code>, <code>physicalCardExpiryMonth</code>, <code>physicalCardExpiryYear</code></td><td class="type">integer</td><td>yes</td><td>Added 2026-10-14, for example <code>3</code> and <code>2030</code>. <span class="badge verified">Verified</span> in test</td></tr>
+            <tr><td><code>isToken</code></td><td class="type">boolean</td><td>yes</td><td>Added 2026-10-14. Null on a Visa test card. <span class="badge verified">Verified</span> in test. A boolean when set. <span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>expiresAt</code></td><td class="type">datetime</td><td>no</td><td>When the setup link or session expires. Not the card expiry.</td></tr>
             <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. An empty value comes back as <code>[]</code>, not <code>{}</code>. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>failureReason</code></td><td class="type">string</td><td>missing</td><td>Missing from the captured responses, also on a real refusal. Expect the key to be absent or <code>null</code>. Branch on <code>status</code> alone. <span class="badge verified">Verified</span></td></tr>
@@ -294,7 +298,7 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
-      <p>A delete returns a short body: <code>{paymentMethodId, tenantId, customerId, shopperReference, environment, status, previousStatus, cancelledAt, updatedAt}</code>. A repeat delete returns <code>{paymentMethodId, tenantId, status, alreadyCancelled, updatedAt}</code>. See <a href="api-reference.html#delete-a-payment-method">Delete a payment method</a>. <span class="badge verified">Verified</span></p>
+      <p>A delete returns a short body: <code>{paymentMethodId, tenantId, customerId, shopperReference, environment, status, previousStatus, cancelledAt, updatedAt}</code>. A repeat delete returns <code>{paymentMethodId, tenantId, status, alreadyCancelled, updatedAt}</code>. Since 2026-10-14 the delete response also has <code>adyenTokenDisabled</code>, in test only. <span class="badge stated">Stated by Plorea</span> See <a href="api-reference.html#delete-a-payment-method">Delete a payment method</a>. <span class="badge verified">Verified</span></p>
       <p>The setup responses carry a subset. The hosted setup adds <code>adyenPaymentLinkId</code> and <code>adyenPaymentLinkUrl</code>. The session setup adds <code>sessionId</code>, <code>sessionData</code>, <code>channel</code>, <code>clientKey</code>, <code>amount</code> (<code>100</code>, the 1 NOK verification) and <code>currency</code>.</p>
 
       <h3 id="payment-method-statuses">Payment method statuses</h3>
@@ -343,6 +347,7 @@ stateDiagram-v2
             <tr><td><code>retryPolicy</code></td><td class="type">object</td><td>no</td><td><code>{maxRetries, retryIntervalDays}</code>.</td></tr>
             <tr><td><code>retryCount</code></td><td class="type">integer</td><td>no</td><td>Failed attempts on the current charge. <code>1</code> after the first failed scheduled charge, seen in production. Always 0 in test. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>lastChargeAt</code></td><td class="type">datetime</td><td>yes</td><td>Time of the last successful charge.</td></tr>
+            <tr><td><code>currentPeriodEnd</code></td><td class="type">datetime</td><td>missing</td><td>The end of the period the last charge paid for. Plorea starts the next period here, so a late retry does not move the billing date. <span class="badge stated">Stated by Plorea</span> Equal to <code>nextChargeAt</code> on <code>active</code> subscriptions that have a charge. Absent on <code>trialing</code> and <code>canceled</code> ones. <span class="badge verified">Verified</span> in test 2026-10-14.</td></tr>
             <tr><td><code>lastPaymentReference</code></td><td class="type">string</td><td>yes</td><td><code>{subscriptionId}-{chargeId}</code> of the last charge, also a failed one.</td></tr>
             <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>The provider's free-text reason for a failed charge, for example <code>"PaymentDetail not found"</code>. Seen in production. Show it, never branch on it. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>canceledAt</code></td><td class="type">datetime</td><td>yes</td><td>When it was cancelled.</td></tr>
@@ -354,6 +359,7 @@ stateDiagram-v2
             <tr><td><code>description</code></td><td class="type">string</td><td>yes</td><td>Display text.</td></tr>
             <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>Decimal, for example <code>0.25</code>.</td></tr>
             <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre. Plorea does not calculate it.</td></tr>
+            <tr><td><code>environment</code></td><td class="type">string</td><td>no</td><td><code>"test"</code> or <code>"live"</code>, from the API key. On <code>GET</code> since 2026-10-13. <span class="badge verified">Verified</span> on one read in production.</td></tr>
             <tr><td><code>merchantOrgNr</code></td><td class="type">string</td><td>yes</td><td>The company that receives the money. Returned on reads since 2026-09-22. Null when none was set. The name and email are never returned. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>metadata</code></td><td class="type">object | array</td><td>no</td><td>Your metadata. Empty comes back as <code>[]</code>.</td></tr>
             <tr><td><code>createdAt</code></td><td class="type">datetime</td><td>no</td><td>Creation time.</td></tr>
@@ -386,9 +392,9 @@ stateDiagram-v2
             <tr><td><code>active</code></td><td>Billing on schedule.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>trialing</code></td><td>In a trial. The first charge happens at <code>trialEndsAt</code>. A separate state, not a kind of active.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>past_due</code></td><td>A scheduled charge failed. Plorea retries it. <code>retryCount</code> and <code>failureReason</code> are set, and <code>nextChargeAt</code> is the retry. Not overdue. Seen in production on 2026-10-01.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>paused</code></td><td>Billing paused with <code>PATCH status</code>. <code>nextChargeAt</code> is null. Resume with <code>active</code> and a future <code>nextChargeAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>paused</code></td><td>Billing paused with <code>PATCH status</code>. <code>nextChargeAt</code> is null. Resume with <code>active</code> and a future <code>nextChargeAt</code>. The status change is verified. A charge on the resumed date has never been seen. <span class="badge open">Open question</span></td><td><span class="badge verified">Verified</span> in test for the status</td></tr>
             <tr><td><code>canceled</code></td><td>Cancelled. US spelling. Access continues until <code>accessEndsAt</code>.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>payment_failed</code></td><td>Documented by Plorea. Never observed. The failure status seen on the wire is <code>past_due</code>.</td><td><span class="badge unobserved">Not observed</span></td></tr>
+            <tr><td><code>payment_failed</code></td><td>The retries ran out: <code>retryCount</code> <code>3</code>, <code>nextChargeAt</code> <code>null</code>. Seen in production on 6 to 8 October 2026, after three attempts about 24 hours apart. Not confirmed by Plorea as a fixed policy. How to leave it is untested.</td><td><span class="badge verified">Verified</span> in production. Exit <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -404,9 +410,10 @@ stateDiagram-v2
   active --> paused: PATCH status paused
   paused --> active: PATCH status active + nextChargeAt
   active --> past_due: scheduled charge fails
-  past_due --> past_due: retry fails (unobserved)
+  past_due --> past_due: retry fails
+  past_due --> payment_failed: last attempt fails
         </pre>
-        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. What follows the last retry is an open question. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. <code>payment_failed</code> is documented but never seen, so it is not drawn.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. After three failed attempts in total, production showed <code>payment_failed</code>. Plorea has not confirmed this as a fixed policy. No arrow leaves <code>payment_failed</code>, because every way out is untested. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. Resume is verified only from <code>paused</code>.</figcaption>
       </figure>
 
       <h3>Interval units</h3>
@@ -434,7 +441,7 @@ stateDiagram-v2
       </div>
 
       <h3>Charge history item</h3>
-      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code> newest first. With a merchant, the envelope also has <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
+      <p>One item of <code>GET /subscriptions/{id}/charges</code>, which returns <code>{subscriptionId, items}</code>. The order is not reliable: a production read on 2026-10-08 was not newest first. Sort by <code>createdAt</code>. With a merchant, the envelope also has <code>merchantOrgNr</code>. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
@@ -549,11 +556,11 @@ stateDiagram-v2
         <table>
           <thead><tr><th>Type</th><th>When</th><th>Evidence</th></tr></thead>
           <tbody>
-            <tr><td><code>payment.authorised</code></td><td>A payment or a manual subscription charge is authorised.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>payment.authorised</code></td><td>A payment or a manual subscription charge is authorised. For manual charges: verified before 2026-10-14, <span class="badge unobserved">Unobserved</span> since.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.failed</code></td><td>A payment is declined. Never <code>payment.refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>A scheduled charge succeeded.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>subscription.charge_failed</code></td><td>A scheduled charge failed. Not in Plorea's catalogue, but captured in test on 2026-10-01 and 2026-10-06. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td>A scheduled charge failed. Not in Plorea's catalogue, but delivered since 2026-10-01, one per failed attempt. See <a href="webhooks.html#subscription-charge-failed">Webhooks</a>.</td><td><span class="badge verified">Verified</span></td></tr>
           </tbody>
         </table>
       </div>

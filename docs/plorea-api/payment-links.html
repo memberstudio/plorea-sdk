@@ -42,7 +42,7 @@ flowchart TD
   E --> G
   G --> H[Send customer to paymentLinkUrl]
   H --> I[Webhook payment.authorised or payment.failed]
-  H --> J[Customer returns to returnUrl]
+  H --> J[Customer returns to returnUrl, after Authorised only]
   I --> K[GET /payments/status/reference]
   J --> K
   K --> L[Book the payment idempotently]
@@ -171,7 +171,7 @@ const link = await res.json();</code></pre></div>
 }</code></pre>
       <dl class="fields">
         <dt>paymentLinkUrl</dt><dd>Send the customer here.</dd>
-        <dt>paymentLinkId</dt><dd>The link id, prefixed <code>pl_</code>. Use it for <code>GET /pay/{id}</code> and for checkout sessions. Store it.</dd>
+        <dt>paymentLinkId</dt><dd>The link id, prefixed <code>pl_</code>. Use it for <code>GET /pay/{id}</code> and for checkout sessions. Store it. Keep it as secret as the payment link URL, which contains it. Do not log it, and show it only to the payer.</dd>
         <dt>expiresAt</dt><dd>When the link stops being payable. Store it. It is your main expiry signal, because the status never changes to <code>expired</code>. <span class="badge verified">Verified</span></dd>
         <dt>partnerSplitsApplied</dt><dd><code>true</code> when Plorea attached the merchant's split. It was <code>true</code> on links with a <code>merchantOrgNr</code> and <code>false</code> without. <span class="badge verified">Verified</span></dd>
         <dt>store, balanceAccountId, merchantAccount</dt><dd>Plorea's routing. Informational. Do not depend on the values.</dd>
@@ -199,7 +199,7 @@ const link = await res.json();</code></pre></div>
       </div>
 
       <h2 id="the-return-url">The return URL</h2>
-      <p>After the attempt, the pay page sends the customer to <code>returnUrl</code>. The customer arrives there both after a success and after giving up.</p>
+      <p>The pay page sends the customer to <code>returnUrl</code> automatically only after an <code>Authorised</code> payment, about two seconds after the success message. After a refusal, a cancel or a pending result, the customer stays on the pay page. So the return URL never tells you that a customer gave up. Read the status instead. The pay page also ignores a <code>returnUrl</code> or <code>invoice_url</code> that is not <code>http</code> or <code>https</code>, so a custom app scheme does nothing here. (Plorea's pay page code, 2026-10-10.)</p>
       <ol class="steps">
         <li><strong>Build the URL on your server.</strong>Never copy a return URL from a request parameter. That is an open redirect.</li>
         <li><strong>Put your own identifier in the path.</strong>For example <code>/invoices/123/paid</code>. Do not expect Plorea to append a reference or a result. What the pay page appends is not documented. <span class="badge open">Open question</span></li>

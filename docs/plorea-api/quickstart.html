@@ -166,7 +166,7 @@ console.log(link.paymentLinkUrl);</code></pre></div>
           </tbody>
         </table>
       </div>
-      <p>Adyen publishes the full list of test cards in its own documentation. After payment, the page sends the customer to your <code>returnUrl</code>.</p>
+      <p>For Mastercard, American Express and cards that trigger the 3-D Secure challenge, see <a href="testing.html#common-cards">Testing</a>. Adyen publishes the <a href="https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers/" rel="noopener">full list of test cards</a>. After payment, the page sends the customer to your <code>returnUrl</code>.</p>
 
       <div class="callout warning">
         <p class="callout-title">The return URL proves nothing</p>
@@ -372,7 +372,7 @@ const method = await res.json(); // redirect to method.adyenPaymentLinkUrl</code
       <p>On a platform, also send <code>merchantOrgNr</code> (and optionally <code>merchantName</code>) on the setup. The 3-D Secure challenge then shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span></p>
 
       <h3>Create a subscription</h3>
-      <p>Create the subscription on the active card. Billing starts at once: without a trial, the scheduler charges the first period within seconds. <span class="badge verified">Verified</span></p>
+      <p>Create the subscription on the active card. Without a trial, billing should start at once. A no-trial signup was charged at once in production on 2026-10-10. <span class="badge verified">Verified</span> in production. In test on 2026-10-06, new no-trial subscriptions were not charged. <span class="badge open">Open question</span> Confirm the first charge in the charge history.</p>
       <div class="endpoint"><span class="method post">POST</span><code>/subscriptions</code></div>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl https://payments.plorea.no/subscriptions \

@@ -88,10 +88,16 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($status->lastCancelReference);
     }
 
-    public function test_it_parses_a_real_paid_payment_status_response(): void
+    /**
+     * A paid payment link. "authorised" is the only success status ever seen,
+     * in test and live; "paid" has never been observed, which is why the
+     * fixture is named for what the API returns. isPaid() is true here
+     * because it counts "authorised" as received — it does not mean captured.
+     */
+    public function test_it_parses_a_real_authorised_payment_status_response(): void
     {
         Http::fake([
-            'payments.plorea.no/payments/status/GOLDEN-2026-001?*' => Http::response($this->fixture('payment-status-paid')),
+            'payments.plorea.no/payments/status/GOLDEN-2026-001?*' => Http::response($this->fixture('payment-status-authorised')),
         ]);
 
         $status = Plorea::payments()->status('GOLDEN-2026-001');
@@ -624,7 +630,9 @@ class GoldenFixturesTest extends TestCase
 
         $this->assertCount(2, $charges);
 
-        // Newest first: the scheduler's own charge, then the manual one.
+        // Newest first in this capture: the scheduler's own charge, then the
+        // manual one. Live order is not reliable (2026-10-08), so consumers
+        // sort by createdAt.
         $this->assertSame('scheduled_charge', $charges->first()?->reason);
         $this->assertSame('manual_charge', $charges->last()?->reason);
 
