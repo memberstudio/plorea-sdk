@@ -384,9 +384,10 @@ $current = $subscriptions-&gt;find('sub_test_acme_001');
 if ($upgrade-&gt;state !== 'charged') {
     // Count back one interval from the period end. After a late retry,
     // lastChargeAt is later than the period start and overcharges.
+    // overflow: false keeps 31 March minus one month on 28 February, not 3 March.
     $periodEnd = $current-&gt;nextChargeAt;
     $periodStart = $current-&gt;lastChargeAt !== null &amp;&amp; $periodEnd !== null &amp;&amp; $current-&gt;interval !== null
-        ? $periodEnd-&gt;sub($current-&gt;interval-&gt;unit-&gt;value, $current-&gt;interval-&gt;count)
+        ? $periodEnd-&gt;sub($current-&gt;interval-&gt;unit-&gt;value, $current-&gt;interval-&gt;count, overflow: false)
         : null;
     $now = now();
 
