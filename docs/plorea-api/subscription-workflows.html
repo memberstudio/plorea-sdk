@@ -329,8 +329,8 @@ vatAmount       = round(difference × vatRate / (1 + vatRate))
 Example: 199 kr → 399 kr, 15 of 30 days left
 difference = (39900 − 19900) × 15/30 = 10000 øre (100,00 kr)
 vatAmount  = 10000 × 0.25 / 1.25    =  2000 øre</code></pre>
-      <p><code>periodStart</code> is the time of the last charge. Read it from the newest item in <code>GET /subscriptions/{id}/charges</code>, or from <code>lastChargeAt</code> on the subscription.</p>
-      <p>Since 2026-10-14 a late retry no longer moves the period: the next period starts at the end of the previous one, and subscriptions have <code>currentPeriodEnd</code>. <span class="badge stated">Stated by Plorea</span> The field is present on <code>active</code> subscriptions with a charge. <span class="badge verified">Verified</span> in test 2026-10-14. Use the period end minus one interval as <code>periodStart</code>. On an <code>active</code> subscription with a charge, <code>currentPeriodEnd</code> equals <code>nextChargeAt</code>, so the example below counts back from <code>nextChargeAt</code>. After a late retry, <code>lastChargeAt</code> is later than the period start and overcharges an upgrade.</p>
+      <p>Before 2026-10-14, <code>periodStart</code> was the time of the last charge, read from <code>lastChargeAt</code> or the newest item in <code>GET /subscriptions/{id}/charges</code>. That is still true when the charge came on time.</p>
+      <p>Since 2026-10-14 a late retry no longer moves the period: the next period starts at the end of the previous one, and subscriptions have <code>currentPeriodEnd</code>. <span class="badge stated">Stated by Plorea</span> The field is present on <code>active</code> subscriptions with a charge. <span class="badge verified">Verified</span> in test 2026-10-14. The API has no period start. The start of the current period is the end of the previous one, so store <code>currentPeriodEnd</code> each time a charge succeeds, and use the stored value from the period before as <code>periodStart</code>. Without a stored value, count back one interval from <code>nextChargeAt</code>. That fallback can be up to 3 days wrong after a period that ends on the 29th, 30th or 31st. After a late retry, <code>lastChargeAt</code> is later than the period start and overcharges an upgrade.</p>
       <p>Prorate only an <code>active</code> subscription with a valid paid period: <code>lastChargeAt</code> and <code>nextChargeAt</code> are both set, and <code>lastChargeAt &lt; now &lt; nextChargeAt</code>. A <code>trialing</code> subscription has <code>lastChargeAt: null</code>. The customer has paid nothing yet, so there is no difference to charge. For a trial, PATCH the new price only.</p>
 
       <ol class="steps">
@@ -382,13 +382,15 @@ $current = $subscriptions-&gt;find('sub_test_acme_001');
 // $upgrade is your own record of this upgrade (for example an Eloquent model).
 // In the state 'charged' the difference is already paid: skip to the PATCH.
 if ($upgrade-&gt;state !== 'charged') {
-    // Count back one interval from the period end. After a late retry,
-    // lastChargeAt is later than the period start and overcharges.
-    // overflow: false keeps 31 March minus one month on 28 February, not 3 March.
+    // The period starts where the previous one ended. $upgrade-&gt;previousPeriodEnd
+    // is your own copy of currentPeriodEnd from the charge before this period.
+    // Do not use lastChargeAt: after a late retry it is later than the start.
+    // The fallback counts back one interval and can be off at month ends.
     $periodEnd = $current-&gt;nextChargeAt;
-    $periodStart = $current-&gt;lastChargeAt !== null &amp;&amp; $periodEnd !== null &amp;&amp; $current-&gt;interval !== null
-        ? $periodEnd-&gt;sub($current-&gt;interval-&gt;unit-&gt;value, $current-&gt;interval-&gt;count, overflow: false)
-        : null;
+    $periodStart = $current-&gt;lastChargeAt === null ? null : ($upgrade-&gt;previousPeriodEnd
+        ?? ($periodEnd !== null &amp;&amp; $current-&gt;interval !== null
+            ? $periodEnd-&gt;sub($current-&gt;interval-&gt;unit-&gt;value, $current-&gt;interval-&gt;count, overflow: false)
+            : null));
     $now = now();
 
     // Prorate only an active subscription with a valid paid period.
