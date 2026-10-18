@@ -61,6 +61,36 @@
       <p><span class="badge verified">Verified 2026-09-19</span> A refund and a cancel were both still pending after more than 24 hours. <span class="badge stated">Stated 2026-09-21</span> Plorea states this is expected, and that the final statuses are <code>refunded</code> and <code>cancelled</code>. Book on the request. Do not wait for the final status.</p>
       <p><span class="badge verified">Verified 2026-10-11</span> One scheduled subscription charge could not be refunded or cancelled through the API. In production, <code>POST /payments/refund</code> answered <code>{"error":"Payment not found"}</code> for a scheduled charge, both with its <code>{subscriptionId}-{chargeId}</code> reference and with its <code>pspReference</code>. <code>POST /payments/cancel</code> on the same charge, while it was still <code>authorised</code>, also failed. The status endpoint fails the same way for that reference. The first charge of a new subscription is also a scheduled charge: <code>GET /subscriptions/{id}/charges</code> reports <code>"reason": "scheduled_charge"</code> for it. Refund it in the Plorea portal. Then record the refund in your own system against the original charge, so no other path refunds it again. <span class="badge open">Open question</span> Whether every scheduled charge behaves this way, and whether Plorea plans an API path. A refund of a manual charge is untested.</p>
 
+      <h3 id="second-payment-on-a-paid-link">A paid link accepts a second payment</h3>
+      <p><span class="badge verified">Verified 2026-10-17 (test)</span> After a pay-by-link is authorised, its URL shows the payment form again. There is no "already paid" page. The page redirects once after success, and a reload shows the form. A second payment was authorised. We reproduced this twice, on two separate links.</p>
+      <ul>
+        <li>Each payment sends its own <code>payment.authorised</code> webhook with <code>success: true</code>. The <code>reference</code> and <code>paymentLinkId</code> are the same. The <code>pspReference</code> is different.</li>
+        <li><code>GET /payments/status/{reference}</code> keeps the <strong>first</strong> <code>pspReference</code>. Only <code>updatedAt</code> and <code>lastWebhookAt</code> move. The status shows no count, amount or PSP reference of the second payment.</li>
+        <li>A refund of the full amount targets the first payment. A second refund of the full amount fails with <code>422</code> and "Refund amount exceeds original payment amount", because <code>refundedTotal</code> caps refunds per reference at the link amount. The second payment cannot be refunded through the API.</li>
+      </ul>
+      <div class="callout warning">
+        <p class="callout-title">Store the PSP reference of every payment</p>
+        <p>Read <code>data.pspReference</code> from each <code>payment.authorised</code> webhook and store it per payment, not per reference. Treat a second successful PSP reference on an already paid reference as a double payment. Refund it by hand in the Plorea portal. Do not refund it through the API.</p>
+      </div>
+
+      <h3 id="declined-then-paid">Declined, then paid: the status and the refund point at the declined try</h3>
+      <p><span class="badge verified">Verified 2026-10-17 (test)</span> We paid a link first with the Adyen test card that is always refused (code 907), then with a good card on the same page.</p>
+      <ul>
+        <li>After the decline: <code>status: "failed"</code>, a <code>pspReference</code> (PSP A) already assigned to the declined try, <code>webhookSuccess: false</code>, and a <code>refusalReason</code> that holds the 907 text. The webhook has <code>eventCode: "AUTHORISATION"</code>, <code>success: false</code> and PSP A. Its <code>data</code> has exactly 12 keys and <strong>no <code>refusalReason</code></strong>. That field exists only on the status endpoint.</li>
+        <li>After the good try: a webhook with <code>success: true</code> and PSP B. The status reads <code>authorised</code>, <code>webhookSuccess: true</code> and <code>refusalReason: null</code>, but <code>pspReference</code> is <strong>still PSP A</strong>.</li>
+        <li>A refund of the full amount through the API was accepted as <code>refund_requested</code>. Its <code>paymentPspReference</code> was PSP A, the try that never took money. The status then showed <code>refund_requested</code> and <code>refundedTotal</code> equal to the full amount. PSP B can no longer be refunded through the API. Nothing on the wire signals the miss.</li>
+        <li>No <code>REFUND</code> webhook arrived in about 19 minutes. This matches 2026-10-09, when none arrived either.</li>
+      </ul>
+      <div class="callout warning">
+        <p class="callout-title">Check for a declined try before an API refund</p>
+        <p>If the reference had a declined attempt before the paid one, the API refund targets the declined PSP reference. Refund by hand. Do not use <code>pspReference</code> from the status to identify the payment that took money.</p>
+      </div>
+      <p><span class="badge verified">Verified 2026-10-17 (test)</span> Test notes. Adyen test CVC values such as 123 do not cause a decline on Plorea's pay page. The page has no cardholder-name field, so Adyen's holder-name refusal trick is unavailable. The always-blocked test card works.</p>
+      <div class="callout gap">
+        <p class="callout-title">What we would like from Plorea</p>
+        <p>Block a second payment on a paid link. Make the status <code>pspReference</code> the payment that took money. Let a refund name a <code>pspReference</code>. We asked on 2026-10-17. Not delivered. See the <a href="wishlist.html#paid-link-second-payment-and-refund-target">wishlist</a>. <span class="badge proposal">Proposal</span></p>
+      </div>
+
       <h3>Capture is automatic</h3>
       <p><span class="badge stated">Stated 2026-09-15</span> Capture runs automatically through Plorea's settlement partner, usually within minutes of authorisation. No capture endpoint exists. A manual capture API is on Plorea's roadmap. For an integrator, <code>authorised</code> is the end of the success path.</p>
 

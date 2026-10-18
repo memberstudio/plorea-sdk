@@ -134,6 +134,73 @@ charge, so no other path refunds it again.
 **❓ Open:** whether every scheduled charge behaves this way, and whether Plorea
 plans an API path. A refund of a manual charge is untested.
 
+### ✅ A paid pay-by-link accepts a second payment — 2026-10-17 (test)
+
+Card via Adyen, pay-by-link, 10 NOK. Webhooks were read on the integrator's
+own receiving server.
+
+After the link is authorised, reopening its URL shows the payment form again.
+There is no "already paid" page. The page redirects once, right after success;
+a reload shows the form. A second payment was authorised. Reproduced twice, on
+two separate links.
+
+- Each payment sends its own `payment.authorised` (eventCode `AUTHORISATION`,
+  `success: true`), with the same `reference` and `paymentLinkId` and a
+  **different `pspReference`**.
+- `GET payments/status/{reference}` keeps the **first** `pspReference`. Only
+  `updatedAt` and `lastWebhookAt` move to the second payment's time. No count,
+  amount or psp of the second payment appears in the status.
+- A refund of the full amount targets the first psp (`paymentPspReference` =
+  first). A second refund of the full amount fails with `422`
+  `ValidationException` "Refund amount exceeds original payment amount".
+  `refundedTotal` caps refunds per reference at the link amount. **The second
+  payment cannot be refunded through the API.**
+
+**Guidance.** Read `data.pspReference` from every `payment.authorised` webhook
+and store it per payment, not per reference. Treat a second successful webhook
+psp on an already-paid reference as a double payment, and refund it by hand in
+the Plorea portal. Do not refund it through the API.
+
+**Wishlist, asked of Plorea 2026-10-17, not delivered:** block a second payment
+on a paid link; make the status `pspReference` the payment that took money; let
+a refund name a `pspReference`.
+
+### ✅ Declined, then paid: the status psp and the refund point at the declined try — 2026-10-17 (test)
+
+First try with the Adyen test card that is always refused (blocked, code 907).
+Second try on the same page with a good card.
+
+- **After the decline:** `status: failed`, a `pspReference` (psp A) is already
+  assigned to the declined try, `webhookSuccess: false`, `refusalReason` =
+  "907 Payment details are not supported for this country/ MCC combination".
+  The webhook: AUTHORISATION, `success: false`, psp A. Its `data` has exactly 12
+  keys (reference, orderId, status, provider, pspReference, paymentLinkId,
+  paymentLinkUrl, amount, currency, environment, eventCode, success) and **no
+  `refusalReason`**. That key exists only on the status endpoint.
+- **After the good try:** webhook AUTHORISATION, `success: true`, psp B. Status
+  reads `authorised`, `webhookSuccess: true`, `refusalReason: null` (cleared),
+  but `pspReference` is **still psp A**, the declined try.
+- **Refund of the full amount via the API:** accepted as `refund_requested`,
+  `paymentPspReference` = psp A. Status: `refund_requested`, `refundedTotal` =
+  the full amount. The refund targets a payment that never took money, Plorea
+  counts the payment as refunded, and psp B can no longer be refunded through
+  the API. Nothing on the wire signals the miss.
+- **No REFUND webhook** arrived within about 19 minutes. This matches
+  2026-10-09 (above), when no REFUND event arrived either.
+
+**Guidance.** Do not use the status `pspReference` to identify the payment that
+took money; the webhook with `success: true` is the only source. Before an API
+refund, check whether the reference ever had a declined attempt before the paid
+one. If so, the refund targets the declined psp: refund by hand.
+
+**Test notes.** Adyen test CVC values (e.g. 123) do **not** cause a decline on
+Plorea's page, and the page has no cardholder-name field, so Adyen's
+holder-name refusal trick is unavailable. The always-blocked test card works.
+
+**Wishlist, asked of Plorea 2026-10-17, not delivered:** same three items as
+above; the second (status psp = the payment that took money) is the one this
+case needs.
+
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
 The create response omits `merchantOrgNr` and `merchantName` entirely. They

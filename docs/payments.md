@@ -239,6 +239,32 @@ One run on 2026-10-09 (test) reported the top-level status still `authorised`
 from `lastRefund*` (and `$status->raw['refundedTotal']`) as well as from the
 status string.
 
+### One reference can take two payments, and the status psp can be the wrong one
+
+Verified 2026-10-17 (test). Two silent traps; `payments()->status()` shows
+neither.
+
+- **A paid pay-by-link accepts a second payment.** Reopening the link URL
+  shows the form again. The second payment sends its own `payment.authorised`
+  with the same `reference` and a different `pspReference`. `status()` keeps
+  the first `$pspReference`. An API refund targets that first psp, and a second
+  full refund fails with a `ValidationException` ("Refund amount exceeds
+  original payment amount"), because `refundedTotal` caps refunds per
+  reference. The second payment cannot be refunded through the API.
+- **Declined, then paid.** The declined try is assigned a psp, and
+  `$pspReference` stays on it after a good second try. An API refund is
+  accepted, targets the declined psp, and counts the payment as refunded. The
+  payment that took money can no longer be refunded through the API.
+
+So: store `data.pspReference` from every `payment.authorised` webhook, per
+payment. Do not use `$status->pspReference` to identify the payment that took
+money. Treat a second successful psp on a paid reference as a double payment
+and refund it by hand in the Plorea portal. Before an API refund, check whether
+the reference had a declined attempt before the paid one; if it did, refund by
+hand. Plorea was asked on 2026-10-17 to block a second payment, to put the
+successful psp on the status, and to let a refund name a psp. Not delivered.
+Details: [api-behaviour.md](api-behaviour.md).
+
 > [!IMPORTANT]
 > **Settlement took over 11 hours** in one observed test-environment refund
 > (2026-09-09). Size any polling loop in hours, not minutes: a job that gives

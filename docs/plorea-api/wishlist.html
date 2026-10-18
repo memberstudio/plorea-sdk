@@ -51,6 +51,7 @@
             <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge stated">Answered 2026-10-14</span></td></tr>
             <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge stated">In test 2026-10-14</span></td></tr>
             <tr><td>21</td><td><a href="#next-charge-date-on-reactivate">Next charge date on reactivate</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>22</td><td><a href="#paid-link-second-payment-and-refund-target">Second payment on a paid link and the refund target</a></td><td>Payments</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -113,6 +114,13 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> Integrators must store <code>expiresAt</code> and compute expiry themselves. Reports show stale open payments.</p>
       <p><strong>Proposal.</strong> Report <code>expired</code> on the status endpoint once <code>expiresAt</code> passes. Optionally send <code>payment.expired</code>.</p>
       <pre><code class="lang-json">{ "reference": "order-1001", "status": "expired", "expiresAt": "2026-10-08T12:00:00Z" }</code></pre>
+
+      <h3 id="paid-link-second-payment-and-refund-target">22. Second payment on a paid link and the refund target</h3>
+      <p><span class="badge proposal">Proposal</span> Asked of Plorea on 2026-10-17. Not delivered.</p>
+      <p><strong>Problem.</strong> A paid payment link shows the form again and accepts a second payment. The status keeps the first <code>pspReference</code>. After a declined try then a paid one, the status <code>pspReference</code> is the declined try. A refund targets the status <code>pspReference</code>, and <code>refundedTotal</code> caps refunds per reference. <span class="badge verified">Verified 2026-10-17 (test)</span> See <a href="field-notes.html#second-payment-on-a-paid-link">Field notes</a>.</p>
+      <p><strong>Impact.</strong> A second payment cannot be refunded through the API. After a declined try, an API refund is accepted for a payment that took no money, and the payment that did take money cannot be refunded through the API. Nothing on the wire signals either case. Integrators must refund by hand and track the PSP reference of every webhook themselves.</p>
+      <p><strong>Proposal.</strong> Three changes. (1) Refuse a second payment on a paid link, and show "already paid". (2) Make <code>pspReference</code> on the status the payment that took money. (3) Let <code>POST /payments/refund</code> take a <code>pspReference</code> that selects the payment to refund.</p>
+      <pre data-title="POST /payments/refund"><code class="lang-json">{ "reference": "order-1001", "modificationReference": "order-1001-REFUND-1", "pspReference": "TESTPSPREF000002", "amount": 1000 }</code></pre>
 
       <h2>Subscriptions</h2>
 

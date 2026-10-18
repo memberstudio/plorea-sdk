@@ -73,6 +73,20 @@ does not invent typed events for shapes nobody has seen.
 **never `payment.refused`** — with `eventCode: AUTHORISATION` + `success: false`
 and no refusal-reason field of any shape.
 
+## One `payment.authorised` per payment, not per reference — VERIFIED 2026-10-17 (test)
+
+A paid pay-by-link accepted a second payment. It sent a second
+`payment.authorised` with the same `reference` and `paymentLinkId` and a
+**different `data.pspReference`**. A declined try also sends an AUTHORISATION
+with `success: false` and its own psp. `GET payments/status` keeps the first
+psp in both cases. The webhook is the only place the psp of each payment shows.
+Persist it per delivery, and deduplicate on `eventId`, not on `reference`.
+Full detail and the refund consequences: [payments.md](payments.md).
+
+The decline webhook `data` has exactly 12 keys and no `refusalReason`:
+reference, orderId, status, provider, pspReference, paymentLinkId,
+paymentLinkUrl, amount, currency, environment, eventCode, success.
+
 ## Subscription webhooks — CAPTURED 2026-09-04
 
 Registration is per tenant and points at whichever single URL was handed to

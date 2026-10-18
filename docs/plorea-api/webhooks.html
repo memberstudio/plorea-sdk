@@ -158,6 +158,11 @@ sequenceDiagram
   }
 }</code></pre>
 
+      <div class="callout warning">
+        <p class="callout-title">One reference, several deliveries</p>
+        <p><span class="badge verified">Verified 2026-10-17 (test)</span> A paid pay-by-link accepted a second payment and sent a second <code>payment.authorised</code> with the same <code>reference</code> and <code>paymentLinkId</code> and a different <code>data.pspReference</code>. A declined try sends <code>eventCode: "AUTHORISATION"</code> with <code>success: false</code> and its own PSP reference. The payment status keeps the first PSP reference. Store <code>data.pspReference</code> per delivery. Treat a second successful PSP reference on a paid reference as a double payment, and refund it by hand.</p>
+      </div>
+
       <h3>payment.failed</h3>
       <p>Plorea sends this about two seconds after the payment status changes to <code>failed</code>. The decline shows only as <code>eventCode: "AUTHORISATION"</code> with <code>success: false</code>. The payload has no refusal reason. <span class="badge verified">Verified</span> Plorea plans to add <code>refusalReason</code> to the status endpoint. <span class="badge stated">Stated by Plorea</span></p>
       <pre data-title="payment.failed"><code class="lang-json">{
