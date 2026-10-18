@@ -66,6 +66,8 @@ Both return immediately with `refund_requested` / `cancel_requested`; the provid
 
 **Persist the `Refund` DTO.** `refundPspReference` exists only on the refund response and never on `payments/status`, whose `lastRefundRequestPspReference` identifies the *request* rather than the refund. No later poll can recover it, and it is the identifier provider support asks for.
 
+**Two payments on one reference (verified 2026-10-17, test).** A paid pay-by-link accepts a second payment and sends a second `payment.authorised` with the same `reference` and a different `data.pspReference`; `status()->pspReference` keeps the first. After a declined try then a paid one, `status()->pspReference` stays on the declined try, and an API refund targets it: accepted, counted as refunded, money not returned, and the paying psp can no longer be refunded through the API. So: store `data.pspReference` from every `payment.authorised` webhook per payment; treat a second successful psp on a paid reference as a double payment and refund it by hand in the Plorea portal; before an API refund, check whether the reference ever had a declined attempt, and refund by hand if so. The decline webhook carries no `refusalReason`; only `status()` does.
+
 ## Embedded checkout
 
 `Plorea::payByLink()->session($linkId, returnUrl: ..., channel: Channel::Web)` opens the Adyen session `pay.plorea.no` mounts, so you can render Drop-in on your own domain or in a native app. It needs `PLOREA_ADYEN_CLIENT_KEY` and your origins (or app identifiers) whitelisted by Plorea. Return `response()->json($session)`, never `raw`. For the full flow, use the `plorea-checkout` skill; for production readiness, `plorea-go-live`.
@@ -213,6 +215,8 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
     }
 });
 ```
+
+One reference can produce several `payment.authorised` deliveries (a second payment on a paid link). Each has its own `data.pspReference`; store it per delivery and deduplicate on `eventId`, not on `reference`.
 
 Delivery is best-effort — also run a scheduled job polling `status()` for open links.
 

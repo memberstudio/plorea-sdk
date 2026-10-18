@@ -200,6 +200,16 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
 `$event->status` and `$event->payload` are available, but treat them as hints.
 Compare `$status->amount` against your local expectation before booking money.
 
+**One reference can produce several `payment.authorised` deliveries.** A paid
+pay-by-link accepted a second payment on 2026-10-17 (test) and sent a second
+`payment.authorised` with the same `reference` and a different
+`data.pspReference`. A declined try sends an AUTHORISATION with `success: false`
+and its own psp. `payments()->status()` keeps the first psp throughout. Read
+`data.pspReference` from each delivery and store it per payment. Treat a
+second successful psp on a paid reference as a double payment to refund by
+hand. The decline payload has no `refusalReason`; that exists only on the
+status endpoint. See [api-behaviour.md](api-behaviour.md).
+
 `$event->eventId` and `$event->type` carry the delivery's own identity — the
 catalogue type (`payment.authorised`, `payment.failed`, `payment.refunded`) and
 the id to deduplicate on. Both are read from the signed body.

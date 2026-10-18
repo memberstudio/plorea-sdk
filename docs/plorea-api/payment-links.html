@@ -347,6 +347,15 @@ async function firstOrCreate(base, payload, maxAttempts = 10) {
         <p>Reject a duplicate <code>reference</code> with <code>409</code> and return the existing link, or accept an <code>Idempotency-Key</code> header. Then the suffix walk is no longer necessary. <span class="badge proposal">Proposal</span></p>
       </div>
 
+      <h2 id="second-payment">A paid link accepts a second payment</h2>
+      <p><span class="badge verified">Verified 2026-10-17 (test)</span> Opening the URL of a paid link shows the payment form again, and a second payment is authorised. Each payment sends its own <code>payment.authorised</code> webhook with the same <code>reference</code> and a different <code>pspReference</code>. The status keeps the first <code>pspReference</code>. The second payment cannot be refunded through the API.</p>
+      <ul>
+        <li>Store <code>data.pspReference</code> from every <code>payment.authorised</code> webhook, per payment.</li>
+        <li>Treat a second successful PSP reference on a paid reference as a double payment. Refund it by hand in the Plorea portal.</li>
+        <li>Do not send a customer back to the link URL after payment.</li>
+      </ul>
+      <p>See <a href="field-notes.html#second-payment-on-a-paid-link">Field notes</a> and <a href="refunds-and-cancellations.html#refund-target">the refund target</a>.</p>
+
       <h2>Reconcile the result</h2>
       <p>Three signals can tell you about the outcome: the webhook, the customer's return, and your own status poll. They can arrive in any order, and the webhook can be lost. Plorea does not redeliver a failed webhook. <span class="badge stated">Stated by Plorea</span></p>
       <ol class="steps">
@@ -354,7 +363,7 @@ async function firstOrCreate(base, payload, maxAttempts = 10) {
         <li><strong>Compare the amount.</strong>Check <code>amount</code> and <code>currency</code> against your invoice. Flag a mismatch for manual handling. Do not book it automatically.</li>
         <li><strong>Book idempotently.</strong>Key the booking on the reference. A second signal must not book the payment twice.</li>
         <li><strong>Poll open links as a backstop.</strong>Run a scheduled job over links that are open and not expired. Stop polling when <code>expiresAt</code> has passed.</li>
-        <li><strong>Store the identifiers.</strong>Keep <code>reference</code>, <code>paymentLinkId</code>, <code>pspReference</code> and <code>expiresAt</code>. Support at Plorea and Adyen asks for the PSP reference.</li>
+        <li><strong>Store the identifiers.</strong>Keep <code>reference</code>, <code>paymentLinkId</code>, <code>pspReference</code> and <code>expiresAt</code>. Support at Plorea and Adyen asks for the PSP reference. Take the PSP reference from each <code>payment.authorised</code> webhook, not only from the status. See <a href="#second-payment">A paid link accepts a second payment</a>.</li>
       </ol>
       <div class="tabs">
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$status = Plorea::payments()-&gt;status($invoice-&gt;plorea_reference);

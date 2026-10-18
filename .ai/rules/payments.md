@@ -98,6 +98,67 @@ portal reference, outcome) so no later refund path refunds it again. Whether
 every scheduled charge behaves this way is open; a manual-charge refund is
 untested. Do not add an SDK path for it until Plorea offers one.
 
+## One reference can take two payments, and status can hold the wrong psp — VERIFIED 2026-10-17 (test)
+
+Card via Adyen, pay-by-link, 10 NOK, webhooks read on the integrator's own
+receiving server. Two separate traps, both silent on the wire.
+
+**A paid link takes a second payment.** After the link is `authorised`,
+reopening its URL shows the payment form again. There is no "already paid"
+page, and the page only redirects once, right after success. A second payment
+was authorised. Reproduced twice, on two separate links.
+
+- Each payment sends its own `payment.authorised` (AUTHORISATION,
+  `success: true`). `reference` and `paymentLinkId` are the same;
+  **`pspReference` is different**.
+- `GET payments/status/{reference}` keeps the **first** `pspReference`. Only
+  `updatedAt` and `lastWebhookAt` move. No count, amount or psp of the second
+  payment appears.
+- A full refund targets the first psp (`paymentPspReference` = first). A second
+  full refund fails with `422` `ValidationException` "Refund amount exceeds
+  original payment amount": `refundedTotal` caps refunds per reference at the
+  link amount. **The second payment cannot be refunded through the API.**
+
+**Declined, then paid: status and refund point at the declined try.** First
+try with the Adyen test card that is always refused (blocked, code 907), second
+try with a good card, both on the same page:
+
+- After the decline: `status: failed`, a `pspReference` (psp A) is already
+  assigned to the declined try, `webhookSuccess: false`, `refusalReason` set
+  (the 907 text). Its webhook is AUTHORISATION, `success: false`, psp A.
+  The webhook `data` has exactly 12 keys (reference, orderId, status, provider,
+  pspReference, paymentLinkId, paymentLinkUrl, amount, currency, environment,
+  eventCode, success) and **no `refusalReason`**. That key exists only on the
+  status endpoint.
+- After the good try: webhook AUTHORISATION, `success: true`, psp B. Status
+  reads `authorised`, `webhookSuccess: true`, `refusalReason: null`, but
+  **`pspReference` is still psp A**.
+- A full API refund was accepted as `refund_requested` with
+  `paymentPspReference` = psp A, the try that never took money. Status then
+  read `refund_requested` and `refundedTotal` = the full amount. Psp B can no
+  longer be refunded through the API. Nothing on the wire signals the miss.
+- No REFUND webhook arrived in about 19 minutes. That matches 2026-10-09, when
+  no REFUND event arrived either; see above.
+
+**Rules for code and docs:**
+
+- Persist `data.pspReference` from every `payment.authorised` webhook, per
+  payment, not per reference. Never use the status `pspReference` to identify
+  the payment that took money.
+- A second successful webhook psp on an already-paid reference is a double
+  payment. Refund it by hand (portal or Plorea). Never auto-refund it through
+  the API.
+- Before an API refund, check whether the reference ever had a declined
+  attempt before the paid one. If so, the refund targets the declined psp:
+  handle by hand.
+- Do not add a `pspReference` list, a payment count or a refund-by-psp option
+  to the SDK. The API offers none. Asked of Plorea on 2026-10-17, not
+  delivered: block a second payment on a paid link, make the status
+  `pspReference` the successful payment, let a refund name a `pspReference`.
+- Test notes: Adyen test CVC values (e.g. 123) do **not** decline on Plorea's
+  page, and the page has no cardholder-name field, so Adyen's holder-name
+  refusal trick is unavailable. The always-blocked test card works.
+
 ## No idempotency on duplicate references
 
 Creating twice gives two live, payable links. `firstOrCreate()` implements the

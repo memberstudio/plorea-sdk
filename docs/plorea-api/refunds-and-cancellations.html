@@ -140,8 +140,16 @@ await db.refunds.insert({ pspReference: refund.refundPspReference, ...refund });
       <dl class="fields">
         <dt>status</dt><dd>Always <code>refund_requested</code> on success. It means "accepted", not "pending and maybe doomed".</dd>
         <dt>refundPspReference</dt><dd>The provider's id for the refund. <strong>Store it now.</strong> It exists only on this response. Plorea and Adyen support ask for it. <span class="badge verified">Verified</span></dd>
-        <dt>paymentPspReference</dt><dd>The provider's id for the original payment. Same as <code>pspReference</code> on the status.</dd>
+        <dt>paymentPspReference</dt><dd>The provider's id for the original payment. Same as <code>pspReference</code> on the status. <span class="badge verified">Verified 2026-10-17</span> It is the status <code>pspReference</code>, which is not always the payment that took money. See <a href="#refund-target">below</a>.</dd>
       </dl>
+
+      <h3 id="refund-target">Which payment a refund targets</h3>
+      <p><span class="badge verified">Verified 2026-10-17 (test)</span> A refund targets the <code>pspReference</code> that the status shows, and <code>refundedTotal</code> caps refunds per reference at the payment amount. Two cases break this:</p>
+      <ul>
+        <li><strong>A second payment on a paid link.</strong> The status keeps the first PSP reference. A second full refund fails with <code>422</code> and "Refund amount exceeds original payment amount". The second payment cannot be refunded through the API.</li>
+        <li><strong>Declined, then paid.</strong> The status keeps the PSP reference of the declined try. The API accepts the refund for that PSP reference and counts the payment as refunded. The payment that took money can no longer be refunded through the API. Nothing signals the miss.</li>
+      </ul>
+      <p>Before an API refund, check whether the reference ever had a declined attempt or a second successful webhook PSP reference. If so, refund by hand in the Plorea portal. Compare <code>paymentPspReference</code> in the refund response with the PSP reference of the webhook that took money. Plorea was asked on 2026-10-17 to let a refund name a <code>pspReference</code>. Not delivered. See <a href="wishlist.html#paid-link-second-payment-and-refund-target">the wishlist</a>.</p>
 
       <h3>Partial refunds</h3>
       <p>Send an <code>amount</code> lower than the payment to refund part of it. The request accepts the field, and the response echoes it. A partial refund has not been taken through to settlement in test. <span class="badge open">Open question</span> Two more things are not documented:</p>

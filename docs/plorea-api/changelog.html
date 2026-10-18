@@ -29,6 +29,14 @@
 
       <h2 id="2026-10">October 2026</h2>
 
+      <h3 id="2026-10-17">2026-10-17</h3>
+      <ul>
+        <li><strong>A paid pay-by-link accepts a second payment.</strong> The link URL shows the form again after payment. A second payment was authorised, on two separate links. Each payment sent its own <code>payment.authorised</code> with the same <code>reference</code> and a different <code>pspReference</code>. <code>GET /payments/status</code> keeps the first. A refund targets the first payment, and a second full refund fails with <code>422</code>, so the second payment cannot be refunded through the API. <span class="badge verified">Verified</span> in test. Store <code>data.pspReference</code> from every webhook. See <a href="field-notes.html#second-payment-on-a-paid-link">Field notes</a>.</li>
+        <li><strong>Declined, then paid: the status and the refund point at the declined try.</strong> The status <code>pspReference</code> stays on the declined attempt after a good second try. An API refund was accepted for the declined PSP reference, and <code>refundedTotal</code> reached the full amount, so the payment that took money can no longer be refunded through the API. The decline webhook has 12 keys and no <code>refusalReason</code>. <span class="badge verified">Verified</span> in test. No <code>REFUND</code> webhook arrived in about 19 minutes. See <a href="field-notes.html#declined-then-paid">Field notes</a>.</li>
+        <li><strong>Asked of Plorea, not delivered:</strong> block a second payment on a paid link, make the status <code>pspReference</code> the payment that took money, and let a refund name a <code>pspReference</code>. See <a href="wishlist.html#paid-link-second-payment-and-refund-target">the wishlist</a>.</li>
+        <li><strong>Docs and SDK guidance:</strong> store <code>data.pspReference</code> per payment. Refund a double payment, or a payment that followed a declined try, by hand. No SDK code changed.</li>
+      </ul>
+
       <h3 id="2026-10-14">2026-10-14</h3>
       <ul>
         <li><strong>A moved <code>nextChargeAt</code> is explained.</strong> Before 2026-10-05, <code>PATCH</code> ignored <code>nextChargeAt</code> without an error. The scheduler also does not charge the same period twice: a date inside a paid period waits until the period ends. <span class="badge stated">Stated by Plorea</span> See <a href="wishlist.html#charge-after-resume">Charge after resume</a>.</li>
