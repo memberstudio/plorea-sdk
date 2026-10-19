@@ -20,7 +20,7 @@ final readonly class PaymentStatus
      * @param  ?string  $chargeId  Set on a subscription charge. Seen in test 2026-10-19.
      * @param  ?Amount  $refundedTotal  The total refunded so far. Seen on a subscription charge in test 2026-10-19.
      * @param  ?string  $refundStatus  For example `partially_refunded`. Seen in test 2026-10-19.
-     * @param  list<PaymentRefund>  $refunds  Each refund on the payment. A subscription charge reports its refunds here, not in the `lastRefund*` fields (test 2026-10-19).
+     * @param  list<PaymentRefund>  $refunds  Each refund on the payment. Empty when Plorea sends no `refunds` list. On a subscription charge in test 2026-10-19, refunds showed here and the `lastRefund*` fields were absent. An older manual-charge capture had `lastRefund*` and no list, so fall back to `lastRefund*` when this is empty.
      * @param  ?string  $cancelStatus  The state of the last cancel request, for example `cancel_requested`. Seen in test 2026-10-19.
      */
     public function __construct(
@@ -154,10 +154,15 @@ final readonly class PaymentStatus
 
     /**
      * Whether this status belongs to a subscription charge.
+     *
+     * Reads Plorea's `subscriptionId` and `chargeId`, first seen in test
+     * 2026-10-19. `platform` is not used: a caller can set it on any payment
+     * link. An older status without these fields returns false.
      */
     public function isSubscriptionCharge(): bool
     {
-        return $this->chargeId !== null || ($this->platform !== null && strcasecmp($this->platform, 'subscription') === 0);
+        return $this->subscriptionId !== null && $this->subscriptionId !== ''
+            && $this->chargeId !== null && $this->chargeId !== '';
     }
 
     /**

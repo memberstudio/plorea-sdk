@@ -69,8 +69,8 @@
         </table>
       </div>
       <div class="callout warning">
-        <p class="callout-title">No reason, no per-refund state</p>
-        <p>The payment has no decline reason and no status per refund. Only the <em>last</em> refund and the <em>last</em> cancel are visible. Plorea has stated that <code>refusalReason</code> is coming. Do not model it until you see it. <span class="badge stated">Stated by Plorea</span></p>
+        <p class="callout-title">No reason, and per-refund state only on some payments</p>
+        <p>The payment has no decline reason. On a payment link, only the <em>last</em> refund and the <em>last</em> cancel are visible, with no status per refund. A subscription charge in test on 2026-10-19 showed a <code>refunds</code> list instead, with a <code>status</code> and <code>refundPspReference</code> per refund. <span class="badge verified">Verified 2026-10-19 (test)</span> Plorea has stated that <code>refusalReason</code> is coming. Do not model it until you see it. <span class="badge stated">Stated by Plorea</span></p>
       </div>
       <pre data-title="Payment — refund requested"><code class="lang-json">{
   "reference": "order-1001",

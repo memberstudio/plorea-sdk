@@ -13,9 +13,11 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 - `PaymentStatus::$subscriptionId`, `$chargeId`, `$refundedTotal`,
   `$refundStatus`, `$refunds` (a list of the new `PaymentRefund`) and the
   `$cancelStatus`, `$cancelReference`, `$cancelPspReference` and
-  `$cancelRequestedAt` group. On a subscription charge the `lastRefund*`
-  fields are absent; read `$refunds` and `$refundedTotal`.
-- `PaymentStatus::isSubscriptionCharge()` and `isCancellationRefused()`.
+  `$cancelRequestedAt` group. On a subscription charge in test the
+  `lastRefund*` fields were absent. Read `$refunds` and `$refundedTotal` when
+  present, and fall back to `lastRefund*`.
+- `PaymentStatus::isSubscriptionCharge()` (true when Plorea sends both
+  `subscriptionId` and `chargeId`) and `isCancellationRefused()`.
 - `Refund::$subscriptionId`, `$chargeId`, `$refundedTotal`, `$refundStatus`
   and `PaymentCancellation::$subscriptionId`, `$chargeId`.
 

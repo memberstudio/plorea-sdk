@@ -220,7 +220,9 @@ in the meantime, so do not treat it as a failure.
 ### Keep the refund response — the PSP reference is only there
 
 `refund()` returns a `Refund` whose `$refundPspReference` identifies the refund
-at the provider. **That value never appears on `payments()->status()`.** The
+at the provider. **On a payment link, that value never appears on
+`payments()->status()`.** (A subscription charge's status lists it per refund in
+`$status->refunds`; see [below](#refunds-on-subscription-charges).) The
 status shape carries `lastRefundRequestPspReference`, which is a different
 identifier for a different thing: the *request*, not the resulting refund.
 
@@ -228,7 +230,7 @@ So if you throw the `Refund` away and expect to recover the PSP reference from
 a later status poll, you cannot — and it is the identifier Plorea and Adyen
 support will ask you for. Persist it at the moment of the refund.
 
-There is also **no per-refund status field anywhere**. Until settlement, the
+There is also **no per-refund status field** on a payment link. Until settlement, the
 only signal is the payment's own top-level `status` being `refund_requested`,
 plus the `lastRefund*` group. The top-level status flips there immediately
 (from `paid` / `authorised`) while `webhookEventCode` stays `AUTHORISATION` —
@@ -305,8 +307,9 @@ foreach ($status->refunds as $item) {   // list<PaymentRefund>
 
 - The refund settled 34 seconds after the request. Its entry in `refunds`
   turned `refunded`, with `settledAt` set.
-- The `lastRefund*` fields were absent on that status. Read `refunds` and
-  `refundedTotal` on a subscription charge.
+- The `lastRefund*` fields were absent on that status. An older capture of a
+  manual charge had `lastRefund*` and no `refunds` list. Read `refunds` and
+  `refundedTotal` when present, and fall back to `lastRefund*`.
 - No `payment.refunded` webhook arrived. Poll `status()`.
 - **Never cancel a charged subscription charge.** `cancel()` was not refused
   with `409`, as Plorea stated it would be. Adyen refused the cancel, and the

@@ -47,9 +47,12 @@ Size polling loops in hours. An hour-long timeout reports a healthy refund as
 failed, and an app that then reverses its books or tells the customer does real
 damage.
 
-There is **no per-refund status field**. Pre-settlement the only signal is the
-payment's top-level `status == refund_requested` plus the `lastRefund*` group.
-Post-settlement status and keys are **UNOBSERVED**.
+There is **no per-refund status field** on a payment-link status. Pre-settlement
+the only signal is the payment's top-level `status == refund_requested` plus the
+`lastRefund*` group. Post-settlement status and keys are **UNOBSERVED** there.
+Exception, VERIFIED 2026-10-19 (test): a subscription charge's status has a
+`refunds[]` list with a per-refund `status`, `settledAt` and
+`refundPspReference` (see below).
 
 **`refundPspReference` is response-only.** It exists on the
 `POST payments/refund` response and never on `payments/status`, whose
@@ -97,8 +100,9 @@ money stays captured. Keep the booking reversible, or mark it "requested".
 - `GET payments/status` resolved the same scheduled-charge reference, with
   `platform: subscription`, `reason: scheduled_charge`, `refundedTotal`,
   `refundStatus` and a `refunds[]` list. The `lastRefund*` fields were
-  **absent**, so read `PaymentStatus::$refunds` / `$refundedTotal`, not
-  `lastRefund*`, on a subscription charge.
+  **absent**. An older manual-charge capture had `lastRefund*` and no list.
+  So read `PaymentStatus::$refunds` / `$refundedTotal` when present, and fall
+  back to `lastRefund*`.
 - **No `payment.refunded` webhook arrived** for that refund. Poll `status()`.
 - `POST payments/cancel` on the already charged charge was **not** refused
   with `409`, contrary to what Plorea stated. It answered `cancel_requested`.
