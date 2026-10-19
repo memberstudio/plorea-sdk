@@ -712,6 +712,88 @@ class GoldenFixturesTest extends TestCase
         $this->assertNull($status->paymentLinkId);
     }
 
+    /**
+     * Captured in test 2026-10-19: a 1 NOK refund, then a cancel, on a paid
+     * scheduled subscription charge. Pins that the refund is reported in
+     * `refunds` / `refundedTotal` (the `lastRefund*` fields are absent), and
+     * that a cancel Adyen refused still turns the status to `cancelled`.
+     */
+    public function test_it_parses_a_real_refunded_subscription_charge_with_a_refused_cancel(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/status/*' => Http::response($this->fixture('payment-status-subscription-charge-refunded-cancel-refused')),
+        ]);
+
+        $status = Plorea::payments()->status('sub_test_golden-chg_test_golden_2');
+
+        $this->assertTrue($status->isSubscriptionCharge());
+        $this->assertSame('sub_test_golden', $status->subscriptionId);
+        $this->assertSame('chg_test_golden_2', $status->chargeId);
+        $this->assertSame(100, $status->refundedTotal?->value);
+        $this->assertSame('NOK', $status->refundedTotal->currency);
+        $this->assertSame('partially_refunded', $status->refundStatus);
+        $this->assertNull($status->lastRefundReference);
+        $this->assertNull($status->lastRefundAmount);
+
+        $this->assertCount(1, $status->refunds);
+        $refund = $status->refunds[0];
+        $this->assertTrue($refund->isRefunded());
+        $this->assertSame(100, $refund->amount?->value);
+        $this->assertSame('GOLDEN-CHG-REFUND-1', $refund->reference);
+        $this->assertSame('TESTREFUNDPSP002', $refund->refundPspReference);
+        $this->assertSame('api', $refund->source);
+        $this->assertSame('2026-10-19 11:11:40', $refund->settledAt?->format('Y-m-d H:i:s'));
+
+        // The money is still charged, but the status reads "cancelled".
+        $this->assertSame('cancelled', $status->status);
+        $this->assertFalse($status->isPaid());
+        $this->assertTrue($status->isCancellationRefused());
+        $this->assertSame('cancel_requested', $status->cancelStatus);
+        $this->assertSame('GOLDEN-CHG-CANCEL-1', $status->cancelReference);
+        $this->assertSame('TESTCANCELPSP002', $status->cancelPspReference);
+        $this->assertSame('2026-10-19 11:11:07', $status->cancelRequestedAt?->format('Y-m-d H:i:s'));
+        $this->assertNull($status->lastCancelReference);
+    }
+
+    /**
+     * Captured in test 2026-10-19: the refund response for a subscription
+     * charge carries the subscription and charge ids and the running total.
+     */
+    public function test_it_parses_a_real_subscription_charge_refund_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/refund' => Http::response($this->fixture('refund-created-subscription-charge')),
+        ]);
+
+        $refund = Plorea::payments()->refund('sub_test_golden-chg_test_golden_2', 'GOLDEN-CHG-REFUND-1', 100);
+
+        $this->assertSame('refund_requested', $refund->status);
+        $this->assertSame('sub_test_golden', $refund->subscriptionId);
+        $this->assertSame('chg_test_golden_2', $refund->chargeId);
+        $this->assertSame(100, $refund->amount?->value);
+        $this->assertSame(100, $refund->refundedTotal?->value);
+        $this->assertSame('partially_refunded', $refund->refundStatus);
+        $this->assertSame('TESTCHARGEPSP002', $refund->paymentPspReference);
+    }
+
+    /**
+     * Captured in test 2026-10-19: a cancel on a charged subscription charge
+     * is accepted (no 409). Adyen refused it later; see the status test above.
+     */
+    public function test_it_parses_a_real_subscription_charge_cancel_response(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/cancel' => Http::response($this->fixture('cancel-created-subscription-charge')),
+        ]);
+
+        $cancellation = Plorea::payments()->cancel('sub_test_golden-chg_test_golden_2', 'GOLDEN-CHG-CANCEL-1');
+
+        $this->assertSame('cancel_requested', $cancellation->status);
+        $this->assertSame('sub_test_golden', $cancellation->subscriptionId);
+        $this->assertSame('chg_test_golden_2', $cancellation->chargeId);
+        $this->assertSame('TESTCANCELPSP002', $cancellation->cancelPspReference);
+    }
+
     public function test_it_maps_a_real_not_active_payment_method_update_to_validation_error(): void
     {
         Http::fake([

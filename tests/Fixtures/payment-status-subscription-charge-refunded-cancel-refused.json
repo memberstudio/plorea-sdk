@@ -1,0 +1,63 @@
+{
+    "reference": "sub_test_golden-chg_test_golden_2",
+    "tenantId": "test-tenant",
+    "platform": "subscription",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_2",
+    "orderId": "GOLDEN-EXT-002",
+    "status": "cancelled",
+    "provider": "adyen",
+    "pspReference": "TESTCHARGEPSP002",
+    "amount": 165000,
+    "currency": "NOK",
+    "environment": "test",
+    "merchantAccount": null,
+    "store": null,
+    "splitsEnabled": false,
+    "splits": null,
+    "merchantOrgNr": "000000000",
+    "reason": "scheduled_charge",
+    "retryNumber": 0,
+    "failureReason": null,
+    "createdAt": "2026-10-10T19:20:49.532Z",
+    "updatedAt": "2026-10-19T11:11:40.793Z",
+    "webhookEventCode": "CANCELLATION",
+    "webhookSuccess": false,
+    "lastWebhookAt": "2026-10-19T11:11:40.793Z",
+    "refundedTotal": 100,
+    "refundStatus": "partially_refunded",
+    "refunds": [
+        {
+            "amount": 100,
+            "currency": "NOK",
+            "reason": "Customer requested refund",
+            "refundPspReference": "TESTREFUNDPSP002",
+            "refundReference": "GOLDEN-CHG-REFUND-1",
+            "requestedAt": "2026-10-19T11:11:06.623Z",
+            "settledAt": "2026-10-19T11:11:40.333Z",
+            "source": "api",
+            "splits": [
+                {
+                    "account": "BA_TEST_BALANCE_ACCOUNT",
+                    "amount": {
+                        "currency": "NOK",
+                        "value": 99
+                    },
+                    "type": "Default"
+                },
+                {
+                    "amount": {
+                        "currency": "NOK",
+                        "value": 1
+                    },
+                    "type": "Commission"
+                }
+            ],
+            "status": "refunded"
+        }
+    ],
+    "cancelStatus": "cancel_requested",
+    "cancelReference": "GOLDEN-CHG-CANCEL-1",
+    "cancelPspReference": "TESTCANCELPSP002",
+    "cancelRequestedAt": "2026-10-19T11:11:07.502Z"
+}

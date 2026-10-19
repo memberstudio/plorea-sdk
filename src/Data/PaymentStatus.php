@@ -16,6 +16,12 @@ final readonly class PaymentStatus
 
     /**
      * @param  array<string, mixed>  $raw
+     * @param  ?string  $subscriptionId  Set on a subscription charge. Seen in test 2026-10-19.
+     * @param  ?string  $chargeId  Set on a subscription charge. Seen in test 2026-10-19.
+     * @param  ?Amount  $refundedTotal  The total refunded so far. Seen on a subscription charge in test 2026-10-19.
+     * @param  ?string  $refundStatus  For example `partially_refunded`. Seen in test 2026-10-19.
+     * @param  list<PaymentRefund>  $refunds  Each refund on the payment. A subscription charge reports its refunds here, not in the `lastRefund*` fields (test 2026-10-19).
+     * @param  ?string  $cancelStatus  The state of the last cancel request, for example `cancel_requested`. Seen in test 2026-10-19.
      */
     public function __construct(
         public string $reference,
@@ -50,6 +56,15 @@ final readonly class PaymentStatus
         public ?string $lastCancelRequestPspReference,
         public ?CarbonImmutable $lastCancelRequestedAt,
         public array $raw = [],
+        public ?string $subscriptionId = null,
+        public ?string $chargeId = null,
+        public ?Amount $refundedTotal = null,
+        public ?string $refundStatus = null,
+        public array $refunds = [],
+        public ?string $cancelStatus = null,
+        public ?string $cancelReference = null,
+        public ?string $cancelPspReference = null,
+        public ?CarbonImmutable $cancelRequestedAt = null,
     ) {}
 
     /**
@@ -58,6 +73,9 @@ final readonly class PaymentStatus
     public static function fromArray(array $data): self
     {
         $value = self::int($data['amount'] ?? null);
+        $currency = self::string($data['currency'] ?? null) ?? 'NOK';
+        $refundedTotal = self::int($data['refundedTotal'] ?? null);
+        $refunds = is_array($data['refunds'] ?? null) ? $data['refunds'] : [];
 
         return new self(
             reference: self::string($data['reference'] ?? null) ?? '',
@@ -70,7 +88,7 @@ final readonly class PaymentStatus
             pspReference: self::string($data['pspReference'] ?? null),
             paymentLinkId: self::string($data['paymentLinkId'] ?? null),
             paymentLinkUrl: self::string($data['paymentLinkUrl'] ?? null),
-            amount: $value === null ? null : new Amount($value, self::string($data['currency'] ?? null) ?? 'NOK'),
+            amount: $value === null ? null : new Amount($value, $currency),
             environment: self::string($data['environment'] ?? null),
             merchantAccount: self::string($data['merchantAccount'] ?? null),
             balanceAccountId: self::string($data['balanceAccountId'] ?? null),
@@ -90,6 +108,18 @@ final readonly class PaymentStatus
             lastCancelRequestPspReference: self::string($data['lastCancelRequestPspReference'] ?? null),
             lastCancelRequestedAt: self::date($data['lastCancelRequestedAt'] ?? null),
             raw: $data,
+            subscriptionId: self::string($data['subscriptionId'] ?? null),
+            chargeId: self::string($data['chargeId'] ?? null),
+            refundedTotal: $refundedTotal === null ? null : new Amount($refundedTotal, $currency),
+            refundStatus: self::string($data['refundStatus'] ?? null),
+            refunds: array_values(array_map(
+                PaymentRefund::fromArray(...),
+                array_filter($refunds, is_array(...)),
+            )),
+            cancelStatus: self::string($data['cancelStatus'] ?? null),
+            cancelReference: self::string($data['cancelReference'] ?? null),
+            cancelPspReference: self::string($data['cancelPspReference'] ?? null),
+            cancelRequestedAt: self::date($data['cancelRequestedAt'] ?? null),
         );
     }
 
@@ -120,6 +150,30 @@ final readonly class PaymentStatus
     public function isPaid(): bool
     {
         return $this->is('authorised') || $this->is('paid');
+    }
+
+    /**
+     * Whether this status belongs to a subscription charge.
+     */
+    public function isSubscriptionCharge(): bool
+    {
+        return $this->chargeId !== null || ($this->platform !== null && strcasecmp($this->platform, 'subscription') === 0);
+    }
+
+    /**
+     * Whether Adyen refused the last cancel request.
+     *
+     * Observed in test 2026-10-19 on a charged subscription charge: Plorea
+     * accepted the cancel, Adyen refused it (`CANCELLATION` with
+     * `webhookSuccess: false`), and the status still became `cancelled`.
+     * The money stayed charged. Do not read `cancelled` as "not paid" while
+     * this returns true.
+     */
+    public function isCancellationRefused(): bool
+    {
+        return $this->webhookEventCode !== null
+            && strcasecmp($this->webhookEventCode, 'CANCELLATION') === 0
+            && $this->webhookSuccess === false;
     }
 
     /**

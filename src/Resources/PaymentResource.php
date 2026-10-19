@@ -62,6 +62,10 @@ class PaymentResource extends Resource
      * means accepted: settlement is asynchronous and its final shape is
      * unobserved, so do not book the refund as final on this response.
      *
+     * A subscription charge refunds under its `{subscriptionId}-{chargeId}`
+     * reference (verified 2026-10-19, test). Its status reports the refund in
+     * `refunds` and `refundedTotal`, not in the `lastRefund*` fields.
+     *
      * @param  string  $modificationReference  Your unique reference for this refund attempt.
      * @param  Amount|int|null  $amount  Refund amount in minor units. Refunds the full payment amount when omitted.
      */
@@ -81,6 +85,11 @@ class PaymentResource extends Resource
 
     /**
      * Request cancellation of an existing payment.
+     *
+     * Never cancel a charged subscription charge. In test on 2026-10-19 the
+     * cancel was accepted, Adyen refused it, and the status still became
+     * `cancelled` while the money stayed charged. Refund it instead. See
+     * PaymentStatus::isCancellationRefused().
      *
      * @param  string  $modificationReference  Your unique reference for this cancellation attempt.
      */

@@ -173,6 +173,12 @@ Reported to Plorea 2026-09-04. `payments/status/{subId}-{chgId}` fails for
 **scheduler-created** charges — 403 "Tenant mismatch" on 2026-09-04, 404
 "Payment not found" on retest 2026-09-09. Manual charges resolve fine.
 
+**Update, VERIFIED 2026-10-19 (test, one charge):** a scheduler-created
+reference (`reason: scheduled_charge`, charged 2026-10-10) now resolves, with
+`platform: subscription`, `subscriptionId`, `chargeId`, `refundedTotal`,
+`refundStatus` and `refunds[]`. One charge in test is not a contract, and
+production is unobserved. Keep `charges()` as the source for dunning.
+
 Read scheduled outcomes from `charges()`. **Dunning must poll that, never
 `payments()->status()`.**
 

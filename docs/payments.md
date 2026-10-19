@@ -281,6 +281,42 @@ Details: [api-behaviour.md](api-behaviour.md).
 
 `modificationReference` is your idempotency key for the modification itself.
 
+### Refunds on subscription charges
+
+Verified 2026-10-19 (test, one scheduled charge). A subscription charge refunds
+like any payment, on its `{subscriptionId}-{chargeId}` reference:
+
+```php
+$reference = "{$charge->subscriptionId}-{$charge->id}";
+
+$refund = Plorea::payments()->refund($reference, 'FIN-2026-00123-refund-1', Amount::nok(10000));
+$refund->chargeId;        // the charge the refund belongs to
+$refund->refundedTotal;   // Amount, the total refunded on this charge so far
+
+$status = Plorea::payments()->status($reference);
+$status->isSubscriptionCharge();   // true
+$status->refundedTotal;            // Amount
+$status->refundStatus;             // 'partially_refunded', …
+foreach ($status->refunds as $item) {   // list<PaymentRefund>
+    $item->reference;      // your modificationReference
+    $item->isRefunded();   // settled at Adyen; $item->settledAt
+}
+```
+
+- The refund settled 34 seconds after the request. Its entry in `refunds`
+  turned `refunded`, with `settledAt` set.
+- The `lastRefund*` fields were absent on that status. Read `refunds` and
+  `refundedTotal` on a subscription charge.
+- No `payment.refunded` webhook arrived. Poll `status()`.
+- **Never cancel a charged subscription charge.** `cancel()` was not refused
+  with `409`, as Plorea stated it would be. Adyen refused the cancel, and the
+  status and the `charges()` item still turned `cancelled` while the money
+  stayed charged. `$status->isCancellationRefused()` detects this state.
+- In production on 2026-10-11, a refund on one scheduled charge answered
+  "Payment not found". Production has not been retested. If a refund is
+  refused, refund in the Plorea portal and record that refund in your own
+  system against the charge.
+
 ## The pay page
 
 ```php

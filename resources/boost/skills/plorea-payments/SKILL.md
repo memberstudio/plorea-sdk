@@ -162,7 +162,19 @@ on `$subscription->lastPaymentReference`, resolvable via
 scheduler-created reference does not resolve: 403 "Tenant mismatch" on
 2026-09-04, 404 "Payment not found" when retested 2026-09-09 against a fresh
 authorised charge. Always read scheduled outcomes from `charges()`; dunning
-must poll that, never `payments()->status()`.
+must poll that, never `payments()->status()`. Since 2026-10-19 (test, one
+charge) a scheduler reference resolves too; production is unobserved.
+
+**Subscription charges (verified 2026-10-19, test, one scheduled charge).**
+`refund()` on `{subscriptionId}-{chargeId}` works: accepted, settled in 34 s.
+On that status, read `$status->refunds` (a list of `PaymentRefund`) and
+`$status->refundedTotal`; the `lastRefund*` fields are absent. No
+`payment.refunded` webhook arrived, so poll `status()`. **Never `cancel()` a
+charged subscription charge**: it was not refused with `409`, Adyen refused the
+cancel, and the charge still turned `cancelled` while the money stayed
+charged. `$status->isCancellationRefused()` detects that. In production on
+2026-10-11 a refund on one scheduled charge answered "Payment not found"; if
+that happens, refund in the Plorea portal and record it locally.
 
 ### Dunning
 

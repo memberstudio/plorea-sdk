@@ -43,7 +43,7 @@
             <tr><td>11</td><td><a href="#interval-change">Interval change</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>12</td><td><a href="#proration">Proration</a></td><td>Subscriptions</td><td>Low</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>13</td><td><a href="#card-setup-webhooks-and-failure-reason">Card setup webhooks and failure reason</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>14</td><td><a href="#scheduled-charges-on-the-status-endpoint">Scheduled charges on the status endpoint</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge open">Reported</span></td></tr>
+            <tr><td>14</td><td><a href="#scheduled-charges-on-the-status-endpoint">Scheduled charges on the status endpoint</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge verified">Seen in test 2026-10-19</span></td></tr>
             <tr><td>15</td><td><a href="#pagination">Pagination</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">Partly delivered 2026-09-22</span></td></tr>
             <tr><td>17</td><td><a href="#machine-readable-error-codes">Machine-readable error codes</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
@@ -184,6 +184,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Problem.</strong> The reference of a scheduled charge returns <code>403</code> or <code>404</code> on <code>GET /payments/status</code>. A manual charge reference works.</p>
       <p><strong>Impact.</strong> Integrators need two code paths to read a charge. A refund of a scheduled charge failed through the API in production. It needs the portal.</p>
       <p><strong>Proposal.</strong> Resolve every charge reference on the status endpoint, with <code>platform: "subscription"</code>, as manual charges already do.</p>
+      <p><span class="badge verified">Seen in test 2026-10-19</span> One scheduled charge reference resolved on the status endpoint, with <code>platform: "subscription"</code>. A refund on it worked through the API. Production is unobserved. A cancel on the charged charge was refused by Adyen, yet read <code>cancelled</code>. See <a href="field-notes.html#subscription-charge-refund">Field notes</a>.</p>
 
       <h3 id="charge-after-resume">19. Charge after resume</h3>
       <p><span class="badge open">Reported to Plorea 2026-10-01</span></p>

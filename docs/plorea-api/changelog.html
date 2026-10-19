@@ -29,6 +29,14 @@
 
       <h2 id="2026-10">October 2026</h2>
 
+      <h3 id="2026-10-19">2026-10-19</h3>
+      <ul>
+        <li><strong>A scheduled subscription charge refunds through the API.</strong> <code>POST /payments/refund</code> on <code>{subscriptionId}-{chargeId}</code> answered <code>refund_requested</code> and settled 34 seconds later. <code>GET /payments/status</code> resolved the reference and showed <code>subscriptionId</code>, <code>chargeId</code>, <code>refundedTotal</code>, <code>refundStatus</code> and a <code>refunds</code> list. The <code>lastRefund*</code> fields were absent. <span class="badge verified">Verified</span> in test, one charge. See <a href="field-notes.html#subscription-charge-refund">Field notes</a>.</li>
+        <li><strong>A refused cancel reads <code>cancelled</code>.</strong> A cancel on the charged charge answered <code>cancel_requested</code>, not <code>409</code>. Adyen refused it, but the status and the charge still turned <code>cancelled</code>. The money stayed charged. <span class="badge verified">Verified</span> in test. Never cancel a charged subscription charge.</li>
+        <li><strong>No <code>payment.refunded</code> webhook</strong> arrived for the subscription-charge refund. <span class="badge verified">Verified</span> in test. Reported to Plorea.</li>
+        <li><strong>SDK:</strong> <code>PaymentStatus</code> maps <code>subscriptionId</code>, <code>chargeId</code>, <code>refundedTotal</code>, <code>refundStatus</code>, <code>refunds</code> and the <code>cancel*</code> group, and adds <code>isSubscriptionCharge()</code> and <code>isCancellationRefused()</code>.</li>
+      </ul>
+
       <h3 id="2026-10-17">2026-10-17</h3>
       <ul>
         <li><strong>A paid pay-by-link accepts a second payment.</strong> The link URL shows the form again after payment. A second payment was authorised, on two separate links. Each payment sent its own <code>payment.authorised</code> with the same <code>reference</code> and a different <code>pspReference</code>. <code>GET /payments/status</code> keeps the first. A refund targets the first payment, and a second full refund fails with <code>422</code>, so the second payment cannot be refunded through the API. <span class="badge verified">Verified</span> in test. Store <code>data.pspReference</code> from every webhook. See <a href="field-notes.html#second-payment-on-a-paid-link">Field notes</a>.</li>

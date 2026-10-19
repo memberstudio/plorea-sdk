@@ -338,6 +338,11 @@ $status = Plorea::payments()->status($subscription->lastPaymentReference);
 > scheduler charge — twice, 25 minutes apart, with the reference taken verbatim
 > from the charge's own `reference` field.
 >
+> **Update, 2026-10-19 (test, one charge):** a scheduler-created reference now
+> resolves, with `platform: subscription`, `subscriptionId`, `chargeId` and the
+> refund fields. Production is unobserved. Keep `charges()` as the source for
+> dunning. See [payments.md](payments.md#refunds-on-subscription-charges).
+>
 > Read scheduled outcomes from `charges()`. Whether the lookup *should* resolve
 > is an open question with Plorea.
 

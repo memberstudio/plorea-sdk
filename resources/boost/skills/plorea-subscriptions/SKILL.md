@@ -102,7 +102,12 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
 - The webhook is a ping. Re-fetch, and book idempotently on the charge
   reference: the webhook and the reconciliation job can both see the same charge.
 - Read scheduled charges from `charges()`. A scheduler-created
-  `{subId}-{chgId}` reference does not resolve through `payments()->status()`.
+  `{subId}-{chgId}` reference did not resolve through `payments()->status()`
+  until 2026-10-19 (now seen resolving for one test charge).
+- Refund a subscription charge with `payments()->refund()` on its
+  `{subId}-{chgId}` reference (verified 2026-10-19, test). Never `cancel()` a
+  charged one: the cancel was refused by Adyen, but the charge still read
+  `cancelled` while the money stayed charged.
 - A **manual** `charge()` raised `PaymentStatusUpdated` in captures before
   2026-10-14, and its reference resolves through `payments()->status()`.
   Whether `payment.authorised` still comes is unobserved. Since 2026-10-14,
