@@ -59,6 +59,18 @@
       </div>
       <p><span class="badge verified">Verified 2026-09-09</span> There is no status per refund. Three captures of a refund-requested payment returned identical 29-key bodies. <code>refundPspReference</code> exists only on the refund response. Store it.</p>
       <p><span class="badge verified">Verified 2026-09-19</span> A refund and a cancel were both still pending after more than 24 hours. <span class="badge stated">Stated 2026-09-21</span> Plorea states this is expected, and that the final statuses are <code>refunded</code> and <code>cancelled</code>. Book on the request. Do not wait for the final status.</p>
+      <h3 id="subscription-charge-refund">A subscription charge refunds, and a refused cancel reads <code>cancelled</code></h3>
+      <p><span class="badge verified">Verified 2026-10-19 (test)</span> One scheduled charge, charged nine days earlier:</p>
+      <ul>
+        <li><code>GET /payments/status/{subscriptionId}-{chargeId}</code> resolved. It has <code>platform: "subscription"</code>, <code>subscriptionId</code>, <code>chargeId</code>, <code>refundedTotal</code>, <code>refundStatus</code>, a <code>refunds</code> list and a <code>cancel*</code> group. The <code>lastRefund*</code> and <code>lastCancel*</code> fields are absent.</li>
+        <li>A partial refund through <code>POST /payments/refund</code> answered <code>refund_requested</code>. Its entry in <code>refunds</code> turned <code>refunded</code>, with <code>settledAt</code> 34 seconds after <code>requestedAt</code>.</li>
+        <li><code>POST /payments/cancel</code> answered <code>cancel_requested</code>, not <code>409</code>. Adyen refused the cancel: <code>webhookEventCode: "CANCELLATION"</code> with <code>webhookSuccess: false</code>. The status and the charge in <code>GET /subscriptions/{id}/charges</code> still turned <code>cancelled</code>. The money stayed charged.</li>
+        <li>No <code>payment.refunded</code> webhook arrived for the refund.</li>
+      </ul>
+      <div class="callout warning">
+        <p class="callout-title">Never cancel a charged subscription charge</p>
+        <p>Refund it. A refused cancel makes the charge read <code>cancelled</code> while the customer is still charged. Detect that state from <code>webhookEventCode: "CANCELLATION"</code> with <code>webhookSuccess: false</code>. Poll the status for refunds; do not wait for a webhook. Reported to Plorea 2026-10-19.</p>
+      </div>
       <p><span class="badge verified">Verified 2026-10-11</span> One scheduled subscription charge could not be refunded or cancelled through the API. In production, <code>POST /payments/refund</code> answered <code>{"error":"Payment not found"}</code> for a scheduled charge, both with its <code>{subscriptionId}-{chargeId}</code> reference and with its <code>pspReference</code>. <code>POST /payments/cancel</code> on the same charge, while it was still <code>authorised</code>, also failed. The status endpoint fails the same way for that reference. The first charge of a new subscription is also a scheduled charge: <code>GET /subscriptions/{id}/charges</code> reports <code>"reason": "scheduled_charge"</code> for it. Refund it in the Plorea portal. Then record the refund in your own system against the original charge, so no other path refunds it again. <span class="badge open">Open question</span> Whether every scheduled charge behaves this way, and whether Plorea plans an API path. A refund of a manual charge is untested.</p>
 
       <h3 id="second-payment-on-a-paid-link">A paid link accepts a second payment</h3>
@@ -221,7 +233,7 @@
       <h3>Reactivate no longer double-bills</h3>
       <p><span class="badge verified">Verified 2026-09-09</span> Reactivate used to charge at once, billing a period the customer had already paid. Plorea fixed it. Now a cancel and reactivate leaves the charge count unchanged and sets <code>nextChargeAt</code> to one interval after the last charge. Reactivating an active subscription returns <code>400</code> "Only canceled subscriptions can be reactivated". Production is unobserved.</p>
       <h3>Scheduled charge references do not resolve as payments</h3>
-      <p><span class="badge open">Open question</span> <code>GET /payments/status/{subId}-{chgId}</code> for a scheduled charge returned <code>403 Tenant mismatch</code> on 2026-09-04 and <code>404</code> on 2026-09-09. Manual charge references resolve normally. Read scheduled outcomes from <code>GET /subscriptions/{id}/charges</code>. Reported to Plorea.</p>
+      <p><span class="badge open">Open question</span> <code>GET /payments/status/{subId}-{chgId}</code> for a scheduled charge returned <code>403 Tenant mismatch</code> on 2026-09-04 and <code>404</code> on 2026-09-09. Manual charge references resolve normally. Read scheduled outcomes from <code>GET /subscriptions/{id}/charges</code>. Reported to Plorea. <span class="badge verified">Verified 2026-10-19 (test)</span> One scheduled charge reference now resolves, with <code>platform: "subscription"</code>. Production is unobserved. See <a href="#subscription-charge-refund">above</a>.</p>
       <h3>No pagination seen</h3>
       <p><span class="badge open">Open question</span> Probed 2026-09-10. <code>GET /subscriptions</code> returns <code>{count, items}</code> plus the filter echo. <code>GET …/charges</code> returns <code>{subscriptionId, items}</code>. Neither has a cursor or page field. With only three items available, "all results" and "first page" look the same.</p>
 

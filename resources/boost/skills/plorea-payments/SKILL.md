@@ -62,9 +62,9 @@ Plorea::payments()->refund('FIN-2026-00123', modificationReference: 'FIN-2026-00
 Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
 
-Both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook. **Settlement takes hours** (>11h observed 2026-09-09), so size polling loops in hours: an hour-long timeout reports a healthy refund as failed, and reversing your books or telling the customer on that basis does real damage. `refund_requested` means accepted. There is no per-refund status field — pre-settlement the only signal is top-level `status` plus the `lastRefund*` group, and `webhookEventCode` stays `AUTHORISATION` because it describes the original authorisation.
+Both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook. **Settlement takes hours** (>11h observed 2026-09-09), so size polling loops in hours: an hour-long timeout reports a healthy refund as failed, and reversing your books or telling the customer on that basis does real damage. `refund_requested` means accepted. On a payment link there is no per-refund status field (a subscription charge has one in `$status->refunds`, see below) — pre-settlement the only signal is top-level `status` plus the `lastRefund*` group, and `webhookEventCode` stays `AUTHORISATION` because it describes the original authorisation.
 
-**Persist the `Refund` DTO.** `refundPspReference` exists only on the refund response and never on `payments/status`, whose `lastRefundRequestPspReference` identifies the *request* rather than the refund. No later poll can recover it, and it is the identifier provider support asks for.
+**Persist the `Refund` DTO.** On a payment link, `refundPspReference` exists only on the refund response and never on `payments/status`, whose `lastRefundRequestPspReference` identifies the *request* rather than the refund. No later poll can recover it, and it is the identifier provider support asks for.
 
 **Two payments on one reference (verified 2026-10-17, test).** A paid pay-by-link accepts a second payment and sends a second `payment.authorised` with the same `reference` and a different `data.pspReference`; `status()->pspReference` keeps the first. After a declined try then a paid one, `status()->pspReference` stays on the declined try, and an API refund targets it: accepted, counted as refunded, money not returned, and the paying psp can no longer be refunded through the API. So: store `data.pspReference` from every `payment.authorised` webhook per payment; treat a second successful psp on a paid reference as a double payment and refund it by hand in the Plorea portal; before an API refund, check whether the reference ever had a declined attempt, and refund by hand if so. The decline webhook carries no `refusalReason`; only `status()` does.
 
@@ -162,7 +162,19 @@ on `$subscription->lastPaymentReference`, resolvable via
 scheduler-created reference does not resolve: 403 "Tenant mismatch" on
 2026-09-04, 404 "Payment not found" when retested 2026-09-09 against a fresh
 authorised charge. Always read scheduled outcomes from `charges()`; dunning
-must poll that, never `payments()->status()`.
+must poll that, never `payments()->status()`. Since 2026-10-19 (test, one
+charge) a scheduler reference resolves too; production is unobserved.
+
+**Subscription charges (verified 2026-10-19, test, one scheduled charge).**
+`refund()` on `{subscriptionId}-{chargeId}` works: accepted, settled in 34 s.
+On that status, read `$status->refunds` (a list of `PaymentRefund`) and
+`$status->refundedTotal`; the `lastRefund*` fields were absent (an older manual-charge capture had only `lastRefund*`, so fall back to them). No
+`payment.refunded` webhook arrived, so poll `status()`. **Never `cancel()` a
+charged subscription charge**: it was not refused with `409`, Adyen refused the
+cancel, and the charge still turned `cancelled` while the money stayed
+charged. `$status->isCancellationRefused()` detects that. In production on
+2026-10-11 a refund on one scheduled charge answered "Payment not found"; if
+that happens, refund in the Plorea portal and record it locally.
 
 ### Dunning
 

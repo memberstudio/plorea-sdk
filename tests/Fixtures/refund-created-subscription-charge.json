@@ -1,0 +1,33 @@
+{
+    "status": "refund_requested",
+    "reference": "sub_test_golden-chg_test_golden_2",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_2",
+    "modificationReference": "GOLDEN-CHG-REFUND-1",
+    "refundPspReference": "TESTREFUNDPSP002",
+    "paymentPspReference": "TESTCHARGEPSP002",
+    "amount": 100,
+    "currency": "NOK",
+    "refundedTotal": 100,
+    "refundStatus": "partially_refunded",
+    "splits": [
+        {
+            "account": "BA_TEST_BALANCE_ACCOUNT",
+            "amount": {
+                "value": 99,
+                "currency": "NOK"
+            },
+            "type": "Default"
+        },
+        {
+            "amount": {
+                "value": 1,
+                "currency": "NOK"
+            },
+            "type": "Commission"
+        }
+    ],
+    "splitsSource": "rebuilt",
+    "adyenStatus": "received",
+    "environment": "test"
+}

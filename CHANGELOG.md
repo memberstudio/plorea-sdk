@@ -2,6 +2,36 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Subscription-charge refunds. Verified on one scheduled charge in test on
+  2026-10-19: `payments()->refund()` on a `{subscriptionId}-{chargeId}`
+  reference is accepted and settles, and `payments()->status()` resolves the
+  reference.
+- `PaymentStatus::$subscriptionId`, `$chargeId`, `$refundedTotal`,
+  `$refundStatus`, `$refunds` (a list of the new `PaymentRefund`) and the
+  `$cancelStatus`, `$cancelReference`, `$cancelPspReference` and
+  `$cancelRequestedAt` group. On a subscription charge in test the
+  `lastRefund*` fields were absent. Read `$refunds` and `$refundedTotal` when
+  present, and fall back to `lastRefund*`.
+- `PaymentStatus::isSubscriptionCharge()` (true when Plorea sends both
+  `subscriptionId` and `chargeId`) and `isCancellationRefused()`.
+- `Refund::$subscriptionId`, `$chargeId`, `$refundedTotal`, `$refundStatus`
+  and `PaymentCancellation::$subscriptionId`, `$chargeId`.
+
+### Plorea API behaviour (2026-10-19, test)
+
+- A cancel on a charged subscription charge is not refused with `409`. Adyen
+  refuses it, but the charge still reads `cancelled` and the money stays
+  charged. Never cancel a charged subscription charge; refund it.
+- No `payment.refunded` webhook arrived for a subscription-charge refund.
+  Poll `status()`.
+- Reported to Plorea. In production, a refund on one scheduled charge
+  answered "Payment not found" on 2026-10-11. Production has not been
+  retested.
+
 ## v0.5.0 - 2026-10-14
 
 ### Added

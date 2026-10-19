@@ -15,6 +15,10 @@ final readonly class Refund
 
     /**
      * @param  array<string, mixed>  $raw
+     * @param  ?string  $subscriptionId  Set when the refund is for a subscription charge. Seen in test 2026-10-19.
+     * @param  ?string  $chargeId  Set when the refund is for a subscription charge. Seen in test 2026-10-19.
+     * @param  ?Amount  $refundedTotal  The total refunded on the payment, this refund included. Seen on a subscription charge in test 2026-10-19.
+     * @param  ?string  $refundStatus  For example `partially_refunded`. Seen on a subscription charge in test 2026-10-19.
      */
     public function __construct(
         public ?string $status,
@@ -25,6 +29,10 @@ final readonly class Refund
         public ?Amount $amount,
         public ?string $environment,
         public array $raw = [],
+        public ?string $subscriptionId = null,
+        public ?string $chargeId = null,
+        public ?Amount $refundedTotal = null,
+        public ?string $refundStatus = null,
     ) {}
 
     /**
@@ -33,6 +41,8 @@ final readonly class Refund
     public static function fromArray(array $data): self
     {
         $value = self::int($data['amount'] ?? null);
+        $currency = self::string($data['currency'] ?? null) ?? 'NOK';
+        $refundedTotal = self::int($data['refundedTotal'] ?? null);
 
         return new self(
             status: self::string($data['status'] ?? null),
@@ -40,9 +50,13 @@ final readonly class Refund
             modificationReference: self::string($data['modificationReference'] ?? null),
             refundPspReference: self::string($data['refundPspReference'] ?? null),
             paymentPspReference: self::string($data['paymentPspReference'] ?? null),
-            amount: $value === null ? null : new Amount($value, self::string($data['currency'] ?? null) ?? 'NOK'),
+            amount: $value === null ? null : new Amount($value, $currency),
             environment: self::string($data['environment'] ?? null),
             raw: $data,
+            subscriptionId: self::string($data['subscriptionId'] ?? null),
+            chargeId: self::string($data['chargeId'] ?? null),
+            refundedTotal: $refundedTotal === null ? null : new Amount($refundedTotal, $currency),
+            refundStatus: self::string($data['refundStatus'] ?? null),
         );
     }
 }

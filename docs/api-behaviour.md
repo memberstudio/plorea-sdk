@@ -121,6 +121,31 @@ Settlement is still unobserved. A refund Adyen later fails would leave an app
 that booked it at `refund_requested` showing "refunded" while the money stays
 captured. Book a refund as requested, and keep the booking reversible.
 
+### ✅ A scheduled subscription charge refunds through the API; a cancel is refused but reads `cancelled` — 2026-10-19 (test)
+
+One scheduled charge (`reason: "scheduled_charge"`, already charged) in test:
+
+- `GET payments/status/{subscriptionId}-{chargeId}` resolved. It added
+  `subscriptionId`, `chargeId`, `refundedTotal`, `refundStatus`, a `refunds[]`
+  list and a `cancel*` group. The `lastRefund*` and `lastCancel*` fields were
+  absent.
+- `POST payments/refund` of 1 kr answered `refund_requested`, with
+  `subscriptionId`, `chargeId`, `refundedTotal` and `refundStatus`. The
+  `refunds[]` entry turned `refunded` with `settledAt` 34 seconds later.
+- `POST payments/cancel` answered `cancel_requested`, not `409`. Adyen refused
+  the cancel (`webhookEventCode: "CANCELLATION"`, `webhookSuccess: false`).
+  The top-level `status` and the `charges()` item still turned `cancelled`,
+  and the money stayed charged.
+- No `payment.refunded` webhook arrived for the refund.
+
+Fixtures: `payment-status-subscription-charge-refunded-cancel-refused.json`,
+`refund-created-subscription-charge.json`,
+`cancel-created-subscription-charge.json`. Reported to Plorea 2026-10-19.
+
+**❓ Open:** whether production behaves the same (see the next entry), whether
+a refund settles to a `payment.refunded` webhook, and why a refused cancel
+reads `cancelled`.
+
 ### ✅ One scheduled subscription charge could not be refunded through the API — 2026-10-11
 
 In production, `POST payments/refund` answered `{"error":"Payment not found"}`

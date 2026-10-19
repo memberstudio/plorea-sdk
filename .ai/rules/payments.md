@@ -47,9 +47,12 @@ Size polling loops in hours. An hour-long timeout reports a healthy refund as
 failed, and an app that then reverses its books or tells the customer does real
 damage.
 
-There is **no per-refund status field**. Pre-settlement the only signal is the
-payment's top-level `status == refund_requested` plus the `lastRefund*` group.
-Post-settlement status and keys are **UNOBSERVED**.
+There is **no per-refund status field** on a payment-link status. Pre-settlement
+the only signal is the payment's top-level `status == refund_requested` plus the
+`lastRefund*` group. Post-settlement status and keys are **UNOBSERVED** there.
+Exception, VERIFIED 2026-10-19 (test): a subscription charge's status has a
+`refunds[]` list with a per-refund `status`, `settledAt` and
+`refundPspReference` (see below).
 
 **`refundPspReference` is response-only.** It exists on the
 `POST payments/refund` response and never on `payments/status`, whose
@@ -89,14 +92,30 @@ accepted, nothing more. A consuming app that books the refund as final at
 that point will show "refunded" even if Adyen later fails the refund and the
 money stays captured. Keep the booking reversible, or mark it "requested".
 
-**A scheduled subscription charge could not be refunded through the API**
-(production, 2026-10-11, one charge tested): `POST payments/refund` with a `{subscriptionId}-{chargeId}`
-reference answers `{"error":"Payment not found"}`, and so does the charge's
-`pspReference`. `POST payments/cancel` on the `authorised` charge also fails. The signup charge is `reason: scheduled_charge` too. Refund it in the Plorea
-portal, then record that refund locally against the original charge (amount,
-portal reference, outcome) so no later refund path refunds it again. Whether
-every scheduled charge behaves this way is open; a manual-charge refund is
-untested. Do not add an SDK path for it until Plorea offers one.
+**Scheduled subscription charges: refund works, cancel lies** — VERIFIED 2026-10-19 (test, one scheduled charge)
+
+- `POST payments/refund` on a `{subscriptionId}-{chargeId}` reference was
+  accepted (`refund_requested`) and settled 34 s later. The response adds
+  `subscriptionId`, `chargeId`, `refundedTotal` and `refundStatus`.
+- `GET payments/status` resolved the same scheduled-charge reference, with
+  `platform: subscription`, `reason: scheduled_charge`, `refundedTotal`,
+  `refundStatus` and a `refunds[]` list. The `lastRefund*` fields were
+  **absent**. An older manual-charge capture had `lastRefund*` and no list.
+  So read `PaymentStatus::$refunds` / `$refundedTotal` when present, and fall
+  back to `lastRefund*`.
+- **No `payment.refunded` webhook arrived** for that refund. Poll `status()`.
+- `POST payments/cancel` on the already charged charge was **not** refused
+  with `409`, contrary to what Plorea stated. It answered `cancel_requested`.
+  Adyen refused it (`webhookEventCode: CANCELLATION`, `webhookSuccess: false`),
+  yet `status` and the `charges()` item both turned `cancelled` while the
+  money stayed charged. Never cancel a charged subscription charge; refund it.
+  `PaymentStatus::isCancellationRefused()` detects the refused cancel.
+- Production record, 2026-10-11 (one charge): the same refund answered
+  `{"error":"Payment not found"}`, by reference and by `pspReference`, and a
+  cancel also failed. The charge was refunded in the Plorea portal. Production
+  has not been re-tested since; if a refund is refused there, refund in the
+  portal and record that refund locally against the charge (amount, portal
+  reference, outcome) so no later refund path refunds it again.
 
 ## One reference can take two payments, and status can hold the wrong psp — VERIFIED 2026-10-17 (test)
 

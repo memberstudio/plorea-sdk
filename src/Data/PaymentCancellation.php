@@ -15,6 +15,8 @@ final readonly class PaymentCancellation
 
     /**
      * @param  array<string, mixed>  $raw
+     * @param  ?string  $subscriptionId  Set when the cancel is for a subscription charge. Seen in test 2026-10-19.
+     * @param  ?string  $chargeId  Set when the cancel is for a subscription charge. Seen in test 2026-10-19.
      */
     public function __construct(
         public ?string $status,
@@ -24,6 +26,8 @@ final readonly class PaymentCancellation
         public ?string $paymentPspReference,
         public ?string $environment,
         public array $raw = [],
+        public ?string $subscriptionId = null,
+        public ?string $chargeId = null,
     ) {}
 
     /**
@@ -39,6 +43,8 @@ final readonly class PaymentCancellation
             paymentPspReference: self::string($data['paymentPspReference'] ?? null),
             environment: self::string($data['environment'] ?? null),
             raw: $data,
+            subscriptionId: self::string($data['subscriptionId'] ?? null),
+            chargeId: self::string($data['chargeId'] ?? null),
         );
     }
 }

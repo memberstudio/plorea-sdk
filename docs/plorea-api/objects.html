@@ -60,12 +60,17 @@
             <tr><td><code>lastCancelReference</code></td><td class="type">string</td><td>yes</td><td>The <code>modificationReference</code> of the last cancel request.</td></tr>
             <tr><td><code>lastCancelRequestPspReference</code></td><td class="type">string</td><td>yes</td><td>Adyen's reference for the last cancel request.</td></tr>
             <tr><td><code>lastCancelRequestedAt</code></td><td class="type">datetime</td><td>yes</td><td>When the last cancel was requested.</td></tr>
+            <tr><td><code>subscriptionId</code>, <code>chargeId</code></td><td class="type">string</td><td>yes</td><td>On a subscription charge only, with <code>platform: "subscription"</code>. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
+            <tr><td><code>refundedTotal</code></td><td class="type">integer</td><td>yes</td><td>Total refunded on the reference, in øre. It caps refunds at the payment amount.</td></tr>
+            <tr><td><code>refundStatus</code></td><td class="type">string</td><td>yes</td><td>For example <code>partially_refunded</code>. Seen on a subscription charge. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
+            <tr><td><code>refunds</code></td><td class="type">array</td><td>yes</td><td>One entry per refund: <code>amount</code>, <code>currency</code>, <code>reason</code>, <code>refundPspReference</code>, <code>refundReference</code>, <code>requestedAt</code>, <code>settledAt</code>, <code>source</code>, <code>splits</code>, <code>status</code>. Seen on a subscription charge, where the <code>lastRefund*</code> fields were absent. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
+            <tr><td><code>cancelStatus</code>, <code>cancelReference</code>, <code>cancelPspReference</code>, <code>cancelRequestedAt</code></td><td class="type">string / datetime</td><td>yes</td><td>The cancel group on a subscription charge, in place of <code>lastCancel*</code>. <code>cancelStatus</code> stayed <code>cancel_requested</code> after Adyen refused the cancel. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout warning">
-        <p class="callout-title">No reason, no per-refund state</p>
-        <p>The payment has no decline reason and no status per refund. Only the <em>last</em> refund and the <em>last</em> cancel are visible. Plorea has stated that <code>refusalReason</code> is coming. Do not model it until you see it. <span class="badge stated">Stated by Plorea</span></p>
+        <p class="callout-title">No reason, and per-refund state only on some payments</p>
+        <p>The payment has no decline reason. On a payment link, only the <em>last</em> refund and the <em>last</em> cancel are visible, with no status per refund. A subscription charge in test on 2026-10-19 showed a <code>refunds</code> list instead, with a <code>status</code> and <code>refundPspReference</code> per refund. <span class="badge verified">Verified 2026-10-19 (test)</span> Plorea has stated that <code>refusalReason</code> is coming. Do not model it until you see it. <span class="badge stated">Stated by Plorea</span></p>
       </div>
       <pre data-title="Payment — refund requested"><code class="lang-json">{
   "reference": "order-1001",

@@ -1,0 +1,10 @@
+{
+    "status": "cancel_requested",
+    "reference": "sub_test_golden-chg_test_golden_2",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_2",
+    "modificationReference": "GOLDEN-CHG-CANCEL-1",
+    "cancelPspReference": "TESTCANCELPSP002",
+    "paymentPspReference": "TESTCHARGEPSP002",
+    "environment": "test"
+}

@@ -220,7 +220,9 @@ in the meantime, so do not treat it as a failure.
 ### Keep the refund response — the PSP reference is only there
 
 `refund()` returns a `Refund` whose `$refundPspReference` identifies the refund
-at the provider. **That value never appears on `payments()->status()`.** The
+at the provider. **On a payment link, that value never appears on
+`payments()->status()`.** (A subscription charge's status lists it per refund in
+`$status->refunds`; see [below](#refunds-on-subscription-charges).) The
 status shape carries `lastRefundRequestPspReference`, which is a different
 identifier for a different thing: the *request*, not the resulting refund.
 
@@ -228,7 +230,7 @@ So if you throw the `Refund` away and expect to recover the PSP reference from
 a later status poll, you cannot — and it is the identifier Plorea and Adyen
 support will ask you for. Persist it at the moment of the refund.
 
-There is also **no per-refund status field anywhere**. Until settlement, the
+There is also **no per-refund status field** on a payment link. Until settlement, the
 only signal is the payment's own top-level `status` being `refund_requested`,
 plus the `lastRefund*` group. The top-level status flips there immediately
 (from `paid` / `authorised`) while `webhookEventCode` stays `AUTHORISATION` —
@@ -280,6 +282,43 @@ Details: [api-behaviour.md](api-behaviour.md).
 > captured. Book it as requested, and keep it reversible.
 
 `modificationReference` is your idempotency key for the modification itself.
+
+### Refunds on subscription charges
+
+Verified 2026-10-19 (test, one scheduled charge). A subscription charge refunds
+like any payment, on its `{subscriptionId}-{chargeId}` reference:
+
+```php
+$reference = "{$charge->subscriptionId}-{$charge->id}";
+
+$refund = Plorea::payments()->refund($reference, 'FIN-2026-00123-refund-1', Amount::nok(10000));
+$refund->chargeId;        // the charge the refund belongs to
+$refund->refundedTotal;   // Amount, the total refunded on this charge so far
+
+$status = Plorea::payments()->status($reference);
+$status->isSubscriptionCharge();   // true
+$status->refundedTotal;            // Amount
+$status->refundStatus;             // 'partially_refunded', …
+foreach ($status->refunds as $item) {   // list<PaymentRefund>
+    $item->reference;      // your modificationReference
+    $item->isRefunded();   // settled at Adyen; $item->settledAt
+}
+```
+
+- The refund settled 34 seconds after the request. Its entry in `refunds`
+  turned `refunded`, with `settledAt` set.
+- The `lastRefund*` fields were absent on that status. An older capture of a
+  manual charge had `lastRefund*` and no `refunds` list. Read `refunds` and
+  `refundedTotal` when present, and fall back to `lastRefund*`.
+- No `payment.refunded` webhook arrived. Poll `status()`.
+- **Never cancel a charged subscription charge.** `cancel()` was not refused
+  with `409`, as Plorea stated it would be. Adyen refused the cancel, and the
+  status and the `charges()` item still turned `cancelled` while the money
+  stayed charged. `$status->isCancellationRefused()` detects this state.
+- In production on 2026-10-11, a refund on one scheduled charge answered
+  "Payment not found". Production has not been retested. If a refund is
+  refused, refund in the Plorea portal and record that refund in your own
+  system against the charge.
 
 ## The pay page
 
