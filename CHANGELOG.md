@@ -2,6 +2,27 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- `trialUntil()` sends `trialEndsAt` in UTC with `Z`
+  (`2026-09-01T00:00:00.000Z`), the same as `nextChargeAt`. Before, it sent the
+  date's own offset.
+
+### Plorea API behaviour (stated by Plorea 2026-10-20)
+
+- The late trial-end charge came from create: Plorea stored `trialEndsAt` as
+  sent, with its offset, and the scheduler compared it as text against UTC. A
+  minimum wait of 15 minutes after create also applied. Fixed on create; PATCH
+  was already correct.
+- All dates now come back in UTC (`2026-10-19T12:02:42.000Z`). A date without
+  an offset, or a date that does not exist (30 February), gives `400`.
+- `currentPeriodEnd` is null until the first charge, and `GET /subscriptions`
+  now returns it too.
+- OpenAPI 0.14.0 replaces 0.13.0, which had a format error. The SDK is
+  hand-written and was not affected.
+
 ## v0.6.0 - 2026-10-19
 
 ### Added

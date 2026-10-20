@@ -119,7 +119,7 @@ const payment = await res.json();</code></pre></div>
       <p>A <code>tenantId</code> groups data for one of your own customers, for example one club or one shop. A <code>customerId</code> identifies the paying person inside that tenant. Plorea scopes stored cards and subscriptions by both. A call that mixes the IDs of two tenants fails with <code>403 Tenant mismatch</code>.</p>
 
       <h3>Dates</h3>
-      <p>Timestamps use ISO 8601 with an offset, for example <code>2026-11-01T00:00:00+00:00</code>. Send dates in the same format.</p>
+      <p>Timestamps use ISO 8601. Plorea returns UTC, for example <code>2026-10-19T12:02:42.000Z</code>. Send dates in UTC with <code>Z</code>. A date without an offset gets <code>400</code>. <span class="badge stated">Stated by Plorea 2026-10-20</span></p>
 
       <h3>Errors</h3>
       <p>An error response has a JSON body with one <code>error</code> string. Read the HTTP status, not the message. Messages are fixed templates and can change. See <a href="errors.html">Errors and retries</a>.</p>

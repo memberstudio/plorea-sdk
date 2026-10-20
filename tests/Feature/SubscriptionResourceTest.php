@@ -39,7 +39,7 @@ class SubscriptionResourceTest extends TestCase
             ->create('pm_1', Amount::nok(19900), BillingInterval::monthly())
             ->externalId('ws_acme_456')
             ->title('Done CRM Pro')
-            ->trialUntil(new DateTimeImmutable('2026-09-01T00:00:00+00:00'))
+            ->trialUntil(new DateTimeImmutable('2026-09-01T02:00:00+02:00'))
             ->retryPolicy(3, 2)
             ->vat(rate: 0.25, amount: 3980)
             ->save();
@@ -56,7 +56,7 @@ class SubscriptionResourceTest extends TestCase
             'recurringType' => 'Subscription',
             'amount' => ['value' => 19900, 'currency' => 'NOK'],
             'interval' => ['unit' => 'month', 'count' => 1],
-            'trialEndsAt' => '2026-09-01T00:00:00+00:00',
+            'trialEndsAt' => '2026-09-01T00:00:00.000Z',
             'retryPolicy' => ['maxRetries' => 3, 'retryIntervalDays' => 2],
             'externalId' => 'ws_acme_456',
             'title' => 'Done CRM Pro',
