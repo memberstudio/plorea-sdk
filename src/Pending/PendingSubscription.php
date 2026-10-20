@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace MemberFlow\Plorea\Pending;
 
+use DateTimeImmutable;
 use DateTimeInterface;
+use DateTimeZone;
 use MemberFlow\Plorea\Concerns\FiltersNullValues;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Data\Amount;
@@ -89,7 +91,12 @@ class PendingSubscription
     }
 
     /**
-     * Delay the first charge until the trial ends.
+     * Delay the first charge until the trial ends, serialized in UTC.
+     *
+     * Stated by Plorea 2026-10-20: create stored trialEndsAt as sent and the
+     * scheduler compared it as text against UTC, so an offset of +02:00
+     * charged two hours late. Plorea now normalizes dates to UTC and rejects
+     * a date without an offset, or one that does not exist, with 400.
      */
     public function trialUntil(DateTimeInterface $trialEndsAt): static
     {
@@ -215,7 +222,9 @@ class PendingSubscription
             'recurringType' => $this->recurringType->value,
             'amount' => $this->amount->toArray(),
             'interval' => $this->interval->toArray(),
-            'trialEndsAt' => $this->trialEndsAt?->format(DateTimeInterface::ATOM),
+            'trialEndsAt' => $this->trialEndsAt instanceof DateTimeInterface
+                ? DateTimeImmutable::createFromInterface($this->trialEndsAt)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z')
+                : null,
             'retryPolicy' => $this->retryPolicy?->toArray(),
             'externalId' => $this->externalId,
             'title' => $this->title,

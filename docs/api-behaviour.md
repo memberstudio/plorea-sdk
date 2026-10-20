@@ -544,6 +544,17 @@ new subscriptions without a trial on 2026-10-06 (see above). This time the
 charge did follow. The billing anchor then moves by the delay.
 Do not derive the next period from `trialEndsAt`; read `nextChargeAt` back.
 
+**Cause — stated by Plorea 2026-10-20.** Create stored `trialEndsAt` as sent,
+with its `+02:00` offset, and the scheduler compared that text against UTC.
+A minimum wait of 15 minutes after create also applied. Plorea fixed create;
+PATCH was already correct. Plorea now returns every date in UTC
+(`2026-10-19T12:02:42.000Z`) and rejects a date without an offset, or a date
+that does not exist (30 February), with 400. The scheduler now validates the
+format. In production, trials ending on 1 and 15 January 2027 would have been
+charged one hour late; Plorea corrected them before any charge. The SDK now
+sends `trialEndsAt` in UTC with `Z`, the same as `nextChargeAt`.
+The fixed timing is not yet re-observed on the wire.
+
 ### ✅ `merchantOrgNr` on subscriptions — 2026-09-21
 
 `POST subscriptions` accepts `merchantOrgNr`, `merchantName` and

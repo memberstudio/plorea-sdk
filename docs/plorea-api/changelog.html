@@ -29,6 +29,16 @@
 
       <h2 id="2026-10">October 2026</h2>
 
+      <h3 id="2026-10-20">2026-10-20</h3>
+      <ul>
+        <li><strong>The late trial-end charge is explained and fixed.</strong> Create stored <code>trialEndsAt</code> as sent, with its offset, and the scheduler compared that text against UTC. A minimum wait of 15 minutes after create also applied. Plorea fixed create; <code>PATCH</code> was already correct. The scheduler now validates the format. <span class="badge stated">Stated by Plorea 2026-10-20</span> See <a href="subscriptions.html#trials">Trials</a>.</li>
+        <li><strong>All dates come back in UTC</strong>, for example <code>2026-10-19T12:02:42.000Z</code>. A date without an offset gets <code>400</code>. A date that does not exist, such as 30 February, gets <code>400</code>. <span class="badge stated">Stated by Plorea 2026-10-20</span></li>
+        <li><strong>In production</strong>, trials ending on 1 and 15 January 2027 would have been charged one hour late. Plorea corrected them. Nothing was charged wrong. <span class="badge stated">Stated by Plorea 2026-10-20</span></li>
+        <li><strong><code>currentPeriodEnd</code></strong> is null until the first charge. <code>GET /subscriptions</code> (the list) now returns it too. <span class="badge stated">Stated by Plorea 2026-10-20</span></li>
+        <li><strong>OpenAPI 0.14.0</strong> replaces 0.13.0, which had a format error. <span class="badge stated">Stated by Plorea 2026-10-20</span> The PHP SDK is hand-written and was not affected.</li>
+        <li><strong>SDK:</strong> <code>trialUntil()</code> sends <code>trialEndsAt</code> in UTC with <code>Z</code>, the same as <code>nextChargeAt</code>.</li>
+      </ul>
+
       <h3 id="2026-10-19">2026-10-19</h3>
       <ul>
         <li><strong>A scheduled subscription charge refunds through the API.</strong> <code>POST /payments/refund</code> on <code>{subscriptionId}-{chargeId}</code> answered <code>refund_requested</code> and settled 34 seconds later. <code>GET /payments/status</code> resolved the reference and showed <code>subscriptionId</code>, <code>chargeId</code>, <code>refundedTotal</code>, <code>refundStatus</code> and a <code>refunds</code> list. The <code>lastRefund*</code> fields were absent. <span class="badge verified">Verified</span> in test, one charge. See <a href="field-notes.html#subscription-charge-refund">Field notes</a>.</li>

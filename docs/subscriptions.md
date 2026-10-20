@@ -191,7 +191,8 @@ Plorea::subscriptions()->update($id)->nextChargeAt($date)->allowEarlyCharge()->s
 the next period there, so a late retry does not move the billing date (stated
 by Plorea 2026-10-14). On `active`, charged subscriptions it equals
 `nextChargeAt`; it is null on `trialing` and `canceled` ones (verified in test
-2026-10-14).
+2026-10-14). Plorea stated on 2026-10-20 that it is null until the first
+charge, and that `GET /subscriptions` (the list) now returns it too.
 
 **Open question — no charge was seen after resume, or after a moved date on an
 `active` subscription.** On three resumed test subscriptions the scheduler had

@@ -152,6 +152,14 @@ scheduler first pushed `nextChargeAt` +17 min with no charge and no
 interval, so the anchor drifts by the delay. Read `nextChargeAt` back; never
 compute the next period from `trialEndsAt`.
 
+Cause of the delay — Stated by Plorea 2026-10-20: create stored `trialEndsAt`
+as sent (`+02:00`) and the scheduler compared it as text against UTC. A minimum
+wait of 15 min after create also applied. Plorea fixed create (PATCH was
+already correct). All dates now come back in UTC (`…T12:02:42.000Z`). A date
+without an offset, or one that does not exist (30 Feb), gives 400. The SDK
+sends `trialEndsAt` in UTC with `Z`, like `nextChargeAt`. Not yet re-observed
+on the wire: keep reading `nextChargeAt` back.
+
 `CardOnFile` / `UnscheduledCardOnFile` are echoed back verbatim on setup.
 
 ## `reactivate()` no longer double-bills — FIXED by Plorea, verified 2026-09-09
@@ -325,7 +333,8 @@ resume is safe after the scheduler has advanced the date.
 - `Subscription::$currentPeriodEnd` — VERIFIED in test 2026-10-14: equal to
   `nextChargeAt` on active, charged subscriptions; absent on trialing and
   canceled ones. The fake omits it, because its default subscription has no
-  charge.
+  charge. Stated by Plorea 2026-10-20: it is null until the first charge, and
+  `GET /subscriptions` (the list) now returns it too.
 - `PaymentMethod` card fields — VERIFIED in test 2026-10-14 on a read. The
   months and years are integers. The fake returns them for a plain card.
 - **409 with `paidUntil`** on `PATCH` — Stated by Plorea, not captured.

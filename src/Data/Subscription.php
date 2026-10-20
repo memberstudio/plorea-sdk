@@ -21,7 +21,7 @@ final readonly class Subscription
      * @param  array<string, mixed>  $raw
      * @param  ?string  $merchantOrgNr  The company receiving the funds. Returned on create and on reads (2026-09-22); null when the subscription has none.
      * @param  ?string  $environment  "test" or "live", the environment the API key belongs to. Plorea added it to GET responses on 2026-10-13; null on older responses.
-     * @param  ?CarbonImmutable  $currentPeriodEnd  The end of the period the last charge paid for. Plorea starts the next period here, so a late retry does not move the billing date (stated 2026-10-14). Verified in test 2026-10-14: equal to nextChargeAt on active, charged subscriptions; absent on trialing and canceled ones.
+     * @param  ?CarbonImmutable  $currentPeriodEnd  The end of the period the last charge paid for. Plorea starts the next period here, so a late retry does not move the billing date (stated 2026-10-14). Verified in test 2026-10-14: equal to nextChargeAt on active, charged subscriptions; absent on trialing and canceled ones. Stated by Plorea 2026-10-20: null until the first charge, and also returned by the list.
      */
     public function __construct(
         public string $id,

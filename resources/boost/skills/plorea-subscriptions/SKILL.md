@@ -132,6 +132,11 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
 access is your app's rule, decided when you start it, since no charge will
 arrive to trigger it.
 
+The SDK sends `trialEndsAt` in UTC. Before Plorea's 2026-10-20 fix, a date
+with an offset such as `+02:00` was charged late; Plorea now returns UTC dates
+and rejects a date without an offset with 400. Read `nextChargeAt` back after
+the trial charge; do not compute the next period from `trialEndsAt`.
+
 ## 4. Reconciliation: the only way to see a failure
 
 Nothing is emitted for a **failed** scheduled charge, a cancel, a reactivate or
