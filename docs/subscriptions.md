@@ -104,7 +104,7 @@ isActive()`, never on `isActive()` alone.
 No verified call moves the billing day of a live subscription. Build a new one:
 
 1. Cancel the old subscription. Keep the `accessEndsAt` it returns.
-2. Create a new subscription on the same payment method, with `trialUntil()` set to the new billing day. Copy the amount, interval, `externalId`, VAT and merchant from the old one: without `merchant()`, the money goes to you, not to the client company.
+2. Create a new subscription on the same payment method, with `trialUntil()` set to the new billing day. Copy every field from the old one, `retryPolicy` and the merchant included: without `merchant()`, the money goes to you, not to the client company.
 3. Store the new subscription id. Replace the old id everywhere you keep it.
 
 The card holder does not consent again. The new subscription reads `trialing`,

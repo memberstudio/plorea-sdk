@@ -144,7 +144,7 @@ the trial charge; do not compute the next period from `trialEndsAt`.
 **Moving the billing day** has no verified API call. Cancel the old subscription, then
 create a new one on the same payment method with `trialUntil()` = the new day,
 on or after the old `accessEndsAt` (an earlier day charges the overlap twice).
-Copy amount, interval, `externalId`, VAT and `merchant()` from the old one.
+Copy every field from the old one, `retryPolicy` and `merchant()` included.
 No new consent is needed. The new subscription has a new id: store it in place
 of the old one. Verified in test 2026-10-20: the first charge came about 5
 minutes after the trial end, and `nextChargeAt` then kept the chosen day.

@@ -1224,7 +1224,7 @@ if (res.status === 400) {
       </div>
       <ol class="steps">
         <li><strong>Cancel the old subscription</strong>Call <code>POST /subscriptions/{id}/cancel</code>. Keep the <code>accessEndsAt</code> it returns.</li>
-        <li><strong>Create a new subscription</strong>Use the same payment method. Copy the amount, interval, <code>externalId</code>, VAT and <code>merchantOrgNr</code> from the old one: a subscription without <code>merchantOrgNr</code> pays out to you, not to the client company. Set <code>trialEndsAt</code> to the new billing day, on or after the old <code>accessEndsAt</code>. An earlier day charges again for days the customer has already paid for. <code>accessEndsAt</code> is <code>null</code> when the old subscription was never charged. Plorea asked for no new consent. <span class="badge verified">Verified</span> in test, 2026-10-20</li>
+        <li><strong>Create a new subscription</strong>Use the same payment method. Copy every field from the old one, <code>retryPolicy</code> and <code>merchantOrgNr</code> included: a subscription without <code>merchantOrgNr</code> pays out to you, not to the client company. Set <code>trialEndsAt</code> to the new billing day, on or after the old <code>accessEndsAt</code>. An earlier day charges again for days the customer has already paid for. <code>accessEndsAt</code> is <code>null</code> when the old subscription was never charged. Plorea asked for no new consent. <span class="badge verified">Verified</span> in test, 2026-10-20</li>
         <li><strong>Relink</strong>The new subscription has a new ID. Replace the old ID everywhere you store it.</li>
         <li><strong>Confirm the first charge</strong>It came 4 minutes 49 seconds after <code>trialEndsAt</code> in test. After it, <code>nextChargeAt</code> and <code>currentPeriodEnd</code> both read <code>trialEndsAt</code> + one interval. <span class="badge verified">Verified</span> in test, 2026-10-20. In production the new subscription read <code>trialing</code>; its first charge is not yet seen.</li>
       </ol>
@@ -1240,7 +1240,12 @@ $pending = $subscriptions
 if ($old-&gt;merchantOrgNr !== null) {
     $pending-&gt;merchant($old-&gt;merchantOrgNr, $member-&gt;merchant_name, $member-&gt;merchant_email);
 }
+if ($old-&gt;customerId !== null) $pending-&gt;customerId($old-&gt;customerId);
 if ($old-&gt;externalId !== null) $pending-&gt;externalId($old-&gt;externalId);
+if ($old-&gt;title !== null) $pending-&gt;title($old-&gt;title);
+if ($old-&gt;description !== null) $pending-&gt;description($old-&gt;description);
+if ($old-&gt;quantity !== null) $pending-&gt;quantity($old-&gt;quantity);
+if ($old-&gt;retryPolicy !== null) $pending-&gt;retryPolicy($old-&gt;retryPolicy);
 if ($old-&gt;vatRate !== null &amp;&amp; $old-&gt;vatAmount !== null) {
     $pending-&gt;vat(rate: $old-&gt;vatRate, amount: $old-&gt;vatAmount);
 }
