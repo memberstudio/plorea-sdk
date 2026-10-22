@@ -297,7 +297,7 @@ Helper: `isCancelled()`.
 | `$quantity`, `$vatRate`, `$vatAmount` | |
 | `$externalId`, `$title`, `$description` | |
 | `$interval` | `?BillingInterval` |
-| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| `payment_failed` (seen in production after three failed attempts; the way out is unobserved) |
+| `$status` | `active` \| `trialing` \| `past_due` \| `canceled` \| `paused` \| `payment_failed` (seen in production after three failed attempts; `PATCH status: active` is refused, cancel works) |
 | `$trialEndsAt`, `$nextChargeAt`, `$lastChargeAt` | `?CarbonImmutable` |
 | `$currentPeriodEnd` | `?CarbonImmutable` — the end of the paid period. Equals `nextChargeAt` on `active`, charged subscriptions; null on `trialing` and `canceled` ones (**Verified** in test 2026-10-14); null until the first charge, and also in the list (stated by Plorea 2026-10-20) |
 | `$lastPaymentReference` | `{subId}-{chgId}` — resolvable as a payment for **manual** charges only |

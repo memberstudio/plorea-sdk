@@ -49,7 +49,7 @@ stateDiagram-v2
   active --> canceled: POST /cancel
   canceled --> active: POST /reactivate
         </pre>
-        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. After three failed attempts, production showed <code>payment_failed</code>. Recovery from <code>past_due</code> to <code>active</code> is untested. Every way out of <code>payment_failed</code> is untested. The pause paths were captured in test. No charge has followed a resume yet.</figcaption>
+        <figcaption>Subscription statuses. <code>active</code> → <code>past_due</code> was seen in production. After three failed attempts, production showed <code>payment_failed</code>. Recovery from <code>past_due</code> to <code>active</code> is untested. No verified route takes <code>payment_failed</code> back to <code>active</code>: <code>PATCH status: "active"</code> is refused, and cancel works. The pause paths were captured in test. No charge has followed a resume yet.</figcaption>
       </figure>
       <div class="table-wrap">
         <table>

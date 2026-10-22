@@ -1116,7 +1116,7 @@ stateDiagram-v2
   past_due --> active: retry succeeds (not observed)
   past_due --> payment_failed: last attempt fails
         </pre>
-        <figcaption>Subscription states. <code>past_due</code> was seen in production. After three failed attempts, production showed <code>payment_failed</code>, not <code>canceled</code>. The way out of <code>payment_failed</code> is untested: see <a href="dunning.html#after-the-last-retry">Failed charges and dunning</a>. The arrow from <code>paused</code> back to <code>active</code> is verified for the status only. No charge has followed it yet.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. After three failed attempts, production showed <code>payment_failed</code>, not <code>canceled</code>. The only verified way out of <code>payment_failed</code> is cancel: see <a href="dunning.html#after-the-last-retry">Failed charges and dunning</a>. The arrow from <code>paused</code> back to <code>active</code> is verified for the status only. No charge has followed it yet.</figcaption>
       </figure>
 
       <ol class="steps">
@@ -1224,24 +1224,39 @@ if (res.status === 400) {
       </div>
       <ol class="steps">
         <li><strong>Cancel the old subscription</strong>Call <code>POST /subscriptions/{id}/cancel</code>. Keep the <code>accessEndsAt</code> it returns.</li>
-        <li><strong>Create a new subscription</strong>Use the same payment method. Set <code>trialEndsAt</code> to the new billing day, on or after the old <code>accessEndsAt</code>. An earlier day charges again for days the customer has already paid for. <code>accessEndsAt</code> is <code>null</code> when the old subscription was never charged. Plorea asked for no new consent. <span class="badge verified">Verified</span> in test, 2026-10-20</li>
+        <li><strong>Create a new subscription</strong>Use the same payment method. Copy the amount, interval, <code>externalId</code>, VAT and <code>merchantOrgNr</code> from the old one: a subscription without <code>merchantOrgNr</code> pays out to you, not to the client company. Set <code>trialEndsAt</code> to the new billing day, on or after the old <code>accessEndsAt</code>. An earlier day charges again for days the customer has already paid for. <code>accessEndsAt</code> is <code>null</code> when the old subscription was never charged. Plorea asked for no new consent. <span class="badge verified">Verified</span> in test, 2026-10-20</li>
         <li><strong>Relink</strong>The new subscription has a new ID. Replace the old ID everywhere you store it.</li>
         <li><strong>Confirm the first charge</strong>It came 4 minutes 49 seconds after <code>trialEndsAt</code> in test. After it, <code>nextChargeAt</code> and <code>currentPeriodEnd</code> both read <code>trialEndsAt</code> + one interval. <span class="badge verified">Verified</span> in test, 2026-10-20. In production the new subscription read <code>trialing</code>; its first charge is not yet seen.</li>
       </ol>
-      <pre data-title="PHP SDK"><code class="lang-php">$cancellation = Plorea::subscriptions()-&gt;cancel('sub_test_acme_001', 'billing_day_moved');
+      <pre data-title="PHP SDK"><code class="lang-php">$subscriptions = Plorea::subscriptions();
+$old = $subscriptions-&gt;find($member-&gt;plorea_subscription_id);
 
-// Never bill again before the paid period ends.
+// 1. Build the new subscription from the old one. A read returns the
+//    organisation number, but not the name or email: take those from your record.
+$pending = $subscriptions
+    -&gt;create($old-&gt;paymentMethodId, $old-&gt;amount, $old-&gt;interval)
+    -&gt;metadata(['replaces' =&gt; $old-&gt;id]);
+
+if ($old-&gt;merchantOrgNr !== null) {
+    $pending-&gt;merchant($old-&gt;merchantOrgNr, $member-&gt;merchant_name, $member-&gt;merchant_email);
+}
+if ($old-&gt;externalId !== null) $pending-&gt;externalId($old-&gt;externalId);
+if ($old-&gt;vatRate !== null &amp;&amp; $old-&gt;vatAmount !== null) {
+    $pending-&gt;vat(rate: $old-&gt;vatRate, amount: $old-&gt;vatAmount);
+}
+
+// 2. Cancel. The SDK throws on a failed response, so nothing below runs.
+$cancellation = $subscriptions-&gt;cancel($old-&gt;id, 'billing_day_moved');
+
+// 3. Never bill again before the paid period ends.
 $billingDay = CarbonImmutable::parse('2026-12-01T00:00:00+00:00');
 while ($cancellation-&gt;accessEndsAt?-&gt;isAfter($billingDay)) {
     $billingDay = $billingDay-&gt;addMonth();
 }
 
-$subscription = Plorea::subscriptions()
-    -&gt;create('pm_test_acme_001', Amount::nok(39900), BillingInterval::monthly())
-    -&gt;externalId('member-1001')
-    -&gt;trialUntil($billingDay)
-    -&gt;save();
+$subscription = $pending-&gt;trialUntil($billingDay)-&gt;save();
 
+// 4. Relink.
 $member-&gt;update(['plorea_subscription_id' =&gt; $subscription-&gt;id]);</code></pre>
 
       <!-- ================================================================ -->

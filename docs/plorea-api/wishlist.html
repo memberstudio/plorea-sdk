@@ -132,7 +132,7 @@ Idempotent-Replayed: true</code></pre>
       <ul>
         <li>The event is not in Plorea's webhook catalogue.</li>
         <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
-        <li>After three failed attempts, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> How to leave <code>payment_failed</code> is untested, and the API has no call for the reset Plorea did by hand. <span class="badge unobserved">Unobserved</span></li>
+        <li>After three failed attempts, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> <code>PATCH status: "active"</code> on <code>payment_failed</code> is refused with <code>400</code>, and the API has no call for the reset Plorea did by hand. <span class="badge verified">Verified 2026-10-20</span> See <a href="#move-the-billing-day-and-restart-billing">item 24</a>.</li>
         <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
         <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
       </ul>
