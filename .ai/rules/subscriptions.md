@@ -209,7 +209,7 @@ charges the amount held when it runs (Stated by Plorea, 9 October). PATCH
 payment_failed to active" (VERIFIED in production, Sentry 12–17 October).
 `cancel()` on `payment_failed` → `canceled`, `nextChargeAt` and `accessEndsAt`
 null when never charged (VERIFIED in production 2026-10-20; charge, refund and
-webhook side effects UNOBSERVED). The way back to billing is cancel + create a
+webhook side effects UNOBSERVED). The only verified way back to billing is cancel + create a
 new subscription on the same payment method with a trial to the wanted day
 (see "Moving the billing day" below). Other ways out are **untested**: PATCH `amount` + `nextChargeAt`;
 `resume()` (verified only paused → active; an active one gives 400,
@@ -235,8 +235,9 @@ that — `SubscriptionCharge::isAuthorised()` is the predicate.
 
 ## Moving the billing day — VERIFIED in test 2026-10-20
 
-No call moves the billing day. Cancel the old subscription, then create a new
-one on the same payment method with `trialEndsAt` = the wanted day. No new
+No verified call moves the billing day. Cancel the old subscription, then create a new
+one on the same payment method with `trialEndsAt` = the wanted day, never before
+the old `accessEndsAt` (else the overlap is charged twice). No new
 consent. New id: the integrator must relink. First charge 4m49s after
 `trialEndsAt`; after it `nextChargeAt` = `currentPeriodEnd` = `trialEndsAt` +
 interval (the anchor holds). A later cancel gave `accessEndsAt` = **actual charge
@@ -248,7 +249,8 @@ is UNOBSERVED. Do not quote the ids in the repo.
 
 `GET subscriptions?externalId=X&tenantId=Y` returned the whole tenant (120 rows,
 2 matches). Without `tenantId` the filter works. `forExternalId()` drops rows
-whose `externalId` differs and keeps rows without one; `needingAttention()`
+whose `externalId` is not an exact string match, including rows without one
+(every captured list row carries it); `needingAttention()`
 goes through it. **Do not remove that filter** when Plorea fixes the bug: it
 costs nothing and a regression would bill-flag other customers.
 

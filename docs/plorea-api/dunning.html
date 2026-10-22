@@ -293,7 +293,7 @@ gantt
       <p>In production on 6 to 8 October 2026, one subscription was tried three times, about 24 hours apart. Then it became <code>payment_failed</code> with <code>retryCount: 3</code> and <code>nextChargeAt: null</code>. It was not canceled. <span class="badge verified">Verified</span> in production. Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span></p>
       <p>A retry charges the amount that the subscription holds when the retry runs. If you PATCH the amount during the retry window, the next retry uses the new amount. <span class="badge stated">Stated by Plorea</span></p>
       <div class="callout warning">
-        <p class="callout-title">No API route leaves payment_failed for billing</p>
+        <p class="callout-title">No verified API route leaves payment_failed for billing</p>
         <p><code>PATCH status: "active"</code> is refused. Cancel works. To bill the customer again, cancel and create a new subscription on the same card. See <a href="subscription-workflows.html#move-the-billing-day">Move the billing day</a>.</p>
       </div>
       <div class="table-wrap">

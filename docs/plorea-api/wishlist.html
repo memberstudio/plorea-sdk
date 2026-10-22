@@ -305,7 +305,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Proposal.</strong> Apply every filter given. Return <code>400</code> for a filter the endpoint does not support.</p>
 
       <h3 id="move-the-billing-day-and-restart-billing">24. Move the billing day and restart billing</h3>
-      <p><span class="badge verified">Verified 2026-10-20</span> No call moves the billing day of a live subscription. <code>PATCH status: "active"</code> on <code>payment_failed</code> returns <code>400</code>. The workaround is to cancel and create a new subscription on the same card, with a trial to the wanted day. It works, but the subscription ID changes and the charge history is split in two.</p>
+      <p><span class="badge verified">Verified 2026-10-20</span> No verified call moves the billing day of a live subscription. <code>PATCH status: "active"</code> on <code>payment_failed</code> returns <code>400</code>. The workaround is to cancel and create a new subscription on the same card, with a trial to the wanted day. It works, but the subscription ID changes and the charge history is split in two.</p>
       <p><strong>Proposal.</strong> Accept <code>nextChargeAt</code> on <code>PATCH</code> as the new billing anchor on <code>active</code> subscriptions. Allow <code>payment_failed</code> → <code>active</code> with a <code>nextChargeAt</code>, without an immediate charge.</p>
 
     </article>

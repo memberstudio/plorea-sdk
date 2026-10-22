@@ -634,14 +634,14 @@ Plorea** as a fixed policy (❓ open).
 **📋 Stated by Plorea (9 October):** a retry charges the amount the subscription
 holds when the retry runs.
 
-**✅ No API route takes `payment_failed` back to billing.**
+**No verified API route takes `payment_failed` back to billing.**
 
 - `PATCH` with `status: active`: 400 "Cannot change status from
   payment_failed to active" (production, 12–17 October 2026).
 - `cancel()` works: `canceled`, `nextChargeAt` null, `accessEndsAt` null, on a
   subscription that had never been charged (production, 2026-10-20). ❓ Charges,
   refunds and webhooks from that cancel are unobserved.
-- The way back to billing is a new subscription on the same payment method. See
+- The verified way back to billing is a new subscription on the same payment method. See
   "Moving the billing day" below.
 
 **❓ Untested ways out of `payment_failed`:**
@@ -800,11 +800,14 @@ Reported to Plorea. Read scheduled outcomes from `charges()`.
 
 ### ✅ Moving the billing day: cancel and create again — 2026-10-20
 
-No call moves the billing day of a live subscription. In test, these steps
+No verified call moves the billing day of a live subscription. In test, these steps
 worked:
 
 1. Cancel the old subscription.
 2. Create a new subscription on the same payment method, with `trialEndsAt` set to the new billing day.
+
+Set the new billing day on or after the old `accessEndsAt`, or the customer pays
+twice for the overlap.
 
 - Plorea asked for **no new consent**. The new subscription has a **new id**;
   relink it in your own records.
@@ -824,7 +827,7 @@ In production on 2026-10-20 the same steps gave a `trialing` subscription with
 `GET subscriptions?externalId=…&tenantId=…` returned the whole tenant: 120 rows,
 2 of them with the asked-for `externalId`. Without `tenantId`, the filter
 worked. Reported to Plorea. The SDK drops rows whose `externalId` differs from
-the one asked for, and keeps rows without an `externalId`.
+the one asked for, and drops rows without a string `externalId`.
 
 ### ❓ Neither list endpoint has been seen to paginate — probed 2026-09-10
 

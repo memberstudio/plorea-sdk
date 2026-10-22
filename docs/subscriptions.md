@@ -101,9 +101,9 @@ isActive()`, never on `isActive()` alone.
 
 ### Move the billing day
 
-The API cannot move the billing day of a live subscription. Build a new one:
+No verified call moves the billing day of a live subscription. Build a new one:
 
-1. Cancel the old subscription.
+1. Cancel the old subscription. Keep the `accessEndsAt` it returns.
 2. Create a new subscription on the same payment method, with `trialUntil()` set to the new billing day.
 3. Store the new subscription id. Replace the old id everywhere you keep it.
 
@@ -117,6 +117,11 @@ interval: the billing day holds, even though the charge came minutes late.
 
 > [!WARNING]
 > Cancel the old subscription first. If you skip that, both subscriptions charge the card.
+
+Pick the new billing day on or after the old `accessEndsAt`. An earlier day
+charges again for days the customer has already paid for. `accessEndsAt` is
+null when the old subscription was never charged, for example in
+`payment_failed` after a first charge that failed.
 
 ## Statuses
 
@@ -147,8 +152,8 @@ $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', tenantId:
 > whole tenant: 120 rows, 2 of them a match (**Verified**, 2026-10-20; reported
 > to Plorea). Without `tenantId` the filter worked. The SDK now drops every row
 > whose `externalId` differs from the one you asked for, so `forExternalId()` and
-> `needingAttention()` stay correct. A row without an `externalId` is kept. If
-> you call the endpoint without the SDK, filter the rows yourself.
+> `needingAttention()` stay correct. A row without a string `externalId` is
+> dropped too. If you call the endpoint without the SDK, filter the rows yourself.
 
 ## Update
 
@@ -426,8 +431,8 @@ Read this before building retry logic.
   not confirmed this as a fixed policy (**Open question**).
 - A retry charges the amount the subscription holds when the retry runs
   (**Stated by Plorea**, 9 October).
-- No API route takes a subscription from `payment_failed` back to billing.
-  `PATCH` with `status: active` gives 400 "Cannot change status from
+- No verified API route takes a subscription from `payment_failed` back to
+  billing. `PATCH` with `status: active` gives 400 "Cannot change status from
   payment_failed to active" (**Verified** in production, 12–17 October 2026).
   `cancel()` works: the status went to `canceled`, with `nextChargeAt` null and
   `accessEndsAt` null on a subscription that had never been charged
