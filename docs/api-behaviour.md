@@ -634,7 +634,17 @@ Plorea** as a fixed policy (❓ open).
 **📋 Stated by Plorea (9 October):** a retry charges the amount the subscription
 holds when the retry runs.
 
-**❓ Unobserved: leaving `payment_failed`, by every route.**
+**✅ No API route takes `payment_failed` back to billing.**
+
+- `PATCH` with `status: active`: 400 "Cannot change status from
+  payment_failed to active" (production, 12–17 October 2026).
+- `cancel()` works: `canceled`, `nextChargeAt` null, `accessEndsAt` null, on a
+  subscription that had never been charged (production, 2026-10-20). ❓ Charges,
+  refunds and webhooks from that cancel are unobserved.
+- The way back to billing is a new subscription on the same payment method. See
+  "Moving the billing day" below.
+
+**❓ Untested ways out of `payment_failed`:**
 
 - `PATCH` with `amount` and `nextChargeAt`: not tried. Changing both in one
   update is unverified on any status.
@@ -787,6 +797,34 @@ is a real capture, returning `platform: "subscription"` with a null
 is specifically manual versus scheduled.
 
 Reported to Plorea. Read scheduled outcomes from `charges()`.
+
+### ✅ Moving the billing day: cancel and create again — 2026-10-20
+
+No call moves the billing day of a live subscription. In test, these steps
+worked:
+
+1. Cancel the old subscription.
+2. Create a new subscription on the same payment method, with `trialEndsAt` set to the new billing day.
+
+- Plorea asked for **no new consent**. The new subscription has a **new id**;
+  relink it in your own records.
+- It read `trialing`, with `nextChargeAt` equal to `trialEndsAt`.
+- The first charge came **4 minutes 49 seconds** after `trialEndsAt`. After it,
+  the status read `active`, and `nextChargeAt` and `currentPeriodEnd` both read
+  `trialEndsAt` + one interval. The billing day held.
+- A cancel after that charge gave `accessEndsAt` = **the charge time** + one
+  interval, not `trialEndsAt` + one interval. It is a few minutes later than
+  the `currentPeriodEnd` read before the cancel.
+
+In production on 2026-10-20 the same steps gave a `trialing` subscription with
+`nextChargeAt` equal to `trialEndsAt`. Its first charge is not yet seen.
+
+### ⚠️ `externalId` is ignored when `tenantId` is set — 2026-10-20
+
+`GET subscriptions?externalId=…&tenantId=…` returned the whole tenant: 120 rows,
+2 of them with the asked-for `externalId`. Without `tenantId`, the filter
+worked. Reported to Plorea. The SDK drops rows whose `externalId` differs from
+the one asked for, and keeps rows without an `externalId`.
 
 ### ❓ Neither list endpoint has been seen to paginate — probed 2026-09-10
 

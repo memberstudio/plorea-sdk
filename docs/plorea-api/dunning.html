@@ -99,7 +99,7 @@ flowchart TD
 
       <ol class="steps">
         <li><strong>Schedule a job</strong>Run it at least as often as your shortest grace period. Hourly suits monthly plans.</li>
-        <li><strong>List subscriptions per billed entity</strong>Call <code>GET /subscriptions?externalId=…</code> or <code>?tenantId=…</code>. The list has never been seen to paginate. If you hold many subscriptions per filter, compare <code>count</code> with your own records. <span class="badge open">Open question</span></li>
+        <li><strong>List subscriptions per billed entity</strong>Call <code>GET /subscriptions?externalId=…</code> or <code>?tenantId=…</code>. The list has never been seen to paginate. If you hold many subscriptions per filter, compare <code>count</code> with your own records. <span class="badge open">Open question</span> With <code>tenantId</code> set, Plorea ignored the <code>externalId</code> filter and returned the whole tenant: 120 rows, 2 of them a match. Without <code>tenantId</code>, the filter worked. <span class="badge verified">Verified 2026-10-20</span> Reported to Plorea. Check <code>externalId</code> on every row you get back. The PHP SDK does this.</li>
         <li><strong>Apply the tests</strong>Keep the subscriptions that are <code>past_due</code>, <code>payment_failed</code> or overdue.</li>
         <li><strong>Start dunning for a failure status</strong>A <code>past_due</code> subscription reports the failure itself. Do not compare dates: its <code>nextChargeAt</code> is the next retry, not the missed renewal.</li>
         <li><strong>Read the charge history for an overdue one</strong>Call <code>GET /subscriptions/{id}/charges</code>. The newest item comes first.</li>
@@ -293,21 +293,22 @@ gantt
       <p>In production on 6 to 8 October 2026, one subscription was tried three times, about 24 hours apart. Then it became <code>payment_failed</code> with <code>retryCount: 3</code> and <code>nextChargeAt: null</code>. It was not canceled. <span class="badge verified">Verified</span> in production. Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span></p>
       <p>A retry charges the amount that the subscription holds when the retry runs. If you PATCH the amount during the retry window, the next retry uses the new amount. <span class="badge stated">Stated by Plorea</span></p>
       <div class="callout warning">
-        <p class="callout-title">Leaving payment_failed is untested</p>
-        <p>No route out of <code>payment_failed</code> has been tested. Do not assume that any call below returns the subscription to <code>active</code>.</p>
+        <p class="callout-title">No API route leaves payment_failed for billing</p>
+        <p><code>PATCH status: "active"</code> is refused. Cancel works. To bill the customer again, cancel and create a new subscription on the same card. See <a href="subscription-workflows.html#move-the-billing-day">Move the billing day</a>.</p>
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Route</th><th>What we know</th></tr></thead>
           <tbody>
             <tr><td><code>PATCH</code> with a new <code>amount</code> and <code>nextChargeAt</code></td><td>Not tested on a <code>payment_failed</code> subscription. Changing both fields in one update is unverified on any status. Moving <code>nextChargeAt</code> on an <code>active</code> subscription has never produced a charge. <span class="badge unobserved">Unobserved</span></td></tr>
-            <tr><td><code>PATCH status: "active"</code> (resume)</td><td>Verified only from <code>paused</code>. On an <code>active</code> subscription it returns <code>400</code> with <code>allowedTransitions: ["paused"]</code>. Not tested on <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></td></tr>
+            <tr><td><code>PATCH status: "active"</code> (resume)</td><td>On <code>payment_failed</code> it returns <code>400</code> "Cannot change status from payment_failed to active". <span class="badge verified">Verified</span> in production, 12–17 October 2026</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/cancel</code></td><td>Works. The status became <code>canceled</code>, with <code>nextChargeAt</code> and <code>accessEndsAt</code> both <code>null</code>, on a subscription that had never been charged. <span class="badge verified">Verified</span> in production, 2026-10-20. Charges, refunds and webhooks from that cancel: <span class="badge unobserved">Unobserved</span></td></tr>
             <tr><td><code>POST /subscriptions/{id}/reactivate</code></td><td>Verified only from <code>canceled</code>. An <code>active</code> subscription returns <code>400</code> "Only canceled subscriptions can be reactivated". Not tested on <code>payment_failed</code>. <span class="badge unobserved">Unobserved</span></td></tr>
             <tr><td>Plorea resets the retry count by hand</td><td>One reset set the status to <code>active</code> and <code>retryCount</code> to <code>0</code>. It charged the card at once and moved the billing anchor. The API has no call for this reset. <span class="badge verified">Verified</span> in production once</td></tr>
           </tbody>
         </table>
       </div>
-      <p>Until Plorea documents a route, do not build automation that depends on leaving <code>payment_failed</code>. Test each route on one subscription first. Ask Plorea if none works. <span class="badge open">Open question</span></p>
+      <p>Do not build automation on the untested routes above. To restart billing, cancel the subscription and create a new one on the same payment method. Plorea asked for no new consent in test. <span class="badge verified">Verified</span> in test, 2026-10-20</p>
 
       <h2>Collect the missed renewal</h2>
       <p>After the customer adds a new card, you must decide whether to charge now or to wait for Plorea's next retry. The API does not tell you which retry is pending.</p>

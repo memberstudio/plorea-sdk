@@ -220,6 +220,7 @@ await db.memberships.update(456, { ploreaSubscriptionId: subscription.subscripti
       <div class="callout danger">
         <p class="callout-title">Create is not safe to retry</p>
         <p>Plorea has no idempotency key. If a create call times out and you send it again, you can get two subscriptions that both bill the card. Before you retry, list subscriptions by <code>externalId</code> and check if the first call succeeded. <span class="badge verified">Verified</span> for payment links. See <a href="errors.html">Errors and retries</a>.</p>
+              <p>With <code>tenantId</code> set, Plorea ignored the <code>externalId</code> filter and returned the whole tenant: 120 rows, 2 of them a match. Without <code>tenantId</code>, the filter worked. <span class="badge verified">Verified 2026-10-20</span> Reported to Plorea. Check <code>externalId</code> on every row you get back. The PHP SDK does this.</p>
       </div>
 
       <h3>Validation errors</h3>

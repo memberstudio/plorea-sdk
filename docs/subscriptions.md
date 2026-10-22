@@ -99,6 +99,25 @@ $subscription->nextChargeAt;  // exactly $subscription->trialEndsAt
 Nothing is charged until the trial lapses. Gate access on `isTrialing() ||
 isActive()`, never on `isActive()` alone.
 
+### Move the billing day
+
+The API cannot move the billing day of a live subscription. Build a new one:
+
+1. Cancel the old subscription.
+2. Create a new subscription on the same payment method, with `trialUntil()` set to the new billing day.
+3. Store the new subscription id. Replace the old id everywhere you keep it.
+
+The card holder does not consent again. The new subscription reads `trialing`,
+with `nextChargeAt` equal to `trialEndsAt`. The first charge came about 4–5
+minutes after `trialEndsAt` (**Verified** in test, 2026-10-20). The same steps
+gave the same `trialing` read in production on 2026-10-20 (**Verified**; the first
+charge there is not yet seen). After the first charge in test, the status read
+`active`, and `nextChargeAt` and `currentPeriodEnd` both read `trialEndsAt` + one
+interval: the billing day holds, even though the charge came minutes late.
+
+> [!WARNING]
+> Cancel the old subscription first. If you skip that, both subscriptions charge the card.
+
 ## Statuses
 
 | Status | Helper | Meaning |
@@ -122,6 +141,14 @@ $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', tenantId:
 ```
 
 `forExternalId()` returns an `Illuminate\Support\Collection` of `Subscription`.
+
+> [!WARNING]
+> With `tenantId` set, Plorea ignored the `externalId` filter and returned the
+> whole tenant: 120 rows, 2 of them a match (**Verified**, 2026-10-20; reported
+> to Plorea). Without `tenantId` the filter worked. The SDK now drops every row
+> whose `externalId` differs from the one you asked for, so `forExternalId()` and
+> `needingAttention()` stay correct. A row without an `externalId` is kept. If
+> you call the endpoint without the SDK, filter the rows yourself.
 
 ## Update
 
@@ -242,6 +269,14 @@ $cancellation->accessEndsAt;  // end of the period already paid for
 Cancelling clears `nextChargeAt` and sets `accessEndsAt` to one billing
 interval after the **last charge**. Gate access on `accessEndsAt`, not on
 `canceledAt`.
+
+The last charge is the time the card was actually charged, not the date you
+planned. After a trial, the first charge came about 4 minutes after
+`trialEndsAt`. A cancel then gave `accessEndsAt` = that charge time + one
+interval, not `trialEndsAt` + one interval (**Verified** in test, 2026-10-20).
+So `accessEndsAt` can be a few minutes later than the `currentPeriodEnd` and
+`nextChargeAt` the subscription showed before the cancel. Store your own
+period end if the exact minute matters.
 
 > [!IMPORTANT]
 > Cancelling during a **trial** returns `accessEndsAt: null` — it is derived
@@ -391,7 +426,16 @@ Read this before building retry logic.
   not confirmed this as a fixed policy (**Open question**).
 - A retry charges the amount the subscription holds when the retry runs
   (**Stated by Plorea**, 9 October).
-- Leaving `payment_failed` is **untested** by every route. `PATCH` with
+- No API route takes a subscription from `payment_failed` back to billing.
+  `PATCH` with `status: active` gives 400 "Cannot change status from
+  payment_failed to active" (**Verified** in production, 12–17 October 2026).
+  `cancel()` works: the status went to `canceled`, with `nextChargeAt` null and
+  `accessEndsAt` null on a subscription that had never been charged
+  (**Verified** in production, 2026-10-20). Charges, refunds and webhooks from
+  that cancel are **unobserved**. To bill the customer again, cancel and create a
+  new subscription on the same payment method (see
+  [Move the billing day](#move-the-billing-day)).
+- Other routes out of `payment_failed` are **untested**. `PATCH` with
   `amount` and `nextChargeAt` was not tried. `resume()` is verified only from
   `paused` (an `active` one gives 400, `allowedTransitions: ["paused"]`).
   `reactivate()` is verified only from `canceled` (400 "Only canceled

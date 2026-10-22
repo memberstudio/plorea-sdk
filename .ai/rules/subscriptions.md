@@ -204,8 +204,14 @@ attempts about 24 hours apart (`retryCount` 3, `nextChargeAt` null), not
 `canceled`. The slot drifts ~5 min each time; `lastChargeAt` does not move on
 a retry; each charge item's `retryNumber` is 0, 1, 2 and the webhooks carry
 `retryCount` 1, 2, 3. That is observed, not confirmed by Plorea as a fixed policy. A retry
-charges the amount held when it runs (Stated by Plorea, 9 October). Leaving
-`payment_failed` is **untested** by every route: PATCH `amount` + `nextChargeAt`;
+charges the amount held when it runs (Stated by Plorea, 9 October). PATCH
+`status: active` on `payment_failed` → 400 "Cannot change status from
+payment_failed to active" (VERIFIED in production, Sentry 12–17 October).
+`cancel()` on `payment_failed` → `canceled`, `nextChargeAt` and `accessEndsAt`
+null when never charged (VERIFIED in production 2026-10-20; charge, refund and
+webhook side effects UNOBSERVED). The way back to billing is cancel + create a
+new subscription on the same payment method with a trial to the wanted day
+(see "Moving the billing day" below). Other ways out are **untested**: PATCH `amount` + `nextChargeAt`;
 `resume()` (verified only paused → active; an active one gives 400,
 `allowedTransitions: ["paused"]`); `reactivate()` (verified only from canceled,
 400 "Only canceled subscriptions can be reactivated"). Plorea's manual retry
@@ -226,6 +232,25 @@ helper exists to find.
 
 It says *which* subscriptions to look at, never *why*. Read `charges()` for
 that — `SubscriptionCharge::isAuthorised()` is the predicate.
+
+## Moving the billing day — VERIFIED in test 2026-10-20
+
+No call moves the billing day. Cancel the old subscription, then create a new
+one on the same payment method with `trialEndsAt` = the wanted day. No new
+consent. New id: the integrator must relink. First charge 4m49s after
+`trialEndsAt`; after it `nextChargeAt` = `currentPeriodEnd` = `trialEndsAt` +
+interval (the anchor holds). A later cancel gave `accessEndsAt` = **actual charge
+time** + interval, not anchor + interval. Production 2026-10-20: the new
+subscription read `trialing`, `nextChargeAt` = `trialEndsAt`; its first charge
+is UNOBSERVED. Do not quote the ids in the repo.
+
+## `externalId` filter ignored with `tenantId` — VERIFIED 2026-10-20
+
+`GET subscriptions?externalId=X&tenantId=Y` returned the whole tenant (120 rows,
+2 matches). Without `tenantId` the filter works. `forExternalId()` drops rows
+whose `externalId` differs and keeps rows without one; `needingAttention()`
+goes through it. **Do not remove that filter** when Plorea fixes the bug: it
+costs nothing and a regression would bill-flag other customers.
 
 ## Neither list endpoint has been seen to paginate — OPEN, probed 2026-09-10
 

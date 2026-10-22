@@ -119,6 +119,12 @@ class SubscriptionResource extends Resource
      * against one external id, verify the count against your own records
      * before trusting this to be exhaustive.
      *
+     * Rows whose externalId differs from the one asked for are dropped.
+     * With tenantId set, Plorea ignored the externalId filter and returned
+     * the whole tenant: 120 rows, 2 of them a match (seen 2026-10-20,
+     * reported to Plorea). A row without an externalId is kept, because the
+     * filter cannot be checked on it.
+     *
      * @return Collection<int, Subscription>
      */
     public function forExternalId(string $externalId, ?string $tenantId = null, ?string $status = null): Collection
@@ -134,6 +140,7 @@ class SubscriptionResource extends Resource
         return new Collection($items)
             ->filter(fn (mixed $item): bool => is_array($item))
             ->map(fn (array $item): Subscription => Subscription::fromArray($item))
+            ->reject(fn (Subscription $subscription): bool => $subscription->externalId !== null && $subscription->externalId !== $externalId)
             ->values();
     }
 

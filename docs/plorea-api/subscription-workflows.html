@@ -62,6 +62,7 @@
             <tr><td>Charge for an extra item once</td><td><a href="#charge-a-one-off-extra">Charge a one-off extra</a></td></tr>
             <tr><td>End a subscription</td><td><a href="#cancel-and-keep-access-to-period-end">Cancel and keep access to period end</a></td></tr>
             <tr><td>Undo a cancellation</td><td><a href="#reactivate-a-canceled-subscription">Reactivate a canceled subscription</a></td></tr>
+            <tr><td>Bill on another day, or restart after <code>payment_failed</code></td><td><a href="#move-the-billing-day">Move the billing day</a></td></tr>
             <tr><td>React when a renewal fails</td><td><a href="dunning.html">Failed charges and dunning</a></td></tr>
           </tbody>
         </table>
@@ -1120,7 +1121,7 @@ stateDiagram-v2
 
       <ol class="steps">
         <li><strong>Cancel</strong>Call <code>POST /subscriptions/{id}/cancel</code> with a <code>reason</code>. The scheduler stops at once.</li>
-        <li><strong>Store <code>accessEndsAt</code></strong>It equals the last charge + one interval. <span class="badge verified">Verified</span></li>
+        <li><strong>Store <code>accessEndsAt</code></strong>It equals the last charge + one interval. The last charge is the time the card was charged, which can be minutes after the planned day. <span class="badge verified">Verified</span></li>
         <li><strong>Treat <code>null</code> as "now"</strong>A cancel during a trial returns <code>accessEndsAt: null</code>. <span class="badge verified">Verified</span></li>
         <li><strong>Remove access when the date passes</strong>Run your own job. Plorea sends no webhook for cancel or for the end of access. <span class="badge stated">Stated by Plorea</span></li>
       </ol>
@@ -1215,6 +1216,29 @@ if (res.status === 400) {
         <p>Before September 2026, reactivate charged the card unconditionally. A customer could pay twice for a period they had already paid. Plorea fixed this. The fix is verified in test. Production is unobserved, so keep a guard: if <code>accessEndsAt</code> is still in the future, the customer may not need a reactivate. <span class="badge verified">Verified</span></p>
       </div>
 
+      <h2 id="move-the-billing-day">Move the billing day</h2>
+      <p><strong>Use this when</strong> the customer must be billed on another day, or a subscription is stuck in <code>payment_failed</code>. No call moves the billing day of a live subscription, and no call takes <code>payment_failed</code> back to <code>active</code>.</p>
+      <div class="callout warning">
+        <p class="callout-title">Cancel first</p>
+        <p>If the old subscription stays live, both subscriptions charge the card.</p>
+      </div>
+      <ol class="steps">
+        <li><strong>Cancel the old subscription</strong>Call <code>POST /subscriptions/{id}/cancel</code>.</li>
+        <li><strong>Create a new subscription</strong>Use the same payment method. Set <code>trialEndsAt</code> to the new billing day. Plorea asked for no new consent. <span class="badge verified">Verified</span> in test, 2026-10-20</li>
+        <li><strong>Relink</strong>The new subscription has a new ID. Replace the old ID everywhere you store it.</li>
+        <li><strong>Confirm the first charge</strong>It came 4 minutes 49 seconds after <code>trialEndsAt</code> in test. After it, <code>nextChargeAt</code> and <code>currentPeriodEnd</code> both read <code>trialEndsAt</code> + one interval. <span class="badge verified">Verified</span> in test, 2026-10-20. In production the new subscription read <code>trialing</code>; its first charge is not yet seen.</li>
+      </ol>
+      <pre data-title="PHP SDK"><code class="lang-php">Plorea::subscriptions()-&gt;cancel('sub_test_acme_001', 'billing_day_moved');
+
+$subscription = Plorea::subscriptions()
+    -&gt;create('pm_test_acme_001', Amount::nok(39900), BillingInterval::monthly())
+    -&gt;externalId('member-1001')
+    -&gt;trialUntil(CarbonImmutable::parse('2026-12-01T00:00:00+00:00'))
+    -&gt;save();
+
+$member-&gt;update(['plorea_subscription_id' =&gt; $subscription-&gt;id]);</code></pre>
+
+      <!-- ================================================================ -->
       <h2>Summary of gaps</h2>
       <div class="table-wrap">
         <table>
@@ -1223,6 +1247,7 @@ if (res.status === 400) {
             <tr><td>Pause / freeze</td><td>Proof that a resumed subscription, or any active one with a moved <code>nextChargeAt</code>, is charged. None was seen in test. <span class="badge open">Open question</span></td><td>Native pause; cancel + new subscription with trial as a fallback</td></tr>
             <tr><td>Upgrade</td><td>Proration <span class="badge proposal">Proposal</span></td><td>Self-computed manual charge + PATCH</td></tr>
             <tr><td>Downgrade with refund</td><td>Refund of a scheduled charge failed through the API. Portal only. <span class="badge verified">Verified</span></td><td>Downgrade at period end</td></tr>
+            <tr><td>Billing day, or restart after <code>payment_failed</code></td><td>A call that moves the billing day, or takes <code>payment_failed</code> back to <code>active</code>. <span class="badge verified">Verified</span> missing</td><td><a href="#move-the-billing-day">Cancel + new subscription with trial</a></td></tr>
             <tr><td>Interval change</td><td><code>interval</code> on PATCH <span class="badge proposal">Proposal</span></td><td>Cancel + new subscription with trial</td></tr>
             <tr><td>Price change</td><td>Effective date on PATCH <span class="badge proposal">Proposal</span></td><td>Time the PATCH yourself</td></tr>
             <tr><td>Any change</td><td>Webhooks for cancel, reactivate, pause and resume <span class="badge proposal">Proposal</span></td><td>Poll and keep your own state</td></tr>

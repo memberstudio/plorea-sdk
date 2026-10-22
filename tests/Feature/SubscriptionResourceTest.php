@@ -290,6 +290,34 @@ class SubscriptionResourceTest extends TestCase
     }
 
     /**
+     * With tenantId set, Plorea ignored the externalId filter and returned
+     * the whole tenant: 120 rows, 2 of them a match (seen 2026-10-20). The
+     * shape here is constructed, not captured. It pins only that a row for
+     * another externalId never comes back, and that a row without one is kept.
+     * needingAttention() goes through the same list, so it must not flag
+     * another customer's subscription.
+     */
+    public function test_it_drops_rows_for_another_external_id_when_plorea_ignores_the_filter(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions?*' => Http::response([
+                'tenantId' => 'other-tenant',
+                'count' => 3,
+                'items' => [
+                    ['subscriptionId' => 'sub_mine', 'externalId' => 'ws_acme_456', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_other', 'externalId' => 'ws_other_789', 'status' => 'payment_failed'],
+                    ['subscriptionId' => 'sub_unlabelled', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                ],
+            ]),
+        ]);
+
+        $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', tenantId: 'other-tenant');
+
+        $this->assertSame(['sub_mine', 'sub_unlabelled'], $subscriptions->pluck('id')->all());
+        $this->assertCount(0, Plorea::subscriptions()->needingAttention('ws_acme_456', tenantId: 'other-tenant'));
+    }
+
+    /**
      * The polling half of dunning. Webhooks are never redelivered, so the
      * helper catches the past_due status Plorea reports
      * while retrying (captured 2026-10-01), the documented-but-never-observed
