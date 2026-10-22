@@ -274,8 +274,8 @@ class SubscriptionResourceTest extends TestCase
                 'externalId' => 'ws_acme_456',
                 'count' => 2,
                 'items' => [
-                    ['subscriptionId' => 'sub_1', 'status' => 'active'],
-                    ['subscriptionId' => 'sub_2', 'status' => 'canceled'],
+                    ['subscriptionId' => 'sub_1', 'externalId' => 'ws_acme_456', 'status' => 'active'],
+                    ['subscriptionId' => 'sub_2', 'externalId' => 'ws_acme_456', 'status' => 'canceled'],
                 ],
             ]),
         ]);
@@ -287,6 +287,36 @@ class SubscriptionResourceTest extends TestCase
         $this->assertSame('sub_1', $subscriptions[0]->id);
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://payments.plorea.no/subscriptions?externalId=ws_acme_456&status=active&platform=memberflow');
+    }
+
+    /**
+     * With tenantId set, Plorea ignored the externalId filter and returned
+     * the whole tenant: 120 rows, 2 of them a match (seen 2026-10-20). The
+     * shape here is constructed, not captured. It pins that only an exact
+     * externalId match comes back: a row for another id, a row without one
+     * and a row with a non-string one are all dropped. needingAttention()
+     * goes through the same list, so it must not flag any of them.
+     */
+    public function test_it_drops_rows_for_another_external_id_when_plorea_ignores_the_filter(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions?*' => Http::response([
+                'tenantId' => 'other-tenant',
+                'count' => 5,
+                'items' => [
+                    ['subscriptionId' => 'sub_mine', 'externalId' => 'ws_acme_456', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_other', 'externalId' => 'ws_other_789', 'status' => 'payment_failed'],
+                    ['subscriptionId' => 'sub_unlabelled', 'status' => 'payment_failed'],
+                    ['subscriptionId' => 'sub_null', 'externalId' => null, 'status' => 'past_due'],
+                    ['subscriptionId' => 'sub_numeric', 'externalId' => 1002, 'status' => 'payment_failed'],
+                ],
+            ]),
+        ]);
+
+        $subscriptions = Plorea::subscriptions()->forExternalId('ws_acme_456', tenantId: 'other-tenant');
+
+        $this->assertSame(['sub_mine'], $subscriptions->pluck('id')->all());
+        $this->assertCount(0, Plorea::subscriptions()->needingAttention('ws_acme_456', tenantId: 'other-tenant'));
     }
 
     /**
@@ -304,16 +334,16 @@ class SubscriptionResourceTest extends TestCase
                 'count' => 5,
                 'items' => [
                     // Healthy: the scheduler has already moved the date on.
-                    ['subscriptionId' => 'sub_ok', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_ok', 'externalId' => 'ws_acme_456', 'status' => 'active', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
                     // A failed charge being retried: the date has moved to the
                     // retry, so only the status gives it away.
-                    ['subscriptionId' => 'sub_past_due', 'status' => 'past_due', 'retryCount' => 1, 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_past_due', 'externalId' => 'ws_acme_456', 'status' => 'past_due', 'retryCount' => 1, 'nextChargeAt' => '2099-01-01T00:00:00Z'],
                     // The documented failure status.
-                    ['subscriptionId' => 'sub_failed', 'status' => 'payment_failed', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_failed', 'externalId' => 'ws_acme_456', 'status' => 'payment_failed', 'nextChargeAt' => '2099-01-01T00:00:00Z'],
                     // Still active, but the charge that was due never landed.
-                    ['subscriptionId' => 'sub_stuck', 'status' => 'active', 'nextChargeAt' => '2020-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_stuck', 'externalId' => 'ws_acme_456', 'status' => 'active', 'nextChargeAt' => '2020-01-01T00:00:00Z'],
                     // Canceled subscriptions keep a stale date and are not overdue.
-                    ['subscriptionId' => 'sub_canceled', 'status' => 'canceled', 'nextChargeAt' => '2020-01-01T00:00:00Z'],
+                    ['subscriptionId' => 'sub_canceled', 'externalId' => 'ws_acme_456', 'status' => 'canceled', 'nextChargeAt' => '2020-01-01T00:00:00Z'],
                 ],
             ]),
         ]);

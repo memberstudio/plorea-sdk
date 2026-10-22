@@ -52,6 +52,8 @@
             <tr><td>20</td><td><a href="#delete-covers-the-stored-card">Delete covers the stored card</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge stated">In test 2026-10-14</span></td></tr>
             <tr><td>21</td><td><a href="#next-charge-date-on-reactivate">Next charge date on reactivate</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>22</td><td><a href="#paid-link-second-payment-and-refund-target">Second payment on a paid link and the refund target</a></td><td>Payments</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>23</td><td><a href="#external-id-filter-with-tenant-id">externalId filter with tenantId</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Reported 2026-10-20</span></td></tr>
+            <tr><td>24</td><td><a href="#move-the-billing-day-and-restart-billing">Move the billing day and restart billing</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -130,7 +132,7 @@ Idempotent-Replayed: true</code></pre>
       <ul>
         <li>The event is not in Plorea's webhook catalogue.</li>
         <li>It is unknown if the event fires on each retry or only on the first. <span class="badge unobserved">Unobserved</span></li>
-        <li>After three failed attempts, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> How to leave <code>payment_failed</code> is untested, and the API has no call for the reset Plorea did by hand. <span class="badge unobserved">Unobserved</span></li>
+        <li>After three failed attempts, one production subscription became <code>payment_failed</code>, not <code>canceled</code> (6 to 8 October 2026). Plorea has not confirmed this as a fixed policy. <span class="badge open">Open question</span> <code>PATCH status: "active"</code> on <code>payment_failed</code> is refused with <code>400</code>, and the API has no call for the reset Plorea did by hand. <span class="badge verified">Verified 2026-10-20</span> See <a href="#move-the-billing-day-and-restart-billing">item 24</a>.</li>
         <li>No event was seen for a real decline. The payload has no <code>nextChargeAt</code>, no <code>pspReference</code> and no refusal category.</li>
         <li>A failed delivery is not redelivered, so integrators must still poll. See <a href="#webhook-redelivery-and-replay">item 3</a>.</li>
       </ul>
@@ -297,6 +299,15 @@ Idempotent-Replayed: true</code></pre>
         <li><strong>Native 3-D Secure.</strong> <span class="badge stated">Promised by Plorea</span> Request native 3DS2 on iOS and Android sessions.</li>
         <li><strong>KYC visibility.</strong> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link.</li>
       </ul>
+      <h3 id="external-id-filter-with-tenant-id">23. <code>externalId</code> filter with <code>tenantId</code></h3>
+      <p><span class="badge verified">Verified 2026-10-20</span> <code>GET /subscriptions?externalId=…&amp;tenantId=…</code> returned the whole tenant: 120 rows, 2 a match. Without <code>tenantId</code>, the filter worked.</p>
+      <p><strong>Impact.</strong> An integrator that trusts the filter reads other customers' subscriptions as its own. A dunning job then flags, or cancels, the wrong customer.</p>
+      <p><strong>Proposal.</strong> Apply every filter given. Return <code>400</code> for a filter the endpoint does not support.</p>
+
+      <h3 id="move-the-billing-day-and-restart-billing">24. Move the billing day and restart billing</h3>
+      <p><span class="badge verified">Verified 2026-10-20</span> No verified call moves the billing day of a live subscription. <code>PATCH status: "active"</code> on <code>payment_failed</code> returns <code>400</code>. The workaround is to cancel and create a new subscription on the same card, with a trial to the wanted day. It works, but the subscription ID changes and the charge history is split in two.</p>
+      <p><strong>Proposal.</strong> Accept <code>nextChargeAt</code> on <code>PATCH</code> as the new billing anchor on <code>active</code> subscriptions. Allow <code>payment_failed</code> → <code>active</code> with a <code>nextChargeAt</code>, without an immediate charge.</p>
+
     </article>
   </main>
   <aside id="toc" class="toc" aria-label="On this page"></aside>

@@ -77,6 +77,10 @@ $membership->update(['plorea_subscription_id' => $subscription->id]);
 $existing = Plorea::subscriptions()->forExternalId((string) $membership->id)->first();
 ```
 
+  `forExternalId()` drops rows for another `externalId`: with `tenantId` set,
+  Plorea ignored the filter and returned the whole tenant (2026-10-20). Calling
+  the endpoint yourself? Filter the rows on `externalId` too.
+
   Keep `PLOREA_RETRY_TIMES=0` for this call. Whether Plorea de-duplicates on
   `externalId` is unobserved, so do not rely on it.
 
@@ -137,6 +141,14 @@ with an offset such as `+02:00` was charged late; Plorea now returns UTC dates
 and rejects a date without an offset with 400. Read `nextChargeAt` back after
 the trial charge; do not compute the next period from `trialEndsAt`.
 
+**Moving the billing day** has no verified API call. Cancel the old subscription, then
+create a new one on the same payment method with `trialUntil()` = the new day,
+on or after the old `accessEndsAt` (an earlier day charges the overlap twice).
+Copy every field from the old one: `tenant()`, `retryPolicy`, metadata and `merchant()` included.
+No new consent is needed. The new subscription has a new id: store it in place
+of the old one. Verified in test 2026-10-20: the first charge came about 5
+minutes after the trial end, and `nextChargeAt` then kept the chosen day.
+
 ## 4. Reconciliation: the only way to see a failure
 
 Nothing is emitted for a **failed** scheduled charge, a cancel, a reactivate or
@@ -158,8 +170,12 @@ apart; not confirmed by Plorea as a fixed policy) **or** whose `nextChargeAt` is
 than an hour past (`graceMinutes:` to tune). A failed scheduled charge turns
 the subscription `past_due` (`isPastDue()`): `retryCount` counts the failures,
 `failureReason` holds the provider's message, and `nextChargeAt` moves to the
-retry, so it is not overdue. Do not branch on a failure reason. Leaving
-`payment_failed` is untested by every route: PATCH `amount` + `nextChargeAt`,
+retry, so it is not overdue. Do not branch on a failure reason. No verified API
+route takes `payment_failed` back to billing: PATCH `status: active` answers 400
+"Cannot change status from payment_failed to active". `cancel()` works (status
+`canceled`, `accessEndsAt` null if never charged); then create a new
+subscription on the same payment method (see "Moving the billing day"). Other
+ways out are untested: PATCH `amount` + `nextChargeAt`,
 `resume()` (verified only from `paused`) and `reactivate()` (verified only from
 `canceled`). Plorea's manual reset charged at once and moved the billing anchor,
 and has no API. A retry charges the amount held when it runs (stated by
@@ -211,7 +227,8 @@ $cancellation = Plorea::subscriptions()->cancel($id, 'customer_requested');
 $endsAt = $cancellation->accessEndsAt ?? now();
 ```
 
-`accessEndsAt` is one interval after the last charge; gate on it, not on
+`accessEndsAt` is one interval after the last charge, timed from when the card
+was actually charged (minutes after the planned day); gate on it, not on
 `canceledAt`. **It is null when a trial is cancelled** — that means access ends
 now, not never. A binding period is your app's rule: Plorea cancels when asked,
 so refuse or defer the call yourself.

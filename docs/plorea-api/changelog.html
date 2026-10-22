@@ -31,6 +31,10 @@
 
       <h3 id="2026-10-20">2026-10-20</h3>
       <ul>
+        <li><strong>The <code>externalId</code> filter is ignored with <code>tenantId</code>.</strong> The list returned the whole tenant: 120 rows, 2 a match. <span class="badge verified">Verified</span> Reported to Plorea. <strong>SDK:</strong> <code>forExternalId()</code> drops rows for another <code>externalId</code>, so <code>needingAttention()</code> is correct again.</li>
+        <li><strong>Move the billing day: cancel and create again.</strong> A new subscription on the same payment method needs no new consent, and the billing day held after the first charge. <span class="badge verified">Verified</span> in test. See <a href="subscription-workflows.html#move-the-billing-day">Move the billing day</a>.</li>
+        <li><strong><code>accessEndsAt</code> counts from the charge time,</strong> not from the planned billing day. <span class="badge verified">Verified</span> in test.</li>
+        <li><strong>Cancel works on <code>payment_failed</code>;</strong> <code>PATCH status: "active"</code> is refused with <code>400</code>. <span class="badge verified">Verified</span> in production.</li>
         <li><strong>The late trial-end charge is explained and fixed.</strong> Create stored <code>trialEndsAt</code> as sent, with its offset, and the scheduler compared that text against UTC. A minimum wait of 15 minutes after create also applied. Plorea fixed create; <code>PATCH</code> was already correct. The scheduler now validates the format. <span class="badge stated">Stated by Plorea 2026-10-20</span> See <a href="subscriptions.html#trials">Trials</a>.</li>
         <li><strong>All dates come back in UTC</strong>, for example <code>2026-10-19T12:02:42.000Z</code>. A date without an offset gets <code>400</code>. A date that does not exist, such as 30 February, gets <code>400</code>. <span class="badge stated">Stated by Plorea 2026-10-20</span></li>
         <li><strong>In production</strong>, trials ending on 1 and 15 January 2027 would have been charged one hour late. Plorea corrected them. Nothing was charged wrong. <span class="badge stated">Stated by Plorea 2026-10-20</span></li>

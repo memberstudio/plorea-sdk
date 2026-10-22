@@ -418,7 +418,7 @@ stateDiagram-v2
   past_due --> past_due: retry fails
   past_due --> payment_failed: last attempt fails
         </pre>
-        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. After three failed attempts in total, production showed <code>payment_failed</code>. Plorea has not confirmed this as a fixed policy. No arrow leaves <code>payment_failed</code>, because every way out is untested. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. Resume is verified only from <code>paused</code>.</figcaption>
+        <figcaption>Subscription states. <code>past_due</code> was seen in production. Test cannot produce it. After three failed attempts in total, production showed <code>payment_failed</code>. Plorea has not confirmed this as a fixed policy. The only verified arrow out of <code>payment_failed</code> is cancel. <code>PATCH status: "active"</code> is refused. A <code>trialing</code> subscription cannot be paused. Reactivate works only from <code>canceled</code>. Resume is verified only from <code>paused</code>.</figcaption>
       </figure>
 
       <h3>Interval units</h3>
