@@ -23,6 +23,7 @@ environment, and what has not.
 | [Testing](testing.md) | `Plorea::fake()`, stubs, assertions, the default fixtures |
 | [Error handling](errors.md) | The exception hierarchy, HTTP status mapping, retry and idempotency |
 | [Request logging](request-logging.md) | `RequestSent` / `ResponseReceived`, building an audit trail |
+| [MCP server](mcp.md) | The read-only MCP server for coding agents: setup check and field notes |
 
 ## Reference
 

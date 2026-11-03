@@ -1,0 +1,138 @@
+[
+    {
+        "id": "environment-mismatch",
+        "title": "A 401 or 403 that is not about the API key",
+        "triggers": ["401", "403", "AuthenticationException", "X-Environment", "PLOREA_ENVIRONMENT", "plr_live_", "plr_test_", "environment", "forbidden", "unauthorized"],
+        "evidence": "Stated by Plorea 2026-10-13; the cross-environment 404 observed in production the same day",
+        "note": "Since 2026-10-13 the API key sets the environment (plr_test_ or plr_live_). An X-Environment header that does not match the key returns 403 (AuthenticationException). A live key with PLOREA_ENVIRONMENT unset sends \"test\" and gets 403 on every call. Check the variable before you rotate the key. Run check-setup: it compares the key prefix with the environment.",
+        "source": {"file": "docs/errors.md", "heading": "A 401 or 403 that is not about the API key"}
+    },
+    {
+        "id": "not-found",
+        "title": "404: unknown reference, or an id from the other environment",
+        "triggers": ["404", "NotFoundException", "not found", "status", "reference"],
+        "evidence": "VERIFIED (open link 200, unknown reference 404); cross-environment 404 observed in production 2026-10-13",
+        "note": "payments/status answers 200 for an open, never-paid link. Only a reference Plorea does not know answers 404. An id created in the other environment (test vs live) also answers 404. Treat NotFoundException as a normal answer to \"does this exist?\", not as an outage.",
+        "source": {"file": "docs/errors.md", "heading": "Not found"}
+    },
+    {
+        "id": "400-vs-402",
+        "title": "400 and 402 on a subscription charge mean different things",
+        "triggers": ["400", "402", "ChargeFailedException", "ValidationException", "charge", "declined", "not chargeable"],
+        "evidence": "VERIFIED 2026-09-04",
+        "note": "402 (ChargeFailedException) is a card decline and nothing else: start dunning, the subscription is fine. 400 (ValidationException) means the subscription is not chargeable at all: it is cancelled, or its payment method is not active. Your app sent a request it should not have.",
+        "source": {"file": "docs/errors.md", "heading": "400 vs 402 — a real distinction"}
+    },
+    {
+        "id": "validation-templates",
+        "title": "Validation messages are static templates",
+        "triggers": ["400", "ValidationException", "validation", "required fields", "message"],
+        "evidence": "VERIFIED 2026-09-09",
+        "note": "A request that misses two required fields answers with a list of all five. Log the message and show it to a developer. Never parse it, and never show it to a customer as a list of what to fix.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Validation messages are static templates — 2026-09-09"}
+    },
+    {
+        "id": "next-charge-in-paid-period",
+        "title": "409 with paidUntil on a subscription update",
+        "triggers": ["409", "NextChargeInPaidPeriodException", "paidUntil", "nextChargeAt", "allowEarlyCharge", "conflict"],
+        "evidence": "Stated by Plorea 2026-10-14",
+        "note": "A subscription update whose new nextChargeAt is inside a paid period answers 409 with paidUntil. The SDK throws NextChargeInPaidPeriodException; paidUntil() returns the period end. Send allowEarlyCharge() to charge anyway. A 409 without paidUntil is a plain RequestException.",
+        "source": {"file": "docs/errors.md", "heading": "Error handling"}
+    },
+    {
+        "id": "retries-and-idempotency",
+        "title": "Retries can bill twice",
+        "triggers": ["PLOREA_RETRY_TIMES", "retry", "idempotency", "idempotent", "timeout", "5xx", "500", "502", "503", "ServerException", "ConnectionException", "duplicate"],
+        "evidence": "VERIFIED (duplicate references create two live links)",
+        "note": "POST payments/link, subscription creation and subscriptions()->charge() have no idempotency. A retry can create a second live link or a second charge. Keep PLOREA_RETRY_TIMES=0, use firstOrCreate() for payment links, and reconcile by reading state back. A timeout is not a failure: it is an unknown, so re-read state before you decide. refund() and cancel() are safe to retry with the same modificationReference.",
+        "source": {"file": "docs/errors.md", "heading": "Retries and idempotency"}
+    },
+    {
+        "id": "already-paid",
+        "title": "firstOrCreate() refuses a reference that is already paid",
+        "triggers": ["PaymentAlreadyPaidException", "firstOrCreate", "already paid", "paid twice"],
+        "evidence": "SDK guard",
+        "note": "firstOrCreate() throws PaymentAlreadyPaidException when the reference is already paid. $e->status holds the settled PaymentStatus. The SDK refuses on purpose: a fresh link for a settled invoice makes it payable twice.",
+        "source": {"file": "docs/errors.md", "heading": "Already paid"}
+    },
+    {
+        "id": "refused-is-failed",
+        "title": "A refused payment reports \"failed\", never \"refused\"",
+        "triggers": ["failed", "refused", "payment.failed", "declined", "webhookSuccess", "AUTHORISATION", "refusalReason"],
+        "evidence": "VERIFIED 2026-09-09",
+        "note": "A declined payment reads status \"failed\" with webhookEventCode AUTHORISATION and webhookSuccess false. The string \"refused\" never appears, so $status->is('refused') is dead code. The webhook type is payment.failed, never payment.refused. Status bodies seen since 2026-10-06 also carry refusalReason; read it from $status->raw.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ A refused payment reports `failed`, not `refused` — 2026-09-09"}
+    },
+    {
+        "id": "expired-never-reported",
+        "title": "\"expired\" is never reported: links stay open",
+        "triggers": ["expired", "expiresAt", "open", "isOpen"],
+        "evidence": "VERIFIED",
+        "note": "A link past its expiry keeps reporting an open status. Judge expiry from the expiresAt returned at creation, or from the pay page's computed expired flag. The status string will not tell you.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ `expired` is never reported — links stay \"open\" forever"}
+    },
+    {
+        "id": "refunds-settle-slowly",
+        "title": "Refunds and cancellations settle in hours, not minutes",
+        "triggers": ["refund", "refund_requested", "cancel_requested", "refunded", "cancelled", "payment.refunded", "refundPspReference", "polling"],
+        "evidence": "VERIFIED 2026-09-09 (more than 11 hours in test); final statuses stated by Plorea 2026-09-21; subscription-charge refunds VERIFIED 2026-10-19 (test)",
+        "note": "Payment links: refund_requested and cancel_requested mean accepted. They can last more than 11 hours. Poll on a scale of hours, or wait for the webhook. Never tell a customer a refund failed, and never reverse it in your books, on a timeout alone. A payment link has no per-refund status field: persist the Refund DTO, because refundPspReference exists only on the refund response. Subscription charges are different (verified 2026-10-19, test): status() on the {subscriptionId}-{chargeId} reference returns a refunds list with a status and settledAt per refund, and no payment.refunded webhook arrived, so poll status(). Never cancel a charged subscription charge: refund it.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Refunds and cancellations settle asynchronously"}
+    },
+    {
+        "id": "webhooks-not-redelivered",
+        "title": "Plorea never redelivers a failed webhook",
+        "triggers": ["webhook", "redeliver", "redelivery", "500", "missing webhook", "lost event", "backstop"],
+        "evidence": "Stated by Plorea 2026-09-21",
+        "note": "A delivery that fails is not sent again, so answering 500 loses the event. Store each delivery before you process it, queue the work, and answer fast. Run a scheduled backstop that re-reads open payments, pending card setups and subscriptions()->needingAttention(): card setup, cancel and reactivate emit no webhook at all.",
+        "source": {"file": "docs/webhooks.md", "heading": "Responses and retries"}
+    },
+    {
+        "id": "webhook-signature",
+        "title": "The webhook signature covers the raw body only",
+        "triggers": ["signature", "x-plorea-signature", "x-plorea-event-id", "eventId", "HMAC", "webhook 403", "AuthenticateWebhook", "PLOREA_WEBHOOK_SECRET", "deduplicate"],
+        "evidence": "VERIFIED end to end 2026-09-09",
+        "note": "x-plorea-signature is base64(HMAC-SHA256(secret, raw body)). The headers sit outside the signature, so deduplicate on $event->eventId, which the SDK reads from the signed body. A middleware that re-encodes the body before AuthenticateWebhook breaks the HMAC while the payload still looks valid. The signing secret is not the API key and not the tenant id.",
+        "source": {"file": "docs/webhooks.md", "heading": "Authentication"}
+    },
+    {
+        "id": "past-due",
+        "title": "A failed scheduled charge: past_due is not overdue",
+        "triggers": ["past_due", "subscription.charge_failed", "retryCount", "failureReason", "needingAttention", "dunning"],
+        "evidence": "VERIFIED in production 2026-10-01",
+        "note": "After a failed scheduled charge the subscription reads past_due, retryCount 1 and a failureReason. nextChargeAt moves to the failure time plus retryIntervalDays, so a past_due subscription does not look overdue. needingAttention() checks the status as well as the date. One subscription.charge_failed is sent per attempt.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ A failed scheduled charge: `past_due` — captured 2026-10-01 (production)"}
+    },
+    {
+        "id": "payment-failed",
+        "title": "After the last retry: payment_failed, not canceled",
+        "triggers": ["payment_failed", "retries exhausted", "nextChargeAt null", "Cannot change status from payment_failed"],
+        "evidence": "VERIFIED in production 2026-10-06 to 2026-10-08; the transitions out are mostly untested",
+        "note": "After three failed attempts about 24 hours apart, the subscription reads payment_failed, retryCount 3 and nextChargeAt null. It is not canceled. PATCH with status active answers 400. cancel() works. The verified way back to billing is a new subscription on the same payment method. charges() is not reliably newest first: sort by createdAt.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ After the last retry: `payment_failed` — 2026-10-06 to 2026-10-08 (production)"}
+    },
+    {
+        "id": "payment-method-failed",
+        "title": "A failed card setup is terminal, and failureReason is null",
+        "triggers": ["pending_setup", "failed", "payment method", "failureReason", "card setup", "storedPaymentMethodId"],
+        "evidence": "VERIFIED 2026-09-04 and 2026-09-09",
+        "note": "A payment method goes pending_setup, then active or failed. failed is terminal: no card was stored and no retry of that method can succeed. failureReason is null even for a genuine refusal, so branch on status alone.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Statuses: `pending_setup` → `active` | `failed` — 2026-09-04"}
+    },
+    {
+        "id": "payment-method-in-use",
+        "title": "A payment method in use cannot be deleted",
+        "triggers": ["PaymentMethodInUseException", "delete", "activeSubscriptionIds", "in use"],
+        "evidence": "VERIFIED 2026-10-06 (test)",
+        "note": "paymentMethods()->delete() answers 400 while subscriptions still use the method. The SDK throws PaymentMethodInUseException, which extends ValidationException; activeSubscriptionIds() lists the subscriptions that block it.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Delete — captured 2026-10-06 (test)"}
+    },
+    {
+        "id": "amounts-minor-units",
+        "title": "Amounts are minor units (øre)",
+        "triggers": ["amount", "minor units", "øre", "ore", "currency", "NOK"],
+        "evidence": "VERIFIED",
+        "note": "10000 is 100,00 kr. The API has no major-unit representation anywhere.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Amounts are minor units (øre)"}
+    }
+]

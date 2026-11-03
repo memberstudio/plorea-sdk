@@ -2,6 +2,17 @@
 
 All notable changes to `memberflow/plorea` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- A read-only MCP server for coding agents: `php artisan mcp:start plorea`.
+  It needs `laravel/mcp` (now under `suggest`) and stays off until
+  `PLOREA_MCP_ENABLED=true`. Two tools: `check-setup` checks the configuration
+  against the going-live list, with an optional read-only ping, and never
+  prints a configured value; `field-note` returns the field-tested notes for
+  an HTTP status, an exception class or a keyword. See `docs/mcp.md`.
+
 ## v0.6.1 - 2026-10-20
 
 ### Fixed

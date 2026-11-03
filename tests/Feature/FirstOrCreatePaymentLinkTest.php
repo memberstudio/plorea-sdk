@@ -224,7 +224,7 @@ class FirstOrCreatePaymentLinkTest extends TestCase
     {
         Http::fake([
             'payments.plorea.no/payments/status/INV-1?*' => Http::response($this->statusResponse()),
-            'payments.plorea.no/pay/pl_existing?*' => fn () => throw new ConnectionException('Connection timed out'),
+            'payments.plorea.no/pay/pl_existing?*' => fn (): never => throw new ConnectionException('Connection timed out'),
             'payments.plorea.no/payments/status/INV-1-1?*' => Http::response(['error' => 'Payment not found'], 404),
         ]);
 
