@@ -59,7 +59,7 @@ and a header that does not match the key returns `403`. Set both together.
 | `PLOREA_WEBHOOK_PATH` | `plorea.webhooks.path` | `plorea/webhook` | Route path |
 | `PLOREA_WEBHOOK_SECRET` | `plorea.webhooks.secret` | — | Signing secret from Plorea |
 | `PLOREA_WEBHOOK_VERIFY` | `plorea.webhooks.verify` | `true` | Staging escape hatch — see [Webhooks](webhooks.md) |
-| `PLOREA_MCP_ENABLED` | `plorea.mcp.enabled` | `false` | Register the read-only `plorea` MCP server (needs `laravel/mcp`) — see [MCP server](mcp.md) |
+| `PLOREA_MCP_ENABLED` | `plorea.mcp.enabled` | `false` | Register the `plorea` MCP server (needs `laravel/mcp`) — see [MCP server](mcp.md) |
 | `PLOREA_MCP_ALLOW_LIVE` | `plorea.mcp.allow_live` | `false` | Let the MCP `lookup` tool read live data |
 | `PLOREA_MCP_MASK` | `plorea.mcp.mask` | `true` | Mask personal data in the MCP `lookup` output |
 | — | `plorea.webhooks.middleware` | `[]` | Extra middleware for the webhook route |

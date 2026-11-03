@@ -16,6 +16,12 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   charges or a payment method with one GET request. Personal data is masked
   as `****` through a per-DTO allowlist (`PLOREA_MCP_MASK`, default `true`),
   and live reads are refused unless `PLOREA_MCP_ALLOW_LIVE=true`.
+- MCP `send-test-webhook` tool: signs a fake `payment.authorised`,
+  `payment.failed`, `subscription.charge_succeeded` or
+  `subscription.charge_failed` event and sends it through the app's own
+  webhook route inside PHP, so the real signature check and the app's
+  listeners run. Nothing goes over the network. It refuses in production and
+  in live.
 
 ## v0.6.1 - 2026-10-20
 

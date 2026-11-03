@@ -335,4 +335,8 @@ Or set `PLOREA_WEBHOOK_VERIFY=false` in `phpunit.xml` and post without a
 signature. The fixtures in `tests/Fixtures/webhook-*.json` are real captured
 deliveries and make good test bodies.
 
+To try a listener by hand in a local or test app, an agent can run the MCP
+tool [`send-test-webhook`](mcp.md#send-test-webhook). It signs a fake event and
+sends it through your own webhook route inside PHP.
+
 See also: [Payments](payments.md) · [Subscriptions](subscriptions.md) · [Verified API behaviour](api-behaviour.md)

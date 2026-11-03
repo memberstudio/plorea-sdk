@@ -15,7 +15,7 @@ use MemberFlow\Plorea\Enums\Environment;
 use MemberFlow\Plorea\Exceptions\AuthenticationException;
 use MemberFlow\Plorea\Exceptions\ConnectionException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
-use MemberFlow\Plorea\Http\PloreaClient;
+use MemberFlow\Plorea\Mcp\Concerns\ReadsPloreaTarget;
 use MemberFlow\Plorea\Mcp\Masker;
 use MemberFlow\Plorea\PloreaManager;
 use Throwable;
@@ -33,6 +33,8 @@ use Throwable;
 #[IsOpenWorld]
 class Lookup extends Tool
 {
+    use ReadsPloreaTarget;
+
     /**
      * The most rows one list answer returns.
      */
@@ -138,29 +140,16 @@ class Lookup extends Tool
 
     /**
      * Why the tool must not read, or null when it may.
-     *
-     * Live counts when either the environment or the key prefix says live:
-     * since 2026-10-13 the key decides the environment, so a live key with
-     * PLOREA_ENVIRONMENT unset still reads live data. The client keeps the
-     * configuration it was built with, so the client is asked too: the app
-     * config can say test while the client still sends a live key.
      */
     protected function refusal(): ?string
     {
-        $environment = $this->config->get('plorea.environment') ?? 'test';
-        $environment = $environment instanceof Environment ? $environment : Environment::tryFrom(is_string($environment) ? $environment : '');
+        $environment = $this->configuredEnvironment();
 
         if (! $environment instanceof Environment) {
             return 'PLOREA_ENVIRONMENT is not "test" or "live". Run check-setup.';
         }
 
-        $key = $this->config->get('plorea.api_key');
-        $client = $this->plorea->client();
-        $isLive = $environment === Environment::Live
-            || (is_string($key) && str_starts_with($key, 'plr_live_'))
-            || ($client instanceof PloreaClient && $client->targetsLive());
-
-        if ($isLive && ! $this->flag('plorea.mcp.allow_live', false)) {
+        if ($this->targetsLive($environment) && ! $this->flag('plorea.mcp.allow_live', false)) {
             return 'The configuration points at live. lookup reads live data only when PLOREA_MCP_ALLOW_LIVE=true.';
         }
 
@@ -170,24 +159,5 @@ class Lookup extends Tool
     protected function masking(): bool
     {
         return $this->flag('plorea.mcp.mask', true);
-    }
-
-    /**
-     * Reads a boolean setting. A value that is not clearly true or false
-     * gives the default.
-     */
-    protected function flag(string $key, bool $default): bool
-    {
-        $value = $this->config->get($key);
-
-        if (is_string($value)) {
-            $value = trim($value);
-        }
-
-        if ($value === null || $value === '') {
-            return $default;
-        }
-
-        return is_bool($value) ? $value : (filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? $default);
     }
 }

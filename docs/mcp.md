@@ -1,10 +1,10 @@
 # MCP server
 
-The SDK ships a local, read-only [MCP](https://modelcontextprotocol.io) server
-for coding agents that build on Plorea. It checks your configuration, returns
-the field-tested notes in this documentation and reads objects from Plorea. No
-tool on it creates, charges, refunds or cancels anything, and no tool prints a
-key or a secret.
+The SDK ships a local [MCP](https://modelcontextprotocol.io) server for coding
+agents that build on Plorea. It checks your configuration, returns the
+field-tested notes in this documentation, reads objects from Plorea and sends
+test webhooks to your own app. No tool on it creates, charges, refunds or
+cancels anything at Plorea, and no tool prints a key or a secret.
 
 ## Turn it on
 
@@ -122,6 +122,56 @@ keeps the safe value: live stays blocked and masking stays on.
 `lookup` also asks the Plorea client which key it holds. A client that was
 built with a live key stays blocked, even when the app config later says
 test.
+
+### `send-test-webhook`
+
+Signs a fake webhook and sends it through your app's own webhook route, inside
+PHP. The real `AuthenticateWebhook`, the controller and your listeners run.
+Use it to test a listener, or to prove that the secret and the route work.
+
+**Your listeners act on the event.** They run as if Plorea sent it, so the
+tool is marked destructive. Point the ids at test data that a listener may
+change. The delivery runs like a web request: terminable middleware and
+`afterResponse()` and `defer()` work run before the tool answers. Each delivery
+gets fresh `scoped()` services, a fresh session and a fresh log `Context`, and the tool puts the
+earlier ones back afterwards. Output that a
+listener prints or `dump()`s is discarded (`output_discarded: true`), because it
+would break the MCP stream. The tool cannot catch a raw write to `STDOUT`, and
+`dd()` or `exit` stops the MCP server.
+
+Pass a `type`:
+
+| `type` | Events | Overrides |
+| --- | --- | --- |
+| `payment.authorised` | `WebhookReceived`, `PaymentStatusUpdated` | `reference` |
+| `payment.failed` | `WebhookReceived`, `PaymentStatusUpdated` | `reference` |
+| `subscription.charge_succeeded` | `WebhookReceived`, `SubscriptionChargeSucceeded` | `subscription_id`, `charge_id`, `external_id` |
+| `subscription.charge_failed` | `WebhookReceived`, `SubscriptionChargeFailed` | `subscription_id`, `charge_id`, `external_id` |
+
+`payment.refunded` has no template, because no delivery of it has been
+captured. The bodies are in `resources/webhooks/`. Each one has the exact shape
+of a captured delivery, with fake ids. Every call gets a fresh `eventId` and
+`createdAt`. For a subscription type, `reference` is
+`{subscription_id}-{charge_id}`, as Plorea sends it.
+
+The answer gives the status code, `accepted` (the body was `[accepted]`), the
+events the delivery dispatches with `has_listeners` for each, and a hint for a
+`403`, `419`, `404` or `5xx`.
+
+**The tool sends nothing over the network.** Plorea may use one signing
+secret for test and live, so a signed body must never leave the app. The tool
+never shows the signature, the secret or the response body. A listener of
+yours that forwards deliveries to another service still forwards this one.
+
+A status code other than `200` is a hint, not proof. A `403` is most likely a
+bad signature, but a listener that aborts with `403` gives the same code after
+earlier listeners ran.
+
+**It refuses** in live (the environment, the key prefix or the client says
+live), with an invalid environment, when `APP_ENV` is `production`, when the
+webhook route is not registered, and when verification is on and
+`PLOREA_WEBHOOK_SECRET` is not set. `PLOREA_MCP_ALLOW_LIVE` does not unlock
+it. When `PLOREA_WEBHOOK_VERIFY=false`, it sends without a signature.
 
 ## Configuration
 
