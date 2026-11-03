@@ -19,6 +19,7 @@ use MemberFlow\Plorea\Exceptions\AuthenticationException;
 use MemberFlow\Plorea\Exceptions\ConnectionException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
 use MemberFlow\Plorea\Exceptions\PloreaException;
+use MemberFlow\Plorea\Mcp\Concerns\ReadsPloreaTarget;
 use MemberFlow\Plorea\PloreaManager;
 use ReflectionClass;
 use Throwable;
@@ -35,6 +36,8 @@ use Throwable;
 #[IsReadOnly]
 class CheckSetup extends Tool
 {
+    use ReadsPloreaTarget;
+
     /**
      * A reference that never exists. A 404 for it proves the key and the
      * environment are accepted, without reading or creating anything.
@@ -336,21 +339,6 @@ class CheckSetup extends Tool
             str_starts_with($key, 'plr_live_') => 'live',
             default => null,
         };
-    }
-
-    /**
-     * The environment the way the client resolves it: an Environment
-     * instance, or the exact string, with "test" when nothing is set.
-     */
-    protected function configuredEnvironment(): ?Environment
-    {
-        $value = $this->config->get('plorea.environment') ?? 'test';
-
-        if ($value instanceof Environment) {
-            return $value;
-        }
-
-        return is_string($value) ? Environment::tryFrom($value) : null;
     }
 
     /**

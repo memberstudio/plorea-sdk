@@ -1,0 +1,21 @@
+{
+    "eventId": "evt_00000000000000000000000000000000",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "tenantId": "test-tenant",
+    "type": "subscription.charge_succeeded",
+    "data": {
+        "subscriptionId": "sub_mcp_test",
+        "chargeId": "chg_mcp_test",
+        "reference": "sub_mcp_test-chg_mcp_test",
+        "customerId": null,
+        "shopperReference": "mcp-test-shopper",
+        "externalId": "MCP-TEST-EXT",
+        "amount": {
+            "value": 29900,
+            "currency": "NOK"
+        },
+        "pspReference": "MCPTESTPSP000003",
+        "nextChargeAt": "2026-02-01T00:00:00.000Z",
+        "environment": "test"
+    }
+}

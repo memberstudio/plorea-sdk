@@ -1,0 +1,20 @@
+{
+    "eventId": "evt_00000000000000000000000000000000",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "tenantId": "test-tenant",
+    "type": "payment.authorised",
+    "data": {
+        "reference": "MCP-TEST-0001",
+        "orderId": null,
+        "status": "authorised",
+        "provider": "adyen",
+        "pspReference": "MCPTESTPSP000001",
+        "paymentLinkId": "pl_mcp_test",
+        "paymentLinkUrl": "https://pay.plorea.no/pl_mcp_test",
+        "amount": 1000,
+        "currency": "NOK",
+        "environment": "test",
+        "eventCode": "AUTHORISATION",
+        "success": true
+    }
+}

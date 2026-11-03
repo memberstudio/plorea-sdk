@@ -1,0 +1,21 @@
+{
+    "eventId": "evt_00000000000000000000000000000000",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "tenantId": "test-tenant",
+    "type": "subscription.charge_failed",
+    "data": {
+        "subscriptionId": "sub_mcp_test",
+        "chargeId": "chg_mcp_test",
+        "reference": "sub_mcp_test-chg_mcp_test",
+        "customerId": "mcp-test-customer",
+        "shopperReference": "mcp-test-shopper",
+        "externalId": "MCP-TEST-EXT",
+        "amount": {
+            "value": 29900,
+            "currency": "NOK"
+        },
+        "failureReason": "PaymentDetail not found",
+        "retryCount": 1,
+        "environment": "test"
+    }
+}
