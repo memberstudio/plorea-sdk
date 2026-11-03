@@ -143,14 +143,21 @@ return [
     |
     | A local MCP server for coding agents, started with
     | `php artisan mcp:start plorea`. It needs laravel/mcp and is off until
-    | you enable it. Its tools only read: they check this configuration and
-    | look up field-tested notes about the API. They never print a key or a
-    | secret, and they never move money.
+    | you enable it. Its tools only read: they check this configuration, look
+    | up field-tested notes about the API and read objects with GET requests.
+    | They never print a key or a secret, and they never move money.
+    |
+    | lookup refuses when the configuration points at live, unless
+    | allow_live is true. It masks personal data as **** unless mask is
+    | false. A value that is not clearly true or false keeps the safe
+    | setting.
     |
     */
 
     'mcp' => [
         'enabled' => env('PLOREA_MCP_ENABLED', false),
+        'allow_live' => env('PLOREA_MCP_ALLOW_LIVE', false),
+        'mask' => env('PLOREA_MCP_MASK', true),
     ],
 
 ];

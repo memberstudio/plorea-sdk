@@ -150,6 +150,30 @@ final readonly class PloreaClient implements Client
         return $request;
     }
 
+    /**
+     * Whether this client's requests can reach live data.
+     *
+     * The client keeps the configuration it was built with, so this answers
+     * for the requests it will send, even when the app config changed later.
+     * A live environment or a live key counts: since 2026-10-13 the key
+     * decides the environment. An invalid environment counts as live,
+     * because nothing proves it is test.
+     */
+    public function targetsLive(): bool
+    {
+        $key = $this->config['api_key'] ?? null;
+
+        if (is_string($key) && str_starts_with($key, 'plr_live_')) {
+            return true;
+        }
+
+        $value = $this->config['environment'] ?? 'test';
+
+        return $value instanceof Environment
+            ? $value === Environment::Live
+            : Environment::tryFrom(is_string($value) ? $value : '') !== Environment::Test;
+    }
+
     private function environment(): Environment
     {
         $value = $this->config['environment'] ?? 'test';

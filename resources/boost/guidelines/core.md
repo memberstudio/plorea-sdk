@@ -22,7 +22,7 @@ Laravel SDK for the Plorea Payments API. Entry point is the `MemberFlow\Plorea\F
 
 ## MCP server
 
-When `laravel/mcp` is installed and `PLOREA_MCP_ENABLED=true`, the app runs a read-only `plorea` MCP server (`php artisan mcp:start plorea`). Run its `check-setup` tool before you debug a 401, a 403 or a missing webhook, and its `field-note` tool with a status code, an exception class or a keyword before you assume how the Plorea API behaves.
+When `laravel/mcp` is installed and `PLOREA_MCP_ENABLED=true`, the app runs a read-only `plorea` MCP server (`php artisan mcp:start plorea`). Run its `check-setup` tool before you debug a 401, a 403 or a missing webhook, and its `field-note` tool with a status code, an exception class or a keyword before you assume how the Plorea API behaves. Its `lookup` tool reads a payment, a payment link, a subscription, its charges or a payment method with one GET request. Personal data comes back as `****`, and it refuses in live unless `PLOREA_MCP_ALLOW_LIVE=true`. Prefer `lookup` over tinker when you debug a Plorea object.
 
 ## Testing
 
