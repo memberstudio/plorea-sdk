@@ -17,6 +17,7 @@ use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Facade;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -290,6 +291,8 @@ class SendTestWebhook extends Tool
         $scoped = $this->app instanceof Container
             ? (fn (): array => array_intersect_key($this->instances, array_flip($abstracts)))->call($this->app)
             : [];
+        $sessions = $this->app->resolved('session') ? $this->app->make('session') : null;
+        $openSessions = $sessions instanceof SessionManager ? $sessions->getDrivers() : [];
         $callbacks = $this->app instanceof FoundationApplication ? (fn (): int => count($this->terminatingCallbacks))->call($this->app) : 0;
         $dumped = false;
         $dumper = VarDumper::setHandler(function () use (&$dumped): void {
@@ -300,6 +303,10 @@ class SendTestWebhook extends Tool
 
         try {
             $this->forgetPerRequestInstances();
+
+            if ($sessions instanceof SessionManager) {
+                $sessions->forgetDrivers();
+            }
 
             $kernel = $this->app->make(Kernel::class);
             $response = $kernel->handle($request);
@@ -335,6 +342,12 @@ class SendTestWebhook extends Tool
 
             $this->forgetPerRequestInstances();
 
+            if ($sessions instanceof SessionManager) {
+                (function () use ($openSessions): void {
+                    $this->drivers = $openSessions;
+                })->call($sessions);
+            }
+
             if ($this->app instanceof Container) {
                 (function () use ($scoped): void {
                     $this->instances = [...$this->instances, ...$scoped];
@@ -360,13 +373,15 @@ class SendTestWebhook extends Tool
     }
 
     /**
-     * Singletons that hold the state of one request. The session manager,
-     * its store and the StartSession middleware keep session data, so a
-     * delivery that runs session middleware gets fresh ones.
+     * Singletons that hold the state of one request. The session store and
+     * the StartSession middleware keep session data, so a delivery that runs
+     * session middleware gets fresh ones. The session manager itself stays,
+     * because it holds the drivers that the app registered with extend();
+     * only its open sessions are reset.
      *
      * @var list<string>
      */
-    protected const PER_REQUEST = ['session', 'session.store', StartSession::class];
+    protected const PER_REQUEST = ['session.store', StartSession::class];
 
     /**
      * The names of the bindings that a new request gets fresh: every

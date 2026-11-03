@@ -9,11 +9,13 @@ use Illuminate\Config\Repository;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Route;
+use Illuminate\Session\ArraySessionHandler;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Defer\DeferredCallbackCollection;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Session;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
 use MemberFlow\Plorea\Events\SubscriptionChargeFailed;
@@ -398,6 +400,23 @@ class SendTestWebhookTest extends McpTestCase
         $this->assertSame($outer, $this->app->make('session.store'));
         $this->assertSame('kept', session('outer'));
         $this->assertNull(session('order'));
+    }
+
+    public function test_a_custom_session_driver_still_works_during_and_after_a_delivery(): void
+    {
+        Session::extend('mcp-test', fn (): ArraySessionHandler => new ArraySessionHandler(120));
+        config()->set('session.driver', 'mcp-test');
+        $this->app->make('router')->getRoutes()->getByName('plorea.webhook')?->middleware(StartSession::class);
+        $seen = [];
+        Event::listen(PaymentStatusUpdated::class, function () use (&$seen): void {
+            $seen[] = session()->getHandler()::class;
+        });
+
+        $result = $this->callTool(SendTestWebhook::class, ['type' => 'payment.authorised']);
+
+        $this->assertSame(200, $result['status']);
+        $this->assertSame([ArraySessionHandler::class], $seen);
+        $this->assertInstanceOf(ArraySessionHandler::class, Session::driver('mcp-test')->getHandler());
     }
 
     public function test_a_403_from_a_listener_is_not_called_a_bad_signature(): void
