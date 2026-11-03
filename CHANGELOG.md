@@ -12,6 +12,10 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   against the going-live list, with an optional read-only ping, and never
   prints a configured value; `field-note` returns the field-tested notes for
   an HTTP status, an exception class or a keyword. See `docs/mcp.md`.
+- MCP `lookup` tool: reads a payment, a payment link, a subscription, its
+  charges or a payment method with one GET request. Personal data is masked
+  as `****` through a per-DTO allowlist (`PLOREA_MCP_MASK`, default `true`),
+  and live reads are refused unless `PLOREA_MCP_ALLOW_LIVE=true`.
 
 ## v0.6.1 - 2026-10-20
 

@@ -1,9 +1,10 @@
 # MCP server
 
 The SDK ships a local, read-only [MCP](https://modelcontextprotocol.io) server
-for coding agents that build on Plorea. It checks your configuration and
-returns the field-tested notes in this documentation. No tool on it creates,
-charges, refunds or cancels anything, and no tool prints a key or a secret.
+for coding agents that build on Plorea. It checks your configuration, returns
+the field-tested notes in this documentation and reads objects from Plorea. No
+tool on it creates, charges, refunds or cancels anything, and no tool prints a
+key or a secret.
 
 ## Turn it on
 
@@ -75,10 +76,59 @@ the package that lands in `vendor/`. A test fails when a note points at a
 heading that no longer exists. When you change a finding in `docs/`, update
 its note in the same PR.
 
+### `lookup`
+
+Reads one object from Plorea with a single `GET` request. Pass a `kind` and an
+`id`:
+
+| `kind` | `id` | SDK call |
+| --- | --- | --- |
+| `payment` | The payment reference | `payments()->status()` |
+| `payment_link` | The payment link id | `payByLink()->find()` |
+| `subscription` | The subscription id | `subscriptions()->find()` |
+| `subscription_charges` | The subscription id | `subscriptions()->charges()`, newest first, at most 50 |
+| `subscriptions_for_external_id` | Your external id | `subscriptions()->forExternalId()`, at most 50 |
+| `payment_method` | The payment method id | `paymentMethods()->find()` |
+
+A `404` is an answer (`found: false`), not an error: the id is unknown, or it
+belongs to the other environment.
+
+**Live is blocked.** `lookup` refuses when `PLOREA_ENVIRONMENT` is `live` or
+the key starts with `plr_live_`, and sends nothing. Since 2026-10-13 the key
+decides the environment, so a live key with the environment unset still counts
+as live. Set `PLOREA_MCP_ALLOW_LIVE=true` to allow live reads.
+
+**Personal data is masked.** Every DTO has an allowlist in
+`src/Mcp/Masker.php`. A field on it is kept or masked. A masked field shows
+`****` when it has a value, and `null` when it has none. A field that is not on
+the list never appears, and neither does `raw`: a field that Plorea adds later
+stays hidden until someone classifies it. A test fails when a DTO field is not
+on its list.
+
+| Kept | Masked |
+| --- | --- |
+| Status, amounts, currency, dates, VAT, payment references, PSP references, subscription, charge and payment method ids, event codes, `failureReason`, card brand and funding source | `customerId`, `doneId`, `shopperReference`, `storedPaymentMethodId`, card digits and expiry, `externalId`, `orderId`, `title`, `product`, `platform`, `store`, refund and cancel references, `description`, `metadata`, refund and cancel reasons, merchant name and org number, return, invoice and pay URLs |
+
+Text and ids that your app chooses are masked, because an app can put an
+e-mail or a name in them. The payment reference is kept: an agent needs it to
+follow a payment, so do not put personal data in it.
+
+Set `PLOREA_MCP_MASK=false` to see masked fields. Do that only on your own
+machine with test data.
+
+A setting that is not clearly true or false, such as an empty or blank value,
+keeps the safe value: live stays blocked and masking stays on.
+
+`lookup` also asks the Plorea client which key it holds. A client that was
+built with a live key stays blocked, even when the app config later says
+test.
+
 ## Configuration
 
 | Env | Config | Default | Purpose |
 | --- | --- | --- | --- |
 | `PLOREA_MCP_ENABLED` | `plorea.mcp.enabled` | `false` | Register the `plorea` MCP server |
+| `PLOREA_MCP_ALLOW_LIVE` | `plorea.mcp.allow_live` | `false` | Let `lookup` read live data |
+| `PLOREA_MCP_MASK` | `plorea.mcp.mask` | `true` | Mask personal data in `lookup` output |
 
 See also: [Going live](going-live.md) · [Error handling](errors.md) · [Verified API behaviour](api-behaviour.md)
