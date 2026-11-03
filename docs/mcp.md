@@ -133,7 +133,7 @@ Use it to test a listener, or to prove that the secret and the route work.
 tool is marked destructive. Point the ids at test data that a listener may
 change. The delivery runs like a web request: terminable middleware and
 `afterResponse()` and `defer()` work run before the tool answers. Each delivery
-gets fresh `scoped()` services and a fresh log `Context`, and the tool puts the
+gets fresh `scoped()` services, a fresh session and a fresh log `Context`, and the tool puts the
 earlier ones back afterwards. Output that a
 listener prints or `dump()`s is discarded (`output_discarded: true`), because it
 would break the MCP stream. The tool cannot catch a raw write to `STDOUT`, and

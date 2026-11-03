@@ -9,6 +9,7 @@ use Illuminate\Config\Repository;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Route;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Defer\DeferredCallbackCollection;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Event;
@@ -376,6 +377,27 @@ class SendTestWebhookTest extends McpTestCase
         $this->assertSame(200, $result['status']);
         $this->assertSame(['ORDER-1', 'ORDER-2'], $seen);
         $this->assertSame($outer, $this->app->make(GenericUser::class));
+    }
+
+    public function test_each_delivery_gets_a_fresh_session_and_the_outer_one_comes_back(): void
+    {
+        $this->app->make('router')->getRoutes()->getByName('plorea.webhook')?->middleware(StartSession::class);
+        session(['outer' => 'kept']);
+        $outer = $this->app->make('session.store');
+        $seen = [];
+        Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) use (&$seen): void {
+            $seen[] = [session('outer'), session('order')];
+            session(['order' => $event->reference]);
+        });
+
+        $this->callTool(SendTestWebhook::class, ['type' => 'payment.authorised', 'reference' => 'ORDER-1']);
+        $result = $this->callTool(SendTestWebhook::class, ['type' => 'payment.authorised', 'reference' => 'ORDER-2']);
+
+        $this->assertSame(200, $result['status']);
+        $this->assertSame([[null, null], [null, null]], $seen);
+        $this->assertSame($outer, $this->app->make('session.store'));
+        $this->assertSame('kept', session('outer'));
+        $this->assertNull(session('order'));
     }
 
     public function test_a_403_from_a_listener_is_not_called_a_bad_signature(): void

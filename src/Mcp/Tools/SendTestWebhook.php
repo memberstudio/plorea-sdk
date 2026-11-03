@@ -16,6 +16,7 @@ use Illuminate\Foundation\Application as FoundationApplication;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Facade;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -249,9 +250,9 @@ class SendTestWebhook extends Tool
     /**
      * Sends the body through the HTTP kernel, the way the web server would,
      * and puts the process state back afterwards: the request, the current
-     * route, the auth guards, and every scoped() instance, such as the
-     * deferred callbacks and the log Context. The delivery gets fresh scoped
-     * instances, as a new web request does. Output and
+     * route, the auth guards, the session, and every scoped() instance, such
+     * as the deferred callbacks and the log Context. The delivery gets fresh
+     * ones, as a new web request does. Output and
      * dump() calls are discarded, so they cannot reach the MCP stream. When
      * the delivery throws before terminate, its terminating callbacks are
      * dropped, as a crashed web request drops them. A base path in the app
@@ -285,7 +286,7 @@ class SendTestWebhook extends Tool
         [$route, $routeRequest] = (fn (): array => [$this->current, $this->currentRequest])->call($router);
         $boundRoute = $this->app->bound(Route::class) ? $this->app->make(Route::class) : null;
         $guard = $this->config->get('auth.defaults.guard');
-        $abstracts = $this->scopedAbstracts();
+        $abstracts = $this->perRequestAbstracts();
         $scoped = $this->app instanceof Container
             ? (fn (): array => array_intersect_key($this->instances, array_flip($abstracts)))->call($this->app)
             : [];
@@ -298,7 +299,7 @@ class SendTestWebhook extends Tool
         ob_start();
 
         try {
-            $this->forgetScopedInstances();
+            $this->forgetPerRequestInstances();
 
             $kernel = $this->app->make(Kernel::class);
             $response = $kernel->handle($request);
@@ -332,7 +333,7 @@ class SendTestWebhook extends Tool
                 $this->app->forgetInstance(Route::class);
             }
 
-            $this->forgetScopedInstances();
+            $this->forgetPerRequestInstances();
 
             if ($this->app instanceof Container) {
                 (function () use ($scoped): void {
@@ -359,12 +360,23 @@ class SendTestWebhook extends Tool
     }
 
     /**
-     * The names of the scoped() bindings. A binding registered with a typed
-     * closure is named by the closure's return types, as the container does.
+     * Singletons that hold the state of one request. The session manager,
+     * its store and the StartSession middleware keep session data, so a
+     * delivery that runs session middleware gets fresh ones.
+     *
+     * @var list<string>
+     */
+    protected const PER_REQUEST = ['session', 'session.store', StartSession::class];
+
+    /**
+     * The names of the bindings that a new request gets fresh: every
+     * scoped() binding and the PER_REQUEST singletons. A binding registered
+     * with a typed closure is named by the closure's return types, as the
+     * container does.
      *
      * @return list<string>
      */
-    protected function scopedAbstracts(): array
+    protected function perRequestAbstracts(): array
     {
         if (! $this->app instanceof Container) {
             return [];
@@ -372,7 +384,7 @@ class SendTestWebhook extends Tool
 
         /** @var list<string> */
         return (function (): array {
-            $abstracts = [];
+            $abstracts = SendTestWebhook::PER_REQUEST;
 
             foreach ($this->scopedInstances as $scoped) {
                 array_push($abstracts, ...($scoped instanceof Closure ? $this->closureReturnTypes($scoped) : [$scoped]));
@@ -383,16 +395,17 @@ class SendTestWebhook extends Tool
     }
 
     /**
-     * Forgets every scoped() instance and the facade cache in front of it,
-     * so the next call resolves a fresh one, as Octane does between requests.
+     * Forgets every per-request instance and the facade cache in front of
+     * it, so the next call resolves a fresh one, as Octane does between
+     * requests.
      */
-    protected function forgetScopedInstances(): void
+    protected function forgetPerRequestInstances(): void
     {
         if (! $this->app instanceof Container) {
             return;
         }
 
-        $abstracts = $this->scopedAbstracts();
+        $abstracts = $this->perRequestAbstracts();
 
         foreach ($abstracts as $abstract) {
             Facade::clearResolvedInstance($abstract);
