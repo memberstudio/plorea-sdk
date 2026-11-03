@@ -136,4 +136,21 @@ return [
         'middleware' => [],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | MCP Server
+    |--------------------------------------------------------------------------
+    |
+    | A local MCP server for coding agents, started with
+    | `php artisan mcp:start plorea`. It needs laravel/mcp and is off until
+    | you enable it. Its tools only read: they check this configuration and
+    | look up field-tested notes about the API. They never print a key or a
+    | secret, and they never move money.
+    |
+    */
+
+    'mcp' => [
+        'enabled' => env('PLOREA_MCP_ENABLED', false),
+    ],
+
 ];

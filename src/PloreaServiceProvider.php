@@ -11,8 +11,10 @@ use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Mcp\Facades\Mcp;
 use MemberFlow\Plorea\Contracts\Client;
 use MemberFlow\Plorea\Http\PloreaClient;
+use MemberFlow\Plorea\Mcp\PloreaServer;
 
 class PloreaServiceProvider extends ServiceProvider
 {
@@ -35,6 +37,7 @@ class PloreaServiceProvider extends ServiceProvider
         $this->registerPublishing();
         $this->registerRoutes();
         $this->registerAboutCommand();
+        $this->registerMcpServer();
     }
 
     protected function registerPublishing(): void
@@ -59,6 +62,19 @@ class PloreaServiceProvider extends ServiceProvider
         }
 
         $this->loadRoutesFrom(__DIR__.'/../routes/webhooks.php');
+    }
+
+    /**
+     * Register the local "plorea" MCP server. It needs laravel/mcp, which
+     * is only suggested, and stays off until plorea.mcp.enabled is true.
+     */
+    protected function registerMcpServer(): void
+    {
+        if (! class_exists(Mcp::class) || ! (bool) $this->config()->get('plorea.mcp.enabled', false)) {
+            return;
+        }
+
+        Mcp::local('plorea', PloreaServer::class);
     }
 
     protected function registerAboutCommand(): void

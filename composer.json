@@ -20,6 +20,7 @@
     "require-dev": {
         "larastan/larastan": "^3.7",
         "laravel/boost": "^2.6",
+        "laravel/mcp": "^1.1",
         "laravel/pint": "^1.25",
         "nunomaduro/collision": "^8.8",
         "orchestra/testbench": "^10.0|^11.0",
@@ -28,6 +29,9 @@
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^11.5|^12.0",
         "rector/rector": "^2.1"
+    },
+    "suggest": {
+        "laravel/mcp": "Required for the read-only Plorea MCP server (^1.1). Enable it with PLOREA_MCP_ENABLED=true."
     },
     "autoload": {
         "psr-4": {
