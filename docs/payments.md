@@ -150,9 +150,23 @@ Use the helpers, not string comparison. Observed statuses:
 | Paid | `authorised` — the only success state ever observed, in test and live. `paid` is handled defensively and has never been seen |
 | Modification pending | `refund_requested`, `cancel_requested` |
 | Terminal | `failed` (refused by the acquirer). `cancelled` and `refunded` are what Plorea says settlement produces; neither has been observed |
+| Chargeback | `chargeback_notified`, `chargeback`, `chargeback_reversed` — stated by Plorea 2026-11-04, unobserved |
 
-`captured`, `paid`, the post-settlement statuses and any chargeback status are
-all unobserved, and Plorea has published no complete status enum.
+`captured`, `paid` and the post-settlement statuses are unobserved, and Plorea
+has published no complete status enum.
+
+**Chargebacks (stated by Plorea 2026-11-04, unobserved).**
+`chargeback_notified` means a dispute is open and no money has moved.
+`chargeback` means the money was taken back and deducted from the merchant's
+net. `chargeback_reversed` means the merchant won and the money came back.
+`isPaid()` returns false for all three, `chargeback_reversed` included. The
+package has no helpers for them until one is captured, so use
+`$status->is('chargeback')` and so on. A split refund (Adyen
+`REFUND_WITH_DATA`) now reports `refunded`.
+
+**The status set is open.** New status strings may appear (Plorea,
+2026-11-04). Treat a status
+you do not know as "needs a human", never as paid or failed.
 
 A refusal is the one that surprises people: **a declined payment reports
 `failed`, not `refused`** — captured 2026-09-09 from a real payment link taken
@@ -214,7 +228,9 @@ turned into a cancel. Verified 2026-10-09 (test) for both a partial refund
 
 Both return **immediately** with `refund_requested` / `cancel_requested` and
 the provider settles asynchronously. Poll `status()` or wait for a
-`payment.refunded` webhook for the final state. The requested status persists
+webhook for the final state: `payment.refunded` for a plain refund, and
+`payment.updated` with `data.status: refunded` for a split refund of a payment
+(stated by Plorea 2026-11-04, unobserved). The requested status persists
 in the meantime, so do not treat it as a failure.
 
 ### Keep the refund response — the PSP reference is only there
@@ -310,7 +326,11 @@ foreach ($status->refunds as $item) {   // list<PaymentRefund>
 - The `lastRefund*` fields were absent on that status. An older capture of a
   manual charge had `lastRefund*` and no `refunds` list. Read `refunds` and
   `refundedTotal` when present, and fall back to `lastRefund*`.
-- No `payment.refunded` webhook arrived. Poll `status()`.
+- No `payment.refunded` webhook arrived. Poll `status()`. Plorea stated on
+  2026-11-04 that a split refund of a subscription charge now sends
+  `payment.refunded`; unobserved.
+- A chargeback on a subscription charge sends no webhook (stated by Plorea
+  2026-11-04). Only `charges()` and Plorea's merchant report show it.
 - **Never cancel a charged subscription charge.** `cancel()` was not refused
   with `409`, as Plorea stated it would be. Adyen refused the cancel, and the
   status and the `charges()` item still turned `cancelled` while the money

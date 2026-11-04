@@ -27,6 +27,18 @@
         <span><span class="badge open">Open question</span> Unresolved, or not confirmed by Plorea.</span>
       </div>
 
+      <h2 id="2026-11">November 2026</h2>
+
+      <h3 id="2026-11-04">2026-11-04</h3>
+      <ul>
+        <li><strong>Three chargeback statuses:</strong> <code>chargeback_notified</code> (no money moved), <code>chargeback</code> (money taken back) and <code>chargeback_reversed</code> (money back). They can appear on <code>GET /payments/status/{reference}</code>, <code>GET /transactions</code> and <code>GET /subscriptions/{id}/charges</code>. <span class="badge stated">Stated by Plorea 2026-11-04</span> See <a href="payment-lifecycle.html#chargebacks">Payment lifecycle</a>.</li>
+        <li><strong>Split refunds report <code>refunded</code>.</strong> This covers Adyen <code>REFUND_WITH_DATA</code>. <span class="badge stated">Stated by Plorea 2026-11-04</span></li>
+        <li><strong>Webhooks.</strong> On a payment, chargebacks and split refunds arrive as <code>payment.updated</code>. A split refund of a subscription charge now sends <code>payment.refunded</code>. A chargeback on a subscription charge sends no event; poll the charges. The <code>type</code> field and the event header are unchanged. <span class="badge stated">Stated by Plorea 2026-11-04</span> <strong>SDK:</strong> <code>payment.updated</code> already reaches you as <code>PaymentStatusUpdated</code>.</li>
+        <li><strong>The status list is not fixed.</strong> Handle strings you do not know. <span class="badge stated">Stated by Plorea 2026-11-04</span></li>
+        <li><strong>The merchant report</strong> (<code>GET /reports/merchants</code>) has a <code>paymentMethod</code> object with <code>group</code>, <code>raw</code> and <code>variant</code>. Group on <code>group</code> or <code>raw</code>, never on <code>variant</code>: <code>visa_vipps</code> and <code>mc_vipps</code> are card payments, not Vipps. The report also takes a <code>from</code>/<code>to</code> period and pages. <span class="badge stated">Stated by Plorea 2026-11-04</span> The PHP SDK has no report client.</li>
+        <li><strong>OpenAPI 0.23.0.</strong> Existing calls are unchanged. <span class="badge stated">Stated by Plorea 2026-11-04</span></li>
+      </ul>
+
       <h2 id="2026-10">October 2026</h2>
 
       <h3 id="2026-10-20">2026-10-20</h3>

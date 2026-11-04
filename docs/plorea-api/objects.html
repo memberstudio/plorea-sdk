@@ -119,9 +119,13 @@
             <tr><td><code>cancel_requested</code></td><td>Modification pending</td><td>Plorea accepted a cancel of the authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>refunded</code></td><td>Final</td><td>The refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
             <tr><td><code>cancelled</code></td><td>Final</td><td>The cancel settled. Note the UK spelling here and the US spelling on subscriptions.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>chargeback_notified</code></td><td>Chargeback</td><td>A dispute is open. No money has moved.</td><td><span class="badge stated">Stated by Plorea 2026-11-04</span></td></tr>
+            <tr><td><code>chargeback</code></td><td>Chargeback</td><td>The money was taken back and deducted from the merchant's net.</td><td><span class="badge stated">Stated by Plorea 2026-11-04</span></td></tr>
+            <tr><td><code>chargeback_reversed</code></td><td>Chargeback</td><td>The merchant won. The money came back.</td><td><span class="badge stated">Stated by Plorea 2026-11-04</span></td></tr>
           </tbody>
         </table>
       </div>
+      <p>The list is not complete. New strings may appear. <span class="badge stated">Stated by Plorea 2026-11-04</span> Treat a status you do not know as "needs review".</p>
       <p>No <code>expired</code> and no <code>captured</code> status exist. A link past <code>expiresAt</code> keeps its open status. <span class="badge verified">Verified</span></p>
       <figure class="diagram">
         <pre class="mermaid">
@@ -459,7 +463,7 @@ stateDiagram-v2
             <tr><td><code>amount</code></td><td class="type">object</td><td>no</td><td><code>{currency, value}</code>.</td></tr>
             <tr><td><code>vatRate</code></td><td class="type">number</td><td>yes</td><td>VAT rate.</td></tr>
             <tr><td><code>vatAmount</code></td><td class="type">integer</td><td>yes</td><td>VAT in øre.</td></tr>
-            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td><code>"authorised"</code> or <code>"failed"</code>. <code>"failed"</code> was seen in production on a scheduled charge. Test cannot produce it.</td></tr>
+            <tr><td><code>status</code></td><td class="type">string</td><td>no</td><td>Seen: <code>"authorised"</code> and <code>"failed"</code>. <code>"failed"</code> was seen in production on a scheduled charge. Test cannot produce it. A refused cancel turns it <code>"cancelled"</code>. Plorea states that a chargeback turns it <code>"chargeback_notified"</code>, <code>"chargeback"</code> or <code>"chargeback_reversed"</code>, with no webhook. <span class="badge stated">Stated by Plorea 2026-11-04</span> The list is open.</td></tr>
             <tr><td><code>retryNumber</code></td><td class="type">integer</td><td>no</td><td>0 for the first attempt.</td></tr>
             <tr><td><code>failureReason</code></td><td class="type">string</td><td>yes</td><td>Null on a successful charge. The provider's free text on a failed one.</td></tr>
             <tr><td><code>reason</code></td><td class="type">string</td><td>no</td><td><code>"manual_charge"</code> or <code>"scheduled_charge"</code>.</td></tr>

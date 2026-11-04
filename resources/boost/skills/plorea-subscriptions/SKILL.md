@@ -105,6 +105,10 @@ Event::listen(SubscriptionChargeSucceeded::class, function ($event) {
 
 - The webhook is a ping. Re-fetch, and book idempotently on the charge
   reference: the webhook and the reconciliation job can both see the same charge.
+- A chargeback on a charge sends no webhook (stated by Plorea 2026-11-04,
+  unobserved). The `charges()` item changes to `chargeback_notified`,
+  `chargeback` or `chargeback_reversed`. Poll `charges()`; an `authorised`
+  charge is not final.
 - Read scheduled charges from `charges()`. A scheduler-created
   `{subId}-{chgId}` reference did not resolve through `payments()->status()`
   until 2026-10-19 (now seen resolving for one test charge).

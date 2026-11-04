@@ -56,18 +56,32 @@ Residual risk is the **bytes, not the algorithm**: any middleware that
 re-encodes the body before the verifier sees it breaks the HMAC while the
 payload still looks perfectly valid.
 
-## Catalogue — 4 types (Plorea, 2026-09-09), more planned
+## Catalogue — 4 types (Plorea, 2026-09-09), `payment.updated` (2026-11-04), more planned
 
 | Type | SDK event | Captured |
 | --- | --- | --- |
 | `payment.authorised` | `PaymentStatusUpdated` | Yes |
 | `payment.failed` | `PaymentStatusUpdated` | Yes (2026-09-09) |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
+| `payment.updated` | `PaymentStatusUpdated` | No — Stated by Plorea 2026-11-04; routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
 | `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes (live events, delivered to the test URL, 2026-10-01 to 2026-10-08) — **not** in Plorea's catalogue |
 
-Everything else reaches consumers through `WebhookReceived` **only**. The SDK
-does not invent typed events for shapes nobody has seen.
+**Chargebacks and split refunds — Stated by Plorea 2026-11-04, UNOBSERVED:**
+
+- On a **payment**, a chargeback or a split refund arrives as `payment.updated`
+  with the new status in `data.status`. The controller already routes any
+  non-`subscription.*` type with a reference to `PaymentStatusUpdated`. No
+  code change, and no new typed event.
+- On a **subscription charge**, a split refund now sends `payment.refunded`.
+  Before, nothing was sent. Deduplicate on `eventId` as usual.
+- On a **subscription charge**, a chargeback sends **no event at all**. It
+  shows only in `charges()` (and in Plorea's merchant report). Poll.
+
+Every delivery raises `WebhookReceived`. Any other non-`subscription.*` type
+with a usable reference also raises `PaymentStatusUpdated`. An unknown
+`subscription.*` type reaches consumers through `WebhookReceived` **only**. The
+SDK does not invent typed events for shapes nobody has seen.
 
 `payment.failed` carries the type string in both the header and `body.type` —
 **never `payment.refused`** — with `eventCode: AUTHORISATION` + `success: false`

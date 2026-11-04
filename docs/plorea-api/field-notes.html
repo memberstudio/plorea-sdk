@@ -59,6 +59,8 @@
       </div>
       <p><span class="badge verified">Verified 2026-09-09</span> There is no status per refund. Three captures of a refund-requested payment returned identical 29-key bodies. <code>refundPspReference</code> exists only on the refund response. Store it.</p>
       <p><span class="badge verified">Verified 2026-09-19</span> A refund and a cancel were both still pending after more than 24 hours. <span class="badge stated">Stated 2026-09-21</span> Plorea states this is expected, and that the final statuses are <code>refunded</code> and <code>cancelled</code>. Book on the request. Do not wait for the final status.</p>
+      <h3 id="chargebacks">Chargebacks have three statuses, and a charge chargeback sends nothing</h3>
+      <p><span class="badge stated">Stated by Plorea 2026-11-04</span> <code>chargeback_notified</code>: a dispute is open and no money has moved. <code>chargeback</code>: the money was taken back and deducted from the merchant's net. <code>chargeback_reversed</code>: the merchant won and the money came back. On a payment, Plorea sends <code>payment.updated</code>. On a subscription charge, Plorea sends no event; only <code>GET /subscriptions/{id}/charges</code> and the merchant report show it. A split refund now reports <code>refunded</code>, and on a subscription charge it now sends <code>payment.refunded</code>. <span class="badge unobserved">Unobserved</span> We have not seen any of this on the wire.</p>
       <h3 id="subscription-charge-refund">A subscription charge refunds, and a refused cancel reads <code>cancelled</code></h3>
       <p><span class="badge verified">Verified 2026-10-19 (test)</span> One scheduled charge, charged nine days earlier:</p>
       <ul>

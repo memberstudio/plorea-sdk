@@ -60,6 +60,12 @@ Failed charges are listed too — VERIFIED live 2026-10-01 to 2026-10-08: every
 failed attempt is an item with `status: failed`, a `pspReference` and a
 `failureReason`.
 
+**A chargeback on a charge sends no webhook.** Stated by Plorea 2026-11-04,
+UNOBSERVED: the charge item in `charges()` changes to `chargeback_notified`,
+`chargeback` or `chargeback_reversed`, and nothing is sent. `charges()` and Plorea's
+merchant report are the only signals, so an `authorised` charge is not final. A split refund of a
+charge now sends `payment.refunded` (also stated, 2026-11-04).
+
 **`charges()` is not reliably ordered.** The test capture
 (`subscription-charges.json`, n=2) is newest first; a live read on 2026-10-08
 returned the 2nd, 3rd, then 1st attempt. Sort by `createdAt`; never take
