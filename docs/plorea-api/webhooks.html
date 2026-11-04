@@ -105,7 +105,8 @@ sequenceDiagram
           <tbody>
             <tr><td><code>payment.authorised</code></td><td>A payment link, a session payment or a <strong>manual</strong> subscription charge is authorised. For manual charges: verified before 2026-10-14, <span class="badge unobserved">Unobserved</span> since.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.failed</code></td><td>Adyen declines an authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>payment.refunded</code></td><td>A refund settles.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
+            <tr><td><code>payment.refunded</code></td><td>A refund settles. Since 2026-11-04 also a split refund of a subscription charge, which sent nothing before.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
+            <tr><td><code>payment.updated</code></td><td>A payment gets a chargeback status or a split refund. The new status is in <code>data.status</code>.</td><td><span class="badge stated">Stated by Plorea 2026-11-04</span></td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>The <strong>scheduler</strong> charges a subscription.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>subscription.charge_failed</code></td><td>A <strong>scheduler</strong> charge fails. Not in Plorea's catalogue.</td><td><span class="badge verified">Verified</span> Captured 2026-10-01 and 2026-10-06.</td></tr>
           </tbody>
@@ -273,6 +274,7 @@ sequenceDiagram
             <tr><td>A billing cycle stalls without a failure</td><td>Poll <code>GET /subscriptions/{id}</code>. Compare <code>nextChargeAt</code> with now. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
             <tr><td>A payment link expires</td><td>The status never reports <code>expired</code>. Use <code>expiresAt</code> from the create response, or <code>expired</code> on <code>GET /pay/{id}</code>.</td></tr>
             <tr><td>A cancellation settles</td><td>No <code>payment.cancelled</code> event is known. Poll the status. <span class="badge open">Open question</span></td></tr>
+            <tr><td>A chargeback on a subscription charge</td><td>Poll <code>GET /subscriptions/{id}/charges</code>. The charge changes to <code>chargeback_notified</code>, <code>chargeback</code> or <code>chargeback_reversed</code>. <span class="badge stated">Stated by Plorea 2026-11-04</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -402,7 +404,7 @@ use Illuminate\Support\Facades\Event;
 use MemberFlow\Plorea\Events\PaymentStatusUpdated;
 use MemberFlow\Plorea\Facades\Plorea;
 
-Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) {
+Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event) use ($orders) {
     // eventId is read from the signed body, never from the header.
     $key = "plorea:webhook:{$event-&gt;eventId}";
 
@@ -414,10 +416,18 @@ Event::listen(PaymentStatusUpdated::class, function (PaymentStatusUpdated $event
     // If this throws, nothing is marked, so a retry processes the event again.
     $status = Plorea::payments()-&gt;status($event-&gt;reference);
 
-    if ($status-&gt;isPaid()) {
+    match (true) {
         // Compare $status-&gt;amount with what you expect, then book
         // idempotently on the reference.
-    }
+        $status-&gt;isPaid() =&gt; $orders-&gt;book($status),
+        // A dispute is open. No money has moved yet.
+        $status-&gt;is('chargeback_notified') =&gt; $orders-&gt;flagDispute($status),
+        $status-&gt;is('chargeback') =&gt; $orders-&gt;recordChargeback($status),
+        $status-&gt;is('chargeback_reversed') =&gt; $orders-&gt;recordChargebackReversed($status),
+        $status-&gt;isOpen(), $status-&gt;is('failed'),
+        $status-&gt;isRefundRequested(), $status-&gt;is('refunded') =&gt; $orders-&gt;sync($status),
+        default =&gt; $orders-&gt;flagForReview($status), // a status you do not know
+    };
 
     // Mark as processed only after the work succeeded.
     Cache::put($key, true, now()-&gt;addDay());
@@ -438,8 +448,25 @@ async function handle(event) {
     );
     if (!res.ok) throw new Error(`Status read failed: ${res.status}`); // stays unprocessed
     const payment = await res.json();
-    if (payment.status === 'authorised' || payment.status === 'paid') {
-      await bookPayment(payment.reference, payment.amount); // idempotent
+    switch (payment.status) {
+      case 'authorised':
+      case 'paid':
+        await bookPayment(payment.reference, payment.amount); // idempotent
+        break;
+      case 'chargeback_notified': // a dispute is open, no money moved yet
+        await flagDispute(payment.reference);
+        break;
+      case 'chargeback':
+      case 'chargeback_reversed':
+        await recordChargeback(payment.reference, payment.status); // idempotent
+        break;
+      case 'created': case 'pending': case 'active': case 'failed':
+      case 'refund_requested': case 'refunded':
+      case 'cancel_requested': case 'cancelled':
+        await syncPayment(payment); // idempotent
+        break;
+      default:
+        await flagForReview(payment.reference, payment.status); // unknown status
     }
   }
 
@@ -459,6 +486,7 @@ async function handle(event) {
             <tr><td><code>payment.authorised</code></td><td><code>GET /payments/status/{reference}</code></td><td>Mark the order paid if the status is <code>authorised</code> or <code>paid</code> and the amount matches.</td></tr>
             <tr><td><code>payment.failed</code></td><td><code>GET /payments/status/{reference}</code></td><td>Offer a new link on a suffixed reference. Whether the failed link stays payable is not confirmed.</td></tr>
             <tr><td><code>payment.refunded</code></td><td><code>GET /payments/status/{reference}</code></td><td>Confirm the refund you already booked. Do not book it twice.</td></tr>
+            <tr><td><code>payment.updated</code></td><td><code>GET /payments/status/{reference}</code></td><td>Branch on the status. On <code>chargeback</code>, record the loss and review access. On <code>chargeback_reversed</code>, record the money back. On a status you do not know, flag it for a human.</td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Extend access to <code>nextChargeAt</code>, the end of the paid period. Do not use <code>accessEndsAt</code>: it is <code>null</code> on an active subscription. Record the charge from <code>GET /subscriptions/{id}/charges</code>.</td></tr>
             <tr><td><code>subscription.charge_failed</code></td><td><code>GET /subscriptions/{subscriptionId}</code></td><td>Start dunning idempotently if the status is <code>past_due</code>. Your poll may have seen it first. Show <code>failureReason</code> to the customer. Do not cut access before your grace period ends.</td></tr>
             <tr><td>Unknown type</td><td>—</td><td>Store and log it. Return <code>200</code>.</td></tr>

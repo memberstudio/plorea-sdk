@@ -421,7 +421,7 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
       <ul>
         <li><code>refund_requested</code> means Adyen accepted the refund. Settlement took more than 11 hours in test. Never report a refund as failed because of a timeout. <span class="badge verified">Verified</span></li>
         <li><code>refundPspReference</code> exists only here. Status carries <code>lastRefundRequestPspReference</code>, which identifies the request. There is no per-refund status. <span class="badge verified">Verified</span></li>
-        <li>The <code>payment.refunded</code> webhook marks settlement.</li>
+        <li>The <code>payment.refunded</code> webhook marks settlement. A split refund of a payment sends <code>payment.updated</code> instead. <span class="badge stated">Stated by Plorea 2026-11-04</span></li>
       </ul>
 
       <h4>Errors</h4>

@@ -23,8 +23,20 @@ major-unit constructor, on purpose.
 - `refund_requested` / `cancel_requested` appear immediately after
   `payments/refund` / `payments/cancel` and persist until the provider settles.
 - **UNOBSERVED:** `captured`, `paid`, the post-settlement `refunded` /
-  `cancelled`, and any chargeback status. Plorea has published no complete
-  status enum. Do not model a state machine on strings nobody has seen.
+  `cancelled`. Plorea has published no complete status enum. Do not model a
+  state machine on strings nobody has seen.
+- **Chargebacks — Stated by Plorea 2026-11-04, UNOBSERVED.** Three statuses:
+  `chargeback_notified` (dispute opened, no money moved), `chargeback` (money
+  taken back, deducted from the merchant's net) and `chargeback_reversed`
+  (merchant won, money back). They can come from `payments/status`,
+  `GET transactions` and subscription `charges()`. `isPaid()` is false for all
+  three, `chargeback_reversed` included. No helpers on purpose until one is
+  captured: use `is('chargeback')` etc.
+- **Split refunds — Stated by Plorea 2026-11-04.** A split refund (Adyen
+  `REFUND_WITH_DATA`) now reports `refunded`.
+- **The status set is open** (Plorea, 2026-11-04). New status strings may
+  appear. `status` stays a plain string so an unknown value never throws.
+  Treat an unknown status as "needs a human", never as paid or failed.
 - `expired` has **never** been observed live. Judge expiry from the pay-page
   endpoint's computed `expired` flag or the stored `expiresAt`, never the
   status string.

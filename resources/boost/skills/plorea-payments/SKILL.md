@@ -55,6 +55,8 @@ $status->isCancelRequested();
 
 Use the helpers, not string comparison. A **refused payment reports `failed`, not `refused`** (captured 2026-09-09) — `$status->is('failed')`; the decline itself shows as `webhookEventCode: AUTHORISATION` with `webhookSuccess: false`, and there is no `failureReason` field on this shape. `expired` never appears live — links past expiry keep reporting open; judge expiry from the stored `expiresAt`. The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe Plorea's inbound Adyen webhook, not webhooks sent to your app. Verify `$status->amount` against your local expectation before booking; on mismatch, flag for manual handling.
 
+**Chargebacks (stated by Plorea 2026-11-04, unobserved).** `chargeback_notified` (dispute open, no money moved), `chargeback` (money taken back) and `chargeback_reversed` (merchant won). `isPaid()` is false for all three; use `$status->is('chargeback')`. A split refund now reports `refunded`. The status set is open: treat an unknown status as "needs a human", never as paid or failed.
+
 ## Refund / cancel
 
 ```php
@@ -176,6 +178,8 @@ charged. `$status->isCancellationRefused()` detects that. In production on
 2026-10-11 a refund on one scheduled charge answered "Payment not found"; if
 that happens, refund in the Plorea portal and record it locally.
 
+**Stated by Plorea 2026-11-04, unobserved.** A split refund of a subscription charge now sends `payment.refunded`. A chargeback on a subscription charge sends no webhook at all; only `charges()` and Plorea's merchant report show it.
+
 ### Dunning
 
 A failed scheduler charge emits `subscription.charge_failed` →
@@ -210,7 +214,7 @@ records.
 
 The package registers `POST /plorea/webhook` and verifies the `X-Plorea-Signature` header (base64 HMAC-SHA256 of the raw body, secret used as the key verbatim) against `PLOREA_WEBHOOK_SECRET`. It fails closed without a secret; `PLOREA_WEBHOOK_VERIFY=false` is staging-only. Exclude `plorea/webhook` from CSRF verification.
 
-Plorea's catalogue (confirmed 2026-09-09) has four types, with more planned: `payment.authorised`, `payment.failed`, `payment.refunded` → `PaymentStatusUpdated`; `subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. Everything else arrives as `WebhookReceived` only.
+Plorea's catalogue (confirmed 2026-09-09) has four types, with more planned: `payment.authorised`, `payment.failed`, `payment.refunded` → `PaymentStatusUpdated`; `subscription.charge_succeeded` → `SubscriptionChargeSucceeded`. Every delivery also raises `WebhookReceived`. Any other non-`subscription.*` type with a reference also raises `PaymentStatusUpdated`; an unknown `subscription.*` type raises `WebhookReceived` only. Since 2026-11-04 Plorea states that chargebacks and split refunds of a payment arrive as `payment.updated` with the new `data.status` (unobserved); it reaches you as `PaymentStatusUpdated`, so re-fetch the status.
 
 Every event carries `$event->eventId` and `$event->type`, read from the request **body**. Deduplicate on `$event->eventId` — the signature covers the raw body only, so the `x-plorea-event-id` header can be rewritten on an otherwise valid delivery and keying on it would let a replay through twice.
 

@@ -23,6 +23,21 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   listeners run. Nothing goes over the network. It refuses in production and
   in live.
 
+### Plorea API behaviour (stated by Plorea 2026-11-04, unobserved)
+
+- Three chargeback statuses: `chargeback_notified` (no money moved),
+  `chargeback` (money taken back) and `chargeback_reversed` (money back). They
+  can appear on `payments()->status()` and in `charges()`. `isPaid()` is false
+  for all three. No helpers yet; use `$status->is('chargeback')`.
+- A split refund (Adyen `REFUND_WITH_DATA`) reports `refunded`.
+- On a payment, chargebacks and split refunds arrive as `payment.updated`,
+  which the SDK already routes to `PaymentStatusUpdated`. A split refund of a
+  subscription charge now sends `payment.refunded`. A chargeback on a
+  subscription charge sends no webhook: poll `charges()`.
+- The status set is open. Treat an unknown status as "needs a human".
+- OpenAPI 0.23.0 adds `paymentMethod` and a `from`/`to` period with paging to
+  `GET /reports/merchants`. The SDK has no report client.
+
 ## v0.6.1 - 2026-10-20
 
 ### Fixed

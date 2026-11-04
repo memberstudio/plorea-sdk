@@ -32,7 +32,7 @@
       </div>
 
       <h2>All statuses</h2>
-      <p>Read the status with <code>GET /payments/status/{reference}</code>. The <code>status</code> field holds one of these strings.</p>
+      <p>Read the status with <code>GET /payments/status/{reference}</code>. The <code>status</code> field holds a string. These are the known values. The list is open.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Group</th><th>Status</th><th>Meaning</th><th>Evidence</th></tr></thead>
@@ -47,6 +47,9 @@
             <tr><td><code>cancel_requested</code></td><td>Plorea accepted a cancel. Adyen has not processed it yet.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td rowspan="2"><strong>Final</strong></td><td><code>refunded</code></td><td>The refund settled.</td><td><span class="badge stated">Stated</span></td></tr>
             <tr><td><code>cancelled</code></td><td>The authorisation was cancelled. British spelling, unlike subscriptions.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr id="chargebacks"><td rowspan="3"><strong>Chargeback</strong><br><span class="muted">after payment</span></td><td><code>chargeback_notified</code></td><td>The cardholder opened a dispute. No money has moved yet.</td><td><span class="badge stated">Stated 2026-11-04</span></td></tr>
+            <tr><td><code>chargeback</code></td><td>The money was taken back. It is deducted from the merchant's net.</td><td><span class="badge stated">Stated 2026-11-04</span></td></tr>
+            <tr><td><code>chargeback_reversed</code></td><td>The merchant won the dispute. The money came back.</td><td><span class="badge stated">Stated 2026-11-04</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -55,7 +58,8 @@
         <li><code>refused</code>: a decline reports <code>failed</code>. <span class="badge verified">Verified</span></li>
         <li><code>expired</code>: an expired link keeps an open status. <span class="badge verified">Verified</span></li>
       </ul>
-      <p>Compare statuses case-insensitively. Treat any string not in this table as "needs review". Never treat an unknown string as paid.</p>
+      <p>Compare statuses case-insensitively. Treat any string not in this table as "needs review". Never treat an unknown string as paid. Plorea states that the list is not fixed and that new strings can appear. <span class="badge stated">Stated by Plorea 2026-11-04</span></p>
+      <p>A chargeback can come after a payment that looked final. On a payment, Plorea sends <code>payment.updated</code>. On a subscription charge, Plorea sends nothing. Poll <code>GET /subscriptions/{id}/charges</code>. A split refund (Adyen <code>REFUND_WITH_DATA</code>) reports <code>refunded</code>. <span class="badge stated">Stated by Plorea 2026-11-04</span> The SDK's <code>isPaid()</code> is false for all three chargeback statuses, <code>chargeback_reversed</code> included.</p>
 
       <h2>State diagram</h2>
       <figure class="diagram">

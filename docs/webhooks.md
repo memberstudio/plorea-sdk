@@ -105,8 +105,16 @@ open.
 | `payment.authorised` | `PaymentStatusUpdated` | Yes |
 | `payment.failed` | `PaymentStatusUpdated` | Yes |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
+| `payment.updated` | `PaymentStatusUpdated` | No — stated by Plorea 2026-11-04 |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
 | `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes — sent (live events, at the test URL), though not in Plorea's catalogue |
+
+Chargebacks and split refunds, as stated by Plorea on 2026-11-04 (unobserved):
+
+- On a payment, both arrive as `payment.updated`, with the new status in
+  `data.status`. They reach you as `PaymentStatusUpdated`. Re-fetch the status.
+- A split refund of a subscription charge now sends `payment.refunded`.
+- A chargeback on a subscription charge sends **no** event. Poll `charges()`.
 
 The type string is what you would expect from the status endpoint, not from
 the English: a refusal is `payment.failed`, never `payment.refused`.

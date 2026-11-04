@@ -363,6 +363,12 @@ attempts are listed too, with `status: failed`, a `pspReference` and a
 
 `charges()` is the authoritative record of scheduled billing. **Poll it.**
 
+A chargeback on a charge sends no webhook. The charge item changes to
+`chargeback_notified`, `chargeback` or `chargeback_reversed`. Only
+`charges()` and Plorea's merchant report show it (stated by Plorea 2026-11-04,
+unobserved). An
+`authorised` charge is therefore not final.
+
 ### Looking a charge up as a payment
 
 Each charge produces a payment referenced `{subscriptionId}-{chargeId}`, also
