@@ -128,6 +128,10 @@ Captured in test on 2026-11-09 (API 0.31).
 - **A cancel on an unpaid link** withdraws the link. It is not an error.
   After that, the pay page answers `410` and a new session `400`; both throw
   `PaymentLinkCancelledException`.
+- **Onboarding a company that another partner onboarded** answers `409`
+  "Merchant is onboarded by another partner". The spec does not list it. The
+  SDK throws `RequestException` (409). Payment links for that company still
+  work (2026-11-09, live). Where the money goes is not observed.
 - The spec also lists a `422` for a split refund and a `409` when a
   sub-merchant's balance account cannot be resolved. Nobody has seen either.
   They reach you as `RequestException` (422) and `RequestException` (409).

@@ -35,6 +35,8 @@ $link->expiresAt; // store this — expiry is judged from it, not from status
 
 `merchantOrgNr` is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
 
+A company that another Plorea partner already onboarded: `Plorea::merchants()->onboard()` throws `RequestException` with status 409 ("Merchant is onboarded by another partner"), and `find()` gives 404. A payment link with that org number is still created and opens. Which balance account receives the money is unobserved, so do not treat the 409 as "ready" or as "unusable"; ask Plorea.
+
 The create response does not echo the merchant back; the org number only
 reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
 

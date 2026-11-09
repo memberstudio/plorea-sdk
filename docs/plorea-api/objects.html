@@ -526,7 +526,7 @@ stateDiagram-v2
         </table>
       </div>
       <p>The list returns <code>{tenantId, count, nextCursor, kycDeferred, checkedAt, items}</code>. <code>kycDeferred</code> is a count. An approved <code>kyc</code> step can still list <code>problems</code>. <span class="badge verified">Verified 2026-11-09 (production, read only)</span></p>
-      <p><code>POST /partners/merchants</code> returns the same shape plus <code>created</code>. <span class="badge stated">Stated by Plorea</span> We have not sent it.</p>
+      <p><code>POST /partners/merchants</code> returns the same shape plus <code>created</code>. <span class="badge stated">Stated by Plorea</span> A successful answer has not been seen. A company that another partner onboarded answers <code>409</code> <code>{"error": "Merchant is onboarded by another partner", "merchantOrgNr": "…"}</code>. <span class="badge verified">Verified 2026-11-09 (production)</span></p>
 
       <h2>Webhook event</h2>
       <h3>Envelope</h3>

@@ -16,8 +16,8 @@ use MemberFlow\Plorea\Pending\PendingMerchantOnboarding;
  * account, store and card methods.
  *
  * Live only. A test key gets 400 "Partner merchants are live only"
- * (captured 2026-11-09). The reads are captured from live; onboard() is
- * stated by Plorea and not yet sent.
+ * (captured 2026-11-09). The reads are captured from live. A successful
+ * onboard() is stated by Plorea and not yet seen.
  */
 class PartnerMerchantResource extends Resource
 {
@@ -28,7 +28,7 @@ class PartnerMerchantResource extends Resource
 
     /**
      * One merchant and its onboarding steps. A merchant that belongs to
-     * another tenant is a 404.
+     * another tenant, or to another Plorea partner, is a 404.
      */
     public function find(string $merchantOrgNr, ?string $tenantId = null): PartnerMerchant
     {
@@ -94,6 +94,11 @@ class PartnerMerchantResource extends Resource
      * Plorea creates what is missing and e-mails `$email` the KYC link.
      * Calling it again for the same org number is safe: it answers 200 with
      * `created` false (stated by Plorea, not captured).
+     *
+     * A company that another Plorea partner already onboarded answers 409
+     * "Merchant is onboarded by another partner" and nothing is created
+     * (captured live 2026-11-09). It reaches you as a RequestException with
+     * status 409. Payment links for that company are still accepted.
      *
      * ```php
      * $merchant = Plorea::merchants()

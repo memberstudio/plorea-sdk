@@ -44,6 +44,17 @@ Nothing is created and no KYC e-mail is sent. The SDK throws the generic
 the same org number answered `404` first, so `find()` cannot tell you that
 another partner owns the company.
 
+**The 409 does not block payment links — VERIFIED 2026-11-09 (live), with the
+user's OK.** A 10 kr link with the same org number answered `200`. The create
+response read `store: null` and `balanceAccountId: null`. `payments/status`
+then read a store id and `splitsEnabled: true`; `balanceAccountId` stayed
+`null`. The pay page opened and showed the payment. **UNOBSERVED:** a paid
+link, which balance account receives the money, and whether our split applies.
+So do not treat the 409 as "merchant unusable", and do not treat it as
+"merchant ready" either: `find()` gives `404`, so `isReadyForPayments()` cannot
+be read for such a merchant. Asked Plorea 2026-11-09. Never commit the store
+id or the org number.
+
 Send the legal entity (hovedenhet), not a sub-unit (underenhet, `BEDR`): KYC
 verifies a legal entity.
 

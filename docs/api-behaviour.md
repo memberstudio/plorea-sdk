@@ -700,6 +700,17 @@ with `merchantOrgNr`. Nothing is created. `GET partners/merchants/{orgNr}`
 answered `404` for the same company, so a `404` does not mean the company is
 free to onboard. The SDK throws `RequestException` with status 409.
 
+**✅ Observed 2026-11-09 (live):** the 409 does not block payment links. A
+10 kr link with the same organisation number answered `200`. The create
+response read `store: null` and `balanceAccountId: null`. `GET
+payments/status` then read a store id and `splitsEnabled: true`, with
+`balanceAccountId` still `null`. The pay page opened and showed the payment.
+
+**📋 Not observed:** a paid link for such a company, which balance account
+receives the money, and whether the partner split applies. `find()` answers
+`404`, so `isReadyForPayments()` cannot be read for it. Asked Plorea on
+2026-11-09.
+
 Fixture: `partner-merchants-page.json`, `partner-merchant.json` (anonymised).
 
 ### ✅ Charge shapes — 2026-09-04
