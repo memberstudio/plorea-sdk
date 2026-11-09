@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use MemberFlow\Plorea\Data\PartnerMerchant;
+use MemberFlow\Plorea\Exceptions\RequestException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Testing\RecordedRequest;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -121,6 +122,28 @@ class PartnerMerchantResourceTest extends TestCase
 
         $this->assertSame('GOLDEN-SONS 5', Plorea::merchants()->onboard('999999995', 'owner@example.com')
             ->cardDescriptor('GOLDEN-SONS 5')->toPayload()['cardDescriptor']);
+    }
+
+    /**
+     * Captured 2026-11-09 in live, anonymised. Nothing was created.
+     */
+    public function test_a_company_another_partner_owns_is_a_409(): void
+    {
+        Http::fake([
+            'payments.plorea.no/partners/merchants' => Http::response([
+                'error' => 'Merchant is onboarded by another partner',
+                'merchantOrgNr' => '999999995',
+            ], 409),
+        ]);
+
+        try {
+            Plorea::merchants()->onboard('999999995', 'owner@example.com')->save();
+            $this->fail('Expected the onboarding to be refused.');
+        } catch (RequestException $exception) {
+            $this->assertSame(RequestException::class, $exception::class);
+            $this->assertSame(409, $exception->status);
+            $this->assertSame('Merchant is onboarded by another partner', $exception->getMessage());
+        }
     }
 
     public function test_it_refuses_a_limit_outside_what_plorea_accepts(): void

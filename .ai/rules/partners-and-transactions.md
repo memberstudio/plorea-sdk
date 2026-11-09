@@ -27,13 +27,25 @@ A live subscription for a merchant with approved KYC but no store was never
 charged. `isReadyForPayments()` needs KYC `approved`, a `storeId` and `ready`
 card methods. Do not loosen it to KYC alone.
 
-## `onboard()` is stated, not sent — UNOBSERVED
+## `onboard()` success is stated, not seen — UNOBSERVED
 
 `POST partners/merchants` is built from the 0.31 spec. Plorea states that it
 creates what is missing, e-mails the KYC link, and answers `created: false` on
-a repeat. **Nobody has sent it.** It is live only, so a test means a real
-merchant: **do not send it without the user's explicit OK.** After the first
-real call, capture and anonymise the answer as a fixture.
+a repeat. **No successful call has been seen.** It is live only, so a test
+means a real merchant: **do not send it without the user's explicit OK.**
+After the first successful call, capture and anonymise the answer as a
+fixture.
+
+**VERIFIED 2026-11-09 (live), with the user's OK:** a company that another
+Plorea partner already onboarded answers `409`
+`{"error":"Merchant is onboarded by another partner","merchantOrgNr":"…"}`.
+Nothing is created and no KYC e-mail is sent. The SDK throws the generic
+`RequestException` (status 409); the spec does not list this 409. A `GET` of
+the same org number answered `404` first, so `find()` cannot tell you that
+another partner owns the company.
+
+Send the legal entity (hovedenhet), not a sub-unit (underenhet, `BEDR`): KYC
+verifies a legal entity.
 
 Spec bug: the POST schema gives `country` `default: false` and `example: false`.
 It is an ISO 3166-1 alpha-2 string. `PendingMerchantOnboarding` sends it
