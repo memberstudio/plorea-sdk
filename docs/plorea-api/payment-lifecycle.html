@@ -42,11 +42,12 @@
             <tr><td><code>active</code></td><td>The link is open and payable.</td><td><span class="badge stated">Stated</span></td></tr>
             <tr><td rowspan="2"><strong>Paid</strong><br><span class="muted">success state</span></td><td><code>authorised</code></td><td>Adyen authorised the payment. Plorea says capture follows automatically, but the API does not show it. In test, this is where a successful payment stays.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>paid</code></td><td>Not seen in test. When Plorea reports it is not documented. Treat it the same as <code>authorised</code>, as the SDK does.</td><td><span class="badge open">Open question</span></td></tr>
-            <tr><td><strong>Declined</strong></td><td><code>failed</code></td><td>Adyen refused the payment. No money moved. No reason is given.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td rowspan="2"><strong>Modification pending</strong></td><td><code>refund_requested</code></td><td>Plorea accepted a refund. Adyen has not settled it yet.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><strong>Declined</strong></td><td><code>failed</code></td><td>Adyen refused the payment. No money moved. Since 2026-10-06, <code>refusalReason</code> holds the decline text.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td rowspan="2"><strong>Modification pending</strong></td><td><code>refund_requested</code></td><td>Plorea accepted a refund. Adyen has not settled it yet. A partly refunded payment also stays here, with <code>refundStatus: "partially_refunded"</code>.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
             <tr><td><code>cancel_requested</code></td><td>Plorea accepted a cancel. Adyen has not processed it yet.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td rowspan="2"><strong>Final</strong></td><td><code>refunded</code></td><td>The refund settled.</td><td><span class="badge stated">Stated</span></td></tr>
-            <tr><td><code>cancelled</code></td><td>The authorisation was cancelled. British spelling, unlike subscriptions.</td><td><span class="badge stated">Stated</span></td></tr>
+            <tr><td rowspan="3"><strong>Final</strong></td><td><code>refunded</code></td><td>The refund settled.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>refund_failed</code></td><td>Adyen refused the refund. The money is still with you.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>cancelled</code></td><td>An unpaid link was withdrawn, or the authorisation was cancelled. British spelling, unlike subscriptions. A withdrawn link reads <code>cancelled</code> at once.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -67,6 +68,7 @@ stateDiagram-v2
   created --> authorised: card accepted
   pending --> authorised: card accepted
   created --> failed: card declined
+  created --> cancelled: POST /payments/cancel (withdraws the link)
   pending --> failed: card declined
   authorised --> cancel_requested: POST /payments/cancel
   authorised --> refund_requested: POST /payments/refund
@@ -74,11 +76,13 @@ stateDiagram-v2
   paid --> refund_requested: POST /payments/refund
   cancel_requested --> cancelled: Adyen processes
   refund_requested --> refunded: Adyen settles
+  refund_requested --> refund_failed: Adyen refuses
   failed --> [*]
   cancelled --> [*]
   refunded --> [*]
+  refund_failed --> [*]
         </pre>
-        <figcaption>Plorea states that <code>cancelled</code> and <code>refunded</code> are the final modification statuses. We have not observed them in test. Nobody has described when <code>paid</code> appears. We have never seen it.</figcaption>
+        <figcaption><code>refunded</code>, <code>refund_failed</code> and a withdrawn link's <code>cancelled</code> were seen in test on 2026-11-09. <code>cancelled</code> after <code>cancel_requested</code> is stated by Plorea. Nobody has described when <code>paid</code> appears. We have never seen it.</figcaption>
       </figure>
 
       <h2>Authorisation and capture</h2>
@@ -108,7 +112,7 @@ sequenceDiagram
       </figure>
       <div class="callout gap">
         <p class="callout-title">What we need from Plorea</p>
-        <p>A <code>captured</code> status or a <code>payment.captured</code> webhook, so that integrators know when cancel stops working. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+        <p>A <code>captured</code> status or a <code>payment.captured</code> webhook, so that integrators know when cancel stops working. <span class="badge proposal">Proposal</span> Spec 0.31 lists <code>payment.captured</code>, but we have not received it. <span class="badge stated">Spec 0.31</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
       </div>
 
       <h2>Cancel or refund?</h2>
@@ -121,8 +125,8 @@ sequenceDiagram
             <tr><td>Works on</td><td>An authorisation that is not yet captured</td><td>A captured payment</td></tr>
             <tr><td>Partial amount</td><td>No</td><td>Yes, send <code>amount</code></td></tr>
             <tr><td>Customer sees</td><td>The reservation disappears. No refund line.</td><td>A refund on the statement</td></tr>
-            <tr><td>Immediate status</td><td><code>cancel_requested</code></td><td><code>refund_requested</code></td></tr>
-            <tr><td>Webhook on completion</td><td>None</td><td><code>payment.refunded</code> <span class="badge stated">Stated</span></td></tr>
+            <tr><td>Immediate status</td><td><code>cancel_requested</code>, or <code>cancelled</code> for an unpaid link</td><td><code>refund_requested</code></td></tr>
+            <tr><td>Webhook on completion</td><td>None seen. Spec 0.31 lists <code>payment.cancelled</code>. <span class="badge stated">Spec 0.31</span></td><td><code>payment.refunded</code> <span class="badge stated">Stated</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -132,7 +136,7 @@ sequenceDiagram
         <li><strong>Later, or for part of the amount</strong>: refund.</li>
         <li><strong>When in doubt</strong>: refund.</li>
       </ul>
-      <p class="muted">What Plorea does with a cancel that arrives after capture is an open question. <span class="badge open">Open question</span></p>
+      <p class="muted">A cancel that arrives after capture gets <code>409</code> "Payment has been captured; use /payments/refund". <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="refunds-and-cancellations.html#cancel-outcomes">Refunds and cancellations</a>.</p>
 
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash"># Refund 50,00 kr of ORDER-1001
@@ -258,7 +262,7 @@ flowchart TD
   E -->|no| K["Keep waiting"]
   E -->|yes| X["Mark expired, offer new link"]
   D -->|failed| G["Show decline, offer new attempt"]
-  D -->|"refund_requested / refunded"| H["Reconcile refund ledger (partial or full)"]
+  D -->|"refund_requested / refunded / refund_failed"| H["Reconcile refund ledger (partial or full)"]
   D -->|"cancel_requested / cancelled"| I["Mark cancelled"]
   D -->|unknown| M
         </pre>
@@ -282,10 +286,12 @@ function syncPayment(Order $order): void
             : $order-&gt;flagForReview('amount mismatch'),
         $status-&gt;isOpen() =&gt; $order-&gt;expires_at?-&gt;isPast() ? $order-&gt;markExpired() : null,
         $status-&gt;is('failed') =&gt; $order-&gt;markDeclined(),
-        // The status body shows only the last refund. Your own ledger (one row per
-        // modificationReference) decides whether the order is partly or fully refunded.
-        $status-&gt;isRefundRequested(), $status-&gt;is('refunded') =&gt; $order-&gt;reconcileRefunds($status),
-        $status-&gt;isCancelRequested(), $status-&gt;is('cancelled') =&gt; $order-&gt;markCancelled(),
+        // refunds and refundable help, but a full refund showed an empty refunds list.
+        // Your own ledger (one row per modificationReference) decides the outcome.
+        $status-&gt;isRefundRequested(), $status-&gt;is('refunded'), $status-&gt;is('refund_failed') =&gt; $order-&gt;reconcileRefunds($status),
+        // A refused cancel on a charged charge also read cancelled (2026-10-19).
+        $status-&gt;isCancellationRefused() =&gt; $order-&gt;flagForReview('cancel refused'),
+        $status-&gt;isCancelRequested(), $status-&gt;isCancelled() =&gt; $order-&gt;markCancelled(),
         default =&gt; $order-&gt;flagForReview("unknown status {$status-&gt;status}"),
     };
 }</code></pre></div>
@@ -309,9 +315,9 @@ export async function syncPayment(order) {
   }
   if (OPEN.includes(status)) return new Date(order.expiresAt) &lt; new Date() ? order.markExpired() : undefined;
   if (status === 'failed') return order.markDeclined();
-  // The status body shows only the last refund. Your own refund ledger decides
-  // whether the order is partly or fully refunded.
-  if (['refund_requested', 'refunded'].includes(status)) return order.reconcileRefunds(p);
+  // refunds and refundable help, but a full refund showed an empty refunds list.
+  // Your own refund ledger decides the outcome.
+  if (['refund_requested', 'refunded', 'refund_failed'].includes(status)) return order.reconcileRefunds(p);
   if (['cancel_requested', 'cancelled'].includes(status)) return order.markCancelled();
   return order.flagForReview(`unknown status ${p.status}`);
 }</code></pre></div>
@@ -325,7 +331,7 @@ export async function syncPayment(order) {
         <li><strong>Mark paid once.</strong> Use a database constraint or a conditional update. The webhook and the poll can run at the same moment.</li>
         <li><strong>Check the amount.</strong> Compare <code>amount</code> and <code>currency</code> with your order before you book.</li>
         <li><strong>Poll open payments on a schedule.</strong> Plorea does not redeliver a failed webhook. <span class="badge stated">Stated by Plorea</span> Poll every few minutes for the first hour, then less often until <code>expiresAt</code>.</li>
-        <li><strong>Stop polling at a final state.</strong> Stop at <code>failed</code>, <code>refunded</code> and <code>cancelled</code>, and at expiry. For the requested states, poll on a scale of hours.</li>
+        <li><strong>Stop polling at a final state.</strong> Stop at <code>failed</code>, <code>refunded</code>, <code>refund_failed</code> and <code>cancelled</code>, and at expiry. For the requested states, poll on a scale of hours.</li>
         <li><strong>Never create a second link for a paid order.</strong> Read the status before every create. A duplicate link is payable. <span class="badge verified">Verified</span></li>
       </ul>
 

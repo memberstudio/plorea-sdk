@@ -1,0 +1,7 @@
+{
+    "error": "Payment has been captured; use /payments/refund",
+    "reference": "GOLDEN-2026-021",
+    "status": "authorised",
+    "pspReference": "TESTPSPREF000021",
+    "refundedTotal": null
+}

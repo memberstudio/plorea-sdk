@@ -36,15 +36,15 @@
         "title": "409 with paidUntil on a subscription update",
         "triggers": ["409", "NextChargeInPaidPeriodException", "paidUntil", "nextChargeAt", "allowEarlyCharge", "conflict"],
         "evidence": "Stated by Plorea 2026-10-14",
-        "note": "A subscription update whose new nextChargeAt is inside a paid period answers 409 with paidUntil. The SDK throws NextChargeInPaidPeriodException; paidUntil() returns the period end. Send allowEarlyCharge() to charge anyway. A 409 without paidUntil is a plain RequestException.",
+        "note": "A subscription update whose new nextChargeAt is inside a paid period answers 409 with paidUntil. The SDK throws NextChargeInPaidPeriodException; paidUntil() returns the period end. Send allowEarlyCharge() to charge anyway. A 409 without paidUntil is not this exception: see the captured-payment and another-partner notes; any other 409 is a plain RequestException.",
         "source": {"file": "docs/errors.md", "heading": "Error handling"}
     },
     {
         "id": "retries-and-idempotency",
         "title": "Retries can bill twice",
-        "triggers": ["PLOREA_RETRY_TIMES", "retry", "idempotency", "idempotent", "timeout", "5xx", "500", "502", "503", "ServerException", "ConnectionException", "duplicate"],
-        "evidence": "VERIFIED (duplicate references create two live links)",
-        "note": "POST payments/link, subscription creation and subscriptions()->charge() have no idempotency. A retry can create a second live link or a second charge. Keep PLOREA_RETRY_TIMES=0, use firstOrCreate() for payment links, and reconcile by reading state back. A timeout is not a failure: it is an unknown, so re-read state before you decide. refund() and cancel() are safe to retry with the same modificationReference.",
+        "triggers": ["PLOREA_RETRY_TIMES", "retry", "idempotency", "idempotent", "timeout", "5xx", "500", "502", "503", "ServerException", "ConnectionException", "duplicate", "Idempotency-Key"],
+        "evidence": "VERIFIED (duplicate references create two live links); Idempotency-Key VERIFIED broken 2026-11-09 (test)",
+        "note": "POST payments/link, subscription creation and subscriptions()->charge() have no idempotency. A retry can create a second live link or a second charge. Keep PLOREA_RETRY_TIMES=0, use firstOrCreate() for payment links, and reconcile by reading state back. A timeout is not a failure: it is an unknown, so re-read state before you decide. refund() and cancel() are safe to retry with the same modificationReference. API 0.31 documents an Idempotency-Key header, but in test on 2026-11-09 a repeated key created a second row and moved nextChargeAt, and a reused key with a different amount was booked as authorised. Do not rely on it; the SDK does not send it.",
         "source": {"file": "docs/errors.md", "heading": "Retries and idempotency"}
     },
     {
@@ -134,5 +134,45 @@
         "evidence": "VERIFIED",
         "note": "10000 is 100,00 kr. The API has no major-unit representation anywhere.",
         "source": {"file": "docs/api-behaviour.md", "heading": "✅ Amounts are minor units (øre)"}
+    },
+    {
+        "id": "refund-amount-exceeded",
+        "title": "A refund over the remaining amount is a 400",
+        "triggers": ["RefundAmountExceededException", "422", "remainingAmount", "alreadyRefunded", "Refund amount exceeds original payment amount", "refundable", "canRequestRefund"],
+        "evidence": "VERIFIED 2026-11-09 (test), API 0.31; a 422 until then (2026-10-17)",
+        "note": "refund() with more than is left answers 400 with originalAmount, alreadyRefunded, requestedAmount and remainingAmount. The SDK throws RefundAmountExceededException (extends ValidationException). Before API 0.31 the same refusal was a 422. Ask first: payments()->status($reference)->canRequestRefund() and ->refundable->remainingAmount.",
+        "source": {"file": "docs/errors.md", "heading": "Refund and cancel refusals"}
+    },
+    {
+        "id": "cancel-captured",
+        "title": "Cancel on a captured payment or charge is a 409",
+        "triggers": ["PaymentAlreadyCapturedException", "409", "cancel", "captured", "use refund", "cancel_requested"],
+        "evidence": "VERIFIED 2026-11-09 (test), API 0.31; before that the cancel was accepted and Adyen refused it (2026-10-19)",
+        "note": "payments()->cancel() on a captured payment answers 409 \"Payment has been captured; use /payments/refund\"; on a subscription charge \"Charge has been captured; use refund\". The SDK throws PaymentAlreadyCapturedException for both. Match on the class, not the message. Refund instead.",
+        "source": {"file": "docs/errors.md", "heading": "Refund and cancel refusals"}
+    },
+    {
+        "id": "payment-link-withdrawn",
+        "title": "Cancel on an unpaid link withdraws it",
+        "triggers": ["PaymentLinkCancelledException", "410", "cancelledAt", "alreadyCancelled", "isLinkWithdrawn", "Payment link was cancelled", "withdraw"],
+        "evidence": "VERIFIED 2026-11-09 (test), API 0.31",
+        "note": "payments()->cancel() on an unpaid link answers status cancelled with paymentLinkId, amount and cancelledAt (isLinkWithdrawn() is true). A second cancel answers the same with alreadyCancelled true. After that the pay page answers 410 and payments/session 400, both with cancelledAt: PaymentLinkCancelledException.",
+        "source": {"file": "docs/errors.md", "heading": "Refund and cancel refusals"}
+    },
+    {
+        "id": "merchant-other-partner",
+        "title": "Onboarding a company another partner owns is a 409",
+        "triggers": ["MerchantOnboardedByAnotherPartnerException", "409", "onboard", "another partner", "Merchant is onboarded by another partner", "partners/merchants"],
+        "evidence": "VERIFIED 2026-11-09 (live), one company; payout destination UNOBSERVED",
+        "note": "merchants()->onboard()->save() for a company that another Plorea partner already onboarded answers 409 with merchantOrgNr. Nothing is created and no KYC e-mail is sent. The SDK throws MerchantOnboardedByAnotherPartnerException. merchants()->find() answers 404 for the same company, so a 404 does not mean the company is free. A payment link with that org number is still created and its pay page opens. Which balance account receives the money is not observed: ask Plorea before you sell for such a merchant.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Merchant onboarding state: `partners/merchants` — 2026-11-09 (live)"}
+    },
+    {
+        "id": "merchant-not-ready",
+        "title": "A merchant without a store is never charged",
+        "triggers": ["merchants", "partners/merchants", "KYC", "store", "storeId", "isReadyForPayments", "cardMethods", "no_store", "action_required"],
+        "evidence": "Observed in live 2026-11-06 to 2026-11-09; partners endpoint VERIFIED 2026-11-09 (live read)",
+        "note": "A live subscription for a merchant org number with approved KYC but no store was never charged: the scheduler moved nextChargeAt once and stopped. Read Plorea::merchants()->find($orgNr) first. isReadyForPayments() needs KYC approved, a storeId and ready card methods. needsKycAction() and kycProblems() say what the merchant must fix. The endpoint answers in live only.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Merchant onboarding state: `partners/merchants` — 2026-11-09 (live)"}
     }
 ]

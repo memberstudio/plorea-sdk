@@ -10,9 +10,15 @@ namespace MemberFlow\Plorea\Events;
  * for the authoritative state.
  *
  * $eventId is Plorea's identifier for the delivery and is what you should
- * deduplicate on. $type is the catalogue type — "payment.authorised",
- * "payment.failed" or "payment.refunded". Both come from the request body
- * rather than the headers, because the signature covers the body only.
+ * deduplicate on. $type is the catalogue type, for example
+ * "payment.authorised", "payment.failed", "payment.refunded",
+ * "payment.refund_failed", "payment.cancelled" or "payment.updated". Both
+ * come from the request body rather than the headers, because the
+ * signature covers the body only.
+ *
+ * Every "payment.*" type raises this event. "payment.updated" carries
+ * chargebacks and split refunds; its `data.status` says which. Do not
+ * branch on $type alone: read the status from the API.
  */
 class PaymentStatusUpdated
 {

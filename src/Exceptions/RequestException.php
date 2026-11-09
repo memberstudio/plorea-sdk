@@ -29,14 +29,19 @@ class RequestException extends PloreaException
 
         $status = $response->status();
         $message = self::messageFor($response, $status);
+        $body = is_array($response->json()) ? $response->json() : [];
 
         return match (true) {
-            $status === 400 && is_array($response->json('activeSubscriptionIds')) => new PaymentMethodInUseException($message, $status, $response),
+            $status === 400 && is_array($body['activeSubscriptionIds'] ?? null) => new PaymentMethodInUseException($message, $status, $response),
+            ($status === 400 || $status === 410) && is_string($body['cancelledAt'] ?? null) => new PaymentLinkCancelledException($message, $status, $response),
+            $status === 400 && array_key_exists('remainingAmount', $body) => new RefundAmountExceededException($message, $status, $response),
             $status === 400 => new ValidationException($message, $status, $response),
             $status === 401, $status === 403 => new AuthenticationException($message, $status, $response),
             $status === 402 => new ChargeFailedException($message, $status, $response),
             $status === 404 => new NotFoundException($message, $status, $response),
-            $status === 409 && is_array($response->json()) && array_key_exists('paidUntil', $response->json()) => new NextChargeInPaidPeriodException($message, $status, $response),
+            $status === 409 && array_key_exists('paidUntil', $body) => new NextChargeInPaidPeriodException($message, $status, $response),
+            $status === 409 && array_key_exists('refundedTotal', $body) && is_string($body['status'] ?? null) && str_contains(strtolower($message), 'captured') => new PaymentAlreadyCapturedException($message, $status, $response),
+            $status === 409 && is_string($body['merchantOrgNr'] ?? null) && str_contains(strtolower($message), 'another partner') => new MerchantOnboardedByAnotherPartnerException($message, $status, $response),
             $status >= 500 => new ServerException($message, $status, $response),
             default => new self($message, $status, $response),
         };

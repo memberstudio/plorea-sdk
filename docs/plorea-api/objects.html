@@ -26,7 +26,7 @@
       </div>
 
       <h2>Payment</h2>
-      <p>The payment object is the body of <code>GET /payments/status/{reference}</code>. It has 29 keys. It is the same for a payment link, an embedded checkout payment and a manual subscription charge. <span class="badge verified">Verified</span></p>
+      <p>The payment object is the body of <code>GET /payments/status/{reference}</code>. It had 29 keys in September 2026. Later keys are listed at the end of the table. It is the same for a payment link, an embedded checkout payment and a manual subscription charge. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
@@ -62,15 +62,19 @@
             <tr><td><code>lastCancelRequestedAt</code></td><td class="type">datetime</td><td>yes</td><td>When the last cancel was requested.</td></tr>
             <tr><td><code>subscriptionId</code>, <code>chargeId</code></td><td class="type">string</td><td>yes</td><td>On a subscription charge only, with <code>platform: "subscription"</code>. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
             <tr><td><code>refundedTotal</code></td><td class="type">integer</td><td>yes</td><td>Total refunded on the reference, in øre. It caps refunds at the payment amount.</td></tr>
-            <tr><td><code>refundStatus</code></td><td class="type">string</td><td>yes</td><td>For example <code>partially_refunded</code>. Seen on a subscription charge. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
-            <tr><td><code>refunds</code></td><td class="type">array</td><td>yes</td><td>One entry per refund: <code>amount</code>, <code>currency</code>, <code>reason</code>, <code>refundPspReference</code>, <code>refundReference</code>, <code>requestedAt</code>, <code>settledAt</code>, <code>source</code>, <code>splits</code>, <code>status</code>. Seen on a subscription charge, where the <code>lastRefund*</code> fields were absent. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
+            <tr><td><code>refundStatus</code></td><td class="type">string</td><td>yes</td><td>For example <code>partially_refunded</code> or <code>refund_failed</code>. A partly refunded payment link read <code>status: "refund_requested"</code> and <code>refundStatus: "partially_refunded"</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>refunds</code></td><td class="type">array</td><td>no</td><td>One entry per refund: <code>amount</code>, <code>currency</code>, <code>eventCode</code> (<code>"REFUND"</code>), <code>refundPspReference</code>, <code>refundReference</code>, <code>settledAt</code>, <code>source</code> (<code>"adyen"</code>) and <code>status</code> (<code>"refunded"</code> or <code>"refund_failed"</code>). Present on payment links since November 2026. A subscription charge on 2026-10-19 also showed <code>reason</code>, <code>requestedAt</code> and <code>splits</code>. A fully refunded payment showed an empty list. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>refundable</code></td><td class="type">object</td><td>no</td><td><code>{originalAmount, refundedTotal, remainingAmount, currency, canRequest, reason, mayStillFail}</code>. Amounts in øre. <code>canRequest</code> says if a refund can be requested now. <code>reason</code> says why not, for example <code>"The whole payment has already been refunded."</code>. <code>mayStillFail</code> warns that a refund can still fail, for example <code>"A payment settled to a sub-merchant is refused with 409 if its balance account cannot be resolved."</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>refusalReason</code></td><td class="type">string</td><td>yes</td><td>Adyen's decline text. Present since 2026-10-06. It held the decline text after a decline on 2026-10-17 and went back to <code>null</code> after a good second try. Not in the webhook. <span class="badge verified">Verified (test)</span></td></tr>
+            <tr><td><code>settledChargeTotal</code>, <code>settledCharges</code></td><td class="type">integer / array</td><td>no</td><td>The total and list of settled charges on the reference. Seen as <code>0</code> and <code>[]</code> on payment links. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>merchantOrgNr</code>, <code>reason</code>, <code>retryNumber</code>, <code>failureReason</code></td><td class="type">string / integer</td><td>yes</td><td>On a subscription charge only. <code>reason</code> is for example <code>"manual_charge"</code>. <code>retryNumber</code> is 0 for the first attempt. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
             <tr><td><code>cancelStatus</code>, <code>cancelReference</code>, <code>cancelPspReference</code>, <code>cancelRequestedAt</code></td><td class="type">string / datetime</td><td>yes</td><td>The cancel group on a subscription charge, in place of <code>lastCancel*</code>. <code>cancelStatus</code> stayed <code>cancel_requested</code> after Adyen refused the cancel. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout warning">
-        <p class="callout-title">No reason, and per-refund state only on some payments</p>
-        <p>The payment has no decline reason. On a payment link, only the <em>last</em> refund and the <em>last</em> cancel are visible, with no status per refund. A subscription charge in test on 2026-10-19 showed a <code>refunds</code> list instead, with a <code>status</code> and <code>refundPspReference</code> per refund. <span class="badge verified">Verified 2026-10-19 (test)</span> Plorea has stated that <code>refusalReason</code> is coming. Do not model it until you see it. <span class="badge stated">Stated by Plorea</span></p>
+        <p class="callout-title">Decline reason and per-refund state</p>
+        <p>Until October 2026 the payment had no decline reason, and a payment link showed only the <em>last</em> refund. A subscription charge in test on 2026-10-19 showed a <code>refunds</code> list first. <span class="badge verified">Verified 2026-10-19 (test)</span> Since November 2026, payment links also have <code>refunds</code>, with a <code>status</code> and <code>refundPspReference</code> per refund, and <code>refusalReason</code> is delivered. <span class="badge verified">Verified 2026-11-09 (test)</span> Read <code>refundable</code> before a refund. It gives the remaining amount and the reason when a refund is not possible.</p>
       </div>
       <pre data-title="Payment — refund requested"><code class="lang-json">{
   "reference": "order-1001",
@@ -115,10 +119,11 @@
             <tr><td><code>authorised</code></td><td>Paid</td><td>Adyen authorised the payment. Capture follows automatically. This is the final success state you can see. Test payments stay here.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>paid</code></td><td>Paid</td><td>Treat as paid. Not seen in test.</td><td><span class="badge unobserved">Not observable in test</span></td></tr>
             <tr><td><code>failed</code></td><td>Declined</td><td>Adyen declined the payment. The string is never <code>refused</code>.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>refund_requested</code></td><td>Modification pending</td><td>Plorea accepted a refund. Settlement can take more than 11 hours.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>cancel_requested</code></td><td>Modification pending</td><td>Plorea accepted a cancel of the authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>refunded</code></td><td>Final</td><td>The refund settled.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
-            <tr><td><code>cancelled</code></td><td>Final</td><td>The cancel settled. Note the UK spelling here and the US spelling on subscriptions.</td><td><span class="badge stated">Stated by Plorea</span></td></tr>
+            <tr><td><code>refund_requested</code></td><td>Modification pending</td><td>Plorea accepted a refund. Settlement can take more than 11 hours. A partly refunded payment stays here, with <code>refundStatus: "partially_refunded"</code>.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>cancel_requested</code></td><td>Modification pending</td><td>Plorea accepted a cancel of an authorisation that is not captured. A captured payment gives <code>409</code> instead.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td><code>refunded</code></td><td>Final</td><td>The whole amount was refunded.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>refund_failed</code></td><td>Final</td><td>Adyen refused the refund. The money stays with the merchant.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td><code>cancelled</code></td><td>Final</td><td>An unpaid link was withdrawn, or a cancel settled. Note the UK spelling here and the US spelling on subscriptions. On 2026-10-19 a charged subscription charge also read <code>cancelled</code> after Adyen refused the cancel; the money stayed charged.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -129,13 +134,15 @@ stateDiagram-v2
   [*] --> created
   created --> authorised: customer pays
   created --> failed: declined
-  authorised --> cancel_requested: POST /payments/cancel
+  created --> cancelled: POST /payments/cancel (link withdrawn)
+  authorised --> cancel_requested: POST /payments/cancel (not captured)
   authorised --> refund_requested: POST /payments/refund
   cancel_requested --> cancelled: settles (stated)
-  refund_requested --> refunded: settles (stated)
+  refund_requested --> refunded: whole amount
+  refund_requested --> refund_failed: Adyen refuses
   failed --> [*]
         </pre>
-        <figcaption>Observed payment states. Final states <code>refunded</code> and <code>cancelled</code> are stated by Plorea, not yet observed.</figcaption>
+        <figcaption>Observed payment states. <code>refunded</code>, <code>refund_failed</code> and a withdrawn link's <code>cancelled</code> were seen in test in November 2026. A settled cancel of an authorisation is stated by Plorea.</figcaption>
       </figure>
 
       <h2>Payment link</h2>
@@ -225,7 +232,7 @@ stateDiagram-v2
 }</code></pre>
 
       <h2>Refund and cancel</h2>
-      <p>The bodies of <code>POST /payments/refund</code> and <code>POST /payments/cancel</code>. <span class="badge verified">Verified</span></p>
+      <p>The bodies of <code>POST /payments/refund</code> and <code>POST /payments/cancel</code>. <span class="badge verified">Verified</span> A cancel of an unpaid link has a different body; see <a href="#withdrawn-link">Withdrawn link</a>.</p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
@@ -242,6 +249,19 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
+      <h3 id="withdrawn-link">Withdrawn link</h3>
+      <p>The body of <code>POST /payments/cancel</code> on an unpaid payment link. The link is withdrawn at once: <code>status</code> is <code>"cancelled"</code>, not <code>"cancel_requested"</code>. A second cancel returns the same body plus <code>alreadyCancelled: true</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></p>
+      <pre data-title="200 OK"><code class="lang-json">{
+  "status": "cancelled",
+  "reference": "order-1001",
+  "paymentLinkId": "pl_test_example",
+  "orderId": null,
+  "amount": 1000,
+  "currency": "NOK",
+  "cancelledAt": "2026-11-08T12:00:00.000Z",
+  "environment": "test"
+}</code></pre>
+      <p>After a withdrawal, <code>GET /pay/{paymentLinkId}</code> returns <code>410</code> with <code>{"error": "Payment link was cancelled", "id", "cancelledAt"}</code>. <code>POST /payments/session</code> for the link returns <code>400</code> with <code>{"error": "Payment link was cancelled", "cancelledAt"}</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></p>
 
       <h2>Checkout session</h2>
       <p>The body of <code>POST /payments/session</code>. Pass it to Adyen Drop-in. <span class="badge verified">Verified</span></p>
@@ -469,6 +489,45 @@ stateDiagram-v2
         </table>
       </div>
 
+      <h2 id="transaction">Transaction</h2>
+      <p>One item of <code>GET /transactions</code>, which returns <code>{tenantId, count, nextCursor, items}</code>. <code>nextCursor</code> is <code>null</code> on the last page. An item is a lighter copy of the <a href="#payment">payment</a>: <code>reference</code>, <code>tenantId</code>, <code>platform</code>, <code>orderId</code>, <code>amount</code>, <code>currency</code>, <code>environment</code>, <code>status</code>, <code>provider</code>, <code>pspReference</code>, <code>paymentLinkId</code>, <code>paymentLinkUrl</code>, <code>merchantAccount</code>, <code>store</code>, <code>splitsEnabled</code>, <code>createdAt</code>, <code>updatedAt</code>, <code>webhookEventCode</code>, <code>webhookSuccess</code>, <code>lastRefundReference</code>, <code>lastRefundAmount</code> and <code>lastRefundReason</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></p>
+      <ul>
+        <li>A card setup appears as a row with a <code>pmsetup_…</code> reference. <span class="badge verified">Verified</span></li>
+        <li>A subscription charge appears with <code>platform: "subscription"</code>. Its row can be stale: one read <code>created</code>, with no <code>pspReference</code>, while the status endpoint read <code>authorised</code>. Read the status endpoint for the truth. <span class="badge verified">Verified 2026-11-09 (test)</span></li>
+      </ul>
+
+      <h2 id="partner-merchant">Partner merchant</h2>
+      <p>The body of <code>GET /partners/merchants/{merchantOrgNr}</code>, and one item of <code>GET /partners/merchants</code>. Live only: a test key gets <code>400</code>. <span class="badge verified">Verified 2026-11-09 (production, read only)</span></p>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>Field</th><th>Type</th><th>Nullable</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>merchantOrgNr</code></td><td class="type">string</td><td>no</td><td>The organisation number.</td></tr>
+            <tr><td><code>name</code>, <code>email</code></td><td class="type">string</td><td>yes</td><td>The merchant's name and contact email. <code>email</code> is on list items.</td></tr>
+            <tr><td><code>kycUrl</code></td><td class="type">string</td><td>yes</td><td>The hosted page where the merchant completes KYC. Send it to the merchant.</td></tr>
+            <tr><td><code>storeId</code></td><td class="type">string</td><td>yes</td><td>Null when the merchant has no store. A merchant without a store cannot be charged.</td></tr>
+            <tr><td><code>steps</code></td><td class="type">object</td><td>no</td><td>One object per onboarding step, each with a <code>status</code>. See below.</td></tr>
+            <tr><td><code>checkedAt</code></td><td class="type">datetime</td><td>no</td><td>When Plorea read the state from Adyen.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Step</th><th>Statuses seen</th><th>Other fields</th></tr></thead>
+          <tbody>
+            <tr><td><code>merchant</code></td><td><code>existed</code></td><td><code>clientType</code></td></tr>
+            <tr><td><code>legalEntity</code></td><td><code>existed</code></td><td><code>id</code></td></tr>
+            <tr><td><code>kyc</code></td><td><code>approved</code>, <code>action_required</code></td><td><code>legalEntityId</code>, <code>verificationStatus</code> (<code>valid</code>, <code>invalid</code>), <code>problems[]</code> with <code>entityType</code>, <code>entityId</code>, <code>code</code>, <code>type</code>, <code>message</code></td></tr>
+            <tr><td><code>balanceAccount</code></td><td><code>ready</code></td><td><code>id</code></td></tr>
+            <tr><td><code>store</code></td><td><code>existed</code>, <code>missing</code></td><td><code>storeId</code>, <code>merchantAccount</code></td></tr>
+            <tr><td><code>cardMethods</code></td><td><code>ready</code>, <code>no_store</code></td><td><code>descriptor</code>, <code>methods</code> (per scheme: <code>state</code>, <code>id</code>, <code>verificationStatus</code>), <code>errors</code>, <code>checkedAt</code>, <code>fromCache</code></td></tr>
+            <tr><td><code>partnerRow</code></td><td><code>written</code></td><td><code>tenantId</code>, <code>createdAt</code>, <code>updatedAt</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The list returns <code>{tenantId, count, nextCursor, kycDeferred, checkedAt, items}</code>. <code>kycDeferred</code> is a count. An approved <code>kyc</code> step can still list <code>problems</code>. <span class="badge verified">Verified 2026-11-09 (production, read only)</span></p>
+      <p><code>POST /partners/merchants</code> returns the same shape plus <code>created</code>. <span class="badge stated">Stated by Plorea</span> A successful answer has not been seen. A company that another partner onboarded answers <code>409</code> <code>{"error": "Merchant is onboarded by another partner", "merchantOrgNr": "…"}</code>. <span class="badge verified">Verified 2026-11-09 (production)</span></p>
+
       <h2>Webhook event</h2>
       <h3>Envelope</h3>
       <p>Every delivery is a JSON body with this envelope. Headers: <code>x-plorea-signature</code>, <code>x-plorea-event-id</code>, <code>x-plorea-event</code>. Only the body is signed. <span class="badge verified">Verified</span></p>
@@ -569,10 +628,10 @@ stateDiagram-v2
           </tbody>
         </table>
       </div>
-      <p>No event is sent for card setup, subscription cancel or reactivate. No <code>payment.captured</code> event exists. <span class="badge stated">Stated by Plorea</span> Plorea also said a failed charge sends nothing. The capture above shows otherwise.</p>
+      <p>No event is sent for card setup, subscription cancel or reactivate. <span class="badge stated">Stated by Plorea</span> Plorea also said a failed charge sends nothing. The capture above shows otherwise. Spec 0.31 lists more events, among them <code>payment.captured</code> and <code>subscription.trial_will_end</code>. None of them is captured yet. <span class="badge stated">Spec 0.31</span> See <a href="webhooks.html">Webhooks</a>.</p>
 
       <h2>Error</h2>
-      <p>Every error has the same body: one <code>error</code> string. Branch on the HTTP status. The message is a fixed template. See <a href="errors.html">Errors and retries</a>.</p>
+      <p>Every error has one <code>error</code> string. Branch on the HTTP status. The message is a fixed template. Some errors add fields: a refund over the remaining amount, a cancel of a captured payment and a withdrawn link carry amounts, references or <code>cancelledAt</code>. <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="errors.html">Errors and retries</a>.</p>
       <pre data-title="403 Forbidden"><code class="lang-json">{ "error": "Tenant mismatch" }</code></pre>
     </article>
   </main>

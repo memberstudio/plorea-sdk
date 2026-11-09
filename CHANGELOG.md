@@ -22,6 +22,52 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   webhook route inside PHP, so the real signature check and the app's
   listeners run. Nothing goes over the network. It refuses in production and
   in live.
+- API 0.31: `Plorea::transactions()` with `list()` and `all()` (cursor
+  paging, `limit` 1–1000), returning `Transaction` and `TransactionPage`.
+- API 0.31: `Plorea::merchants()` with `find()`, `list()`, `all()` and
+  `onboard()` (`PendingMerchantOnboarding`), returning `PartnerMerchant`,
+  `PartnerMerchantStep` and `PartnerMerchantPage`. Helpers:
+  `isReadyForPayments()`, `needsKycAction()`, `isKycDeferred()`,
+  `kycProblems()`. Live only. The reads are captured from live; `onboard()`
+  has not been sent.
+- `PaymentStatus::$refusalReason`, `$refundable` (the new `Refundability`),
+  `$settledChargeTotal`, `$merchantOrgNr`, `$reason`, `$retryNumber`,
+  `$failureReason` and `canRequestRefund()`.
+- `PaymentCancellation::$paymentLinkId`, `$orderId`, `$amount`,
+  `$cancelledAt`, `$alreadyCancelled` and `isLinkWithdrawn()`.
+- `Refund::$splits`, `$splitsSource`, `$adyenStatus`;
+  `PaymentRefund::$eventCode` and `isFailed()`.
+- `payments()->status()` and `refund()` take an optional `$tenantId`.
+- `RefundAmountExceededException` (400), `PaymentLinkCancelledException`
+  (400/410), `PaymentAlreadyCapturedException` (409 on cancel) and
+  `MerchantOnboardedByAnotherPartnerException` (409 on `merchants()->onboard()`, captured
+  live).
+- The webhook middleware accepts `X-Plorea-Signature-Next` during a secret
+  rotation.
+- `Plorea::fake()` answers the transaction and partner-merchant routes.
+- MCP: the new `PaymentStatus` fields and `Refundability` are classified for
+  masking. Four new field notes: `refund-amount-exceeded`, `cancel-captured`,
+  `payment-link-withdrawn`, `merchant-not-ready`.
+
+### Plorea API behaviour (API 0.31, verified 2026-11-09)
+
+- A refund over the remaining amount is now `400` with the amounts (was
+  `422`).
+- Cancel on an unpaid link withdraws it. Cancel on a captured payment or
+  charge is `409` (before, Adyen refused it and the status still read
+  `cancelled`).
+- `refunded`, `refund_failed` and `cancelled` are now observed statuses.
+- The `Idempotency-Key` header does not work in test. The SDK does not send
+  it.
+- `trialDays`, `billingAnchor` and `proration` were ignored in test. The SDK
+  does not send them.
+- A payment link with a `shopperReference` gets Adyen error `702` on its
+  session.
+- Transaction rows for subscription charges appear (the spec says they do
+  not), and their status can be stale.
+- A live subscription for a merchant without a store was never charged.
+- The spec lists more `payment.*` webhook types; all raise
+  `PaymentStatusUpdated`. None of the new ones is captured.
 
 ## v0.6.1 - 2026-10-20
 

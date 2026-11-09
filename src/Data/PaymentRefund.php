@@ -20,7 +20,8 @@ final readonly class PaymentRefund
     /**
      * @param  array<string, mixed>  $raw
      * @param  ?string  $reference  The modification reference sent with the refund (`refundReference` on the wire).
-     * @param  ?string  $source  Where the refund came from. Only `api` has been seen.
+     * @param  ?string  $source  Where the refund came from. `api` (test 2026-10-19) and `adyen` (test 2026-11-09) have been seen.
+     * @param  ?string  $eventCode  Adyen's event code, for example `REFUND`. Seen in test 2026-11-09.
      */
     public function __construct(
         public ?Amount $amount,
@@ -32,6 +33,7 @@ final readonly class PaymentRefund
         public ?string $source,
         public ?string $status,
         public array $raw = [],
+        public ?string $eventCode = null,
     ) {}
 
     /**
@@ -51,6 +53,7 @@ final readonly class PaymentRefund
             source: self::string($data['source'] ?? null),
             status: self::string($data['status'] ?? null),
             raw: $data,
+            eventCode: self::string($data['eventCode'] ?? null),
         );
     }
 
@@ -60,5 +63,14 @@ final readonly class PaymentRefund
     public function isRefunded(): bool
     {
         return $this->status !== null && strcasecmp($this->status, 'refunded') === 0;
+    }
+
+    /**
+     * Whether Adyen refused the refund. Seen in test 2026-11-09 as
+     * `refund_failed`; the payment's `refundStatus` said the same.
+     */
+    public function isFailed(): bool
+    {
+        return $this->status !== null && strcasecmp($this->status, 'refund_failed') === 0;
     }
 }

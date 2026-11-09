@@ -35,6 +35,8 @@ $link->expiresAt; // store this — expiry is judged from it, not from status
 
 `merchantOrgNr` is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
 
+A company that another Plorea partner already onboarded: `Plorea::merchants()->onboard()->save()` throws `MemberFlow\Plorea\Exceptions\MerchantOnboardedByAnotherPartnerException` (409, `merchantOrgNr()`) ("Merchant is onboarded by another partner"), and `find()` gives 404. A payment link with that org number is still created and opens. Which balance account receives the money is unobserved, so do not treat the 409 as "ready" or as "unusable"; ask Plorea.
+
 The create response does not echo the merchant back; the org number only
 reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
 
@@ -53,7 +55,7 @@ $status->isRefundRequested();  // accepted, provider settling asynchronously
 $status->isCancelRequested();
 ```
 
-Use the helpers, not string comparison. A **refused payment reports `failed`, not `refused`** (captured 2026-09-09) — `$status->is('failed')`; the decline itself shows as `webhookEventCode: AUTHORISATION` with `webhookSuccess: false`, and there is no `failureReason` field on this shape. `expired` never appears live — links past expiry keep reporting open; judge expiry from the stored `expiresAt`. The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe Plorea's inbound Adyen webhook, not webhooks sent to your app. Verify `$status->amount` against your local expectation before booking; on mismatch, flag for manual handling.
+Use the helpers, not string comparison. A **refused payment reports `failed`, not `refused`** (captured 2026-09-09) — `$status->is('failed')`; the decline itself shows as `webhookEventCode: AUTHORISATION` with `webhookSuccess: false`, and the reason is in `$status->refusalReason` (typed since API 0.31). `expired` never appears live — links past expiry keep reporting open; judge expiry from the stored `expiresAt`. The `webhookEventCode` / `webhookSuccess` / `lastWebhookAt` fields describe Plorea's inbound Adyen webhook, not webhooks sent to your app. Verify `$status->amount` against your local expectation before booking; on mismatch, flag for manual handling.
 
 ## Refund / cancel
 
@@ -62,7 +64,9 @@ Plorea::payments()->refund('FIN-2026-00123', modificationReference: 'FIN-2026-00
 Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
 
-Both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook. **Settlement takes hours** (>11h observed 2026-09-09), so size polling loops in hours: an hour-long timeout reports a healthy refund as failed, and reversing your books or telling the customer on that basis does real damage. `refund_requested` means accepted. On a payment link there is no per-refund status field (a subscription charge has one in `$status->refunds`, see below) — pre-settlement the only signal is top-level `status` plus the `lastRefund*` group, and `webhookEventCode` stays `AUTHORISATION` because it describes the original authorisation.
+Since API 0.31: `cancel()` on an **unpaid link withdraws it** (`isLinkWithdrawn()`; the link then throws `PaymentLinkCancelledException`), `cancel()` on a captured payment or charge throws `PaymentAlreadyCapturedException` (refund instead), and a refund over what is left throws `RefundAmountExceededException`. Ask first: `$status->canRequestRefund()` and `$status->refundable?->remainingAmount`. Do not send an `Idempotency-Key`: it did not work in test (2026-11-09).
+
+Otherwise both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook. **Settlement takes hours** (>11h observed 2026-09-09), so size polling loops in hours: an hour-long timeout reports a healthy refund as failed, and reversing your books or telling the customer on that basis does real damage. `refund_requested` means accepted. On a payment link there is no per-refund status field (a subscription charge has one in `$status->refunds`, see below) — pre-settlement the only signal is top-level `status` plus the `lastRefund*` group, and `webhookEventCode` stays `AUTHORISATION` because it describes the original authorisation.
 
 **Persist the `Refund` DTO.** On a payment link, `refundPspReference` exists only on the refund response and never on `payments/status`, whose `lastRefundRequestPspReference` identifies the *request* rather than the refund. No later poll can recover it, and it is the identifier provider support asks for.
 

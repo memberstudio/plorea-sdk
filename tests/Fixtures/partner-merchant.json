@@ -1,0 +1,61 @@
+{
+    "merchantOrgNr": "999999994",
+    "tenantId": "test-tenant",
+    "name": "Golden Merchant 4 AS",
+    "kycUrl": "https://example.test/kyc/golden-4",
+    "storeId": "ST_TEST_GOLDEN_4",
+    "steps": {
+        "merchant": {
+            "status": "existed",
+            "clientType": null
+        },
+        "legalEntity": {
+            "status": "existed",
+            "id": "LE_TEST_GOLDEN_4"
+        },
+        "kyc": {
+            "status": "approved",
+            "legalEntityId": "LE_TEST_GOLDEN_4",
+            "verificationStatus": "valid",
+            "problems": []
+        },
+        "balanceAccount": {
+            "status": "ready",
+            "id": "BA_TEST_GOLDEN_4"
+        },
+        "store": {
+            "status": "existed",
+            "storeId": "ST_TEST_GOLDEN_4",
+            "merchantAccount": "TestMerchantAccount"
+        },
+        "cardMethods": {
+            "status": "ready",
+            "businessLineId": null,
+            "descriptor": "GOLDEN MERCHANT 4",
+            "methods": {
+                "visa": {
+                    "state": "ready",
+                    "id": "PM_TEST_GOLDEN_4_VISA",
+                    "verificationStatus": "valid",
+                    "mid": "0000000004"
+                },
+                "mc": {
+                    "state": "ready",
+                    "id": "PM_TEST_GOLDEN_4_MC",
+                    "verificationStatus": "valid",
+                    "mid": "0000000004"
+                }
+            },
+            "errors": [],
+            "checkedAt": "2026-11-08T23:31:38.260Z",
+            "fromCache": true
+        },
+        "partnerRow": {
+            "status": "written",
+            "tenantId": "test-tenant",
+            "createdAt": "2026-09-10T12:24:13.242Z",
+            "updatedAt": "2026-11-08T22:12:16.274Z"
+        }
+    },
+    "checkedAt": "2026-11-08T23:31:40.515Z"
+}

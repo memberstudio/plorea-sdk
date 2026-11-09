@@ -18,6 +18,12 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * header holds a base64-encoded HMAC-SHA256 of the raw request body. When
  * that header is present it is verified against the configured secret.
  *
+ * During a secret rotation Plorea also sends X-Plorea-Signature-Next: the
+ * same HMAC under the next secret (API spec 0.31; no rotation observed yet).
+ * A delivery passes when either header verifies against the configured
+ * secret, so the app can switch PLOREA_WEBHOOK_SECRET to the new secret at
+ * any point during the rotation without dropping a delivery.
+ *
  * As a fallback — for registrations where a shared secret was handed to
  * Plorea to echo back — a request without a signature header is accepted
  * when the Authorization header matches the secret verbatim (optionally
@@ -48,9 +54,13 @@ class AuthenticateWebhook
         }
 
         $signature = (string) $request->header('X-Plorea-Signature', '');
+        $nextSignature = (string) $request->header('X-Plorea-Signature-Next', '');
 
-        if ($signature !== '') {
-            if (! $this->signatureIsValid($request, $secret, $signature)) {
+        if ($signature !== '' || $nextSignature !== '') {
+            $valid = ($signature !== '' && $this->signatureIsValid($request, $secret, $signature))
+                || ($nextSignature !== '' && $this->signatureIsValid($request, $secret, $nextSignature));
+
+            if (! $valid) {
                 throw new AccessDeniedHttpException('Invalid Plorea webhook signature.');
             }
 

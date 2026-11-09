@@ -1,0 +1,9 @@
+{
+    "error": "Charge has been captured; use refund",
+    "reference": "sub_test_golden-chg_test_golden_4",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_4",
+    "status": "authorised",
+    "pspReference": "TESTCHARGEPSP004",
+    "refundedTotal": null
+}

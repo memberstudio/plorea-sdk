@@ -11,6 +11,7 @@ use MemberFlow\Plorea\Data\PaymentLink;
 use MemberFlow\Plorea\Data\PaymentMethod;
 use MemberFlow\Plorea\Data\PaymentRefund;
 use MemberFlow\Plorea\Data\PaymentStatus;
+use MemberFlow\Plorea\Data\Refundability;
 use MemberFlow\Plorea\Data\Subscription;
 use MemberFlow\Plorea\Data\SubscriptionCharge;
 
@@ -76,6 +77,21 @@ class Masker
             'cancelReference' => 'mask',
             'cancelPspReference' => 'keep',
             'cancelRequestedAt' => 'keep',
+            'refusalReason' => 'keep',
+            'refundable' => 'keep',
+            'settledChargeTotal' => 'keep',
+            'merchantOrgNr' => 'mask',
+            'reason' => 'keep',
+            'retryNumber' => 'keep',
+            'failureReason' => 'keep',
+        ],
+        Refundability::class => [
+            'originalAmount' => 'keep',
+            'refundedTotal' => 'keep',
+            'remainingAmount' => 'keep',
+            'canRequest' => 'keep',
+            'reason' => 'keep',
+            'mayStillFail' => 'keep',
         ],
         PaymentRefund::class => [
             'amount' => 'keep',
@@ -86,6 +102,7 @@ class Masker
             'settledAt' => 'keep',
             'source' => 'keep',
             'status' => 'keep',
+            'eventCode' => 'keep',
         ],
         PaymentLink::class => [
             'id' => 'keep',

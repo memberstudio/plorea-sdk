@@ -30,22 +30,22 @@
         <table>
           <thead><tr><th>#</th><th>Item</th><th>Area</th><th>Priority</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td><a href="#idempotency-keys">Idempotency keys</a></td><td>Payments, subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>1</td><td><a href="#idempotency-keys">Idempotency keys</a></td><td>Payments, subscriptions</td><td>High</td><td><span class="badge open">In spec 0.31, not honoured in test</span></td></tr>
             <tr><td>2</td><td><a href="#failed-charge-webhook-and-payment-failed">Failed charge webhook</a></td><td>Subscriptions</td><td>High</td><td><span class="badge verified">Partly delivered 2026-10-01</span></td></tr>
             <tr><td>3</td><td><a href="#webhook-redelivery-and-replay">Webhook redelivery and replay</a></td><td>Webhooks</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>4</td><td><a href="#sandbox-failure-triggers">Sandbox failure triggers</a></td><td>Testing</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>5</td><td><a href="#refusal-reason">Refusal reason</a></td><td>Payments</td><td>High</td><td><span class="badge stated">Promised</span></td></tr>
-            <tr><td>6</td><td><a href="#openapi-specification">OpenAPI specification</a></td><td>Platform</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>5</td><td><a href="#refusal-reason">Refusal reason</a></td><td>Payments</td><td>High</td><td><span class="badge verified">Delivered 2026-10-06</span></td></tr>
+            <tr><td>6</td><td><a href="#openapi-specification">OpenAPI specification</a></td><td>Platform</td><td>High</td><td><span class="badge verified">Partly delivered: 0.31.0</span></td></tr>
             <tr><td>7</td><td><a href="#capture-api-and-captured-state">Capture API and captured state</a></td><td>Payments</td><td>Medium</td><td><span class="badge stated">On roadmap</span></td></tr>
-            <tr><td>8</td><td><a href="#per-refund-status">Per-refund status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>8</td><td><a href="#per-refund-status">Per-refund status</a></td><td>Payments</td><td>Medium</td><td><span class="badge verified">Largely delivered 2026-11-09</span></td></tr>
             <tr><td>9</td><td><a href="#expired-status">Expired status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>10</td><td><a href="#pause-and-resume">Pause and resume</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge verified">Delivered 2026-10-01</span></td></tr>
             <tr><td>11</td><td><a href="#interval-change">Interval change</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>12</td><td><a href="#proration">Proration</a></td><td>Subscriptions</td><td>Low</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>12</td><td><a href="#proration">Proration</a></td><td>Subscriptions</td><td>Low</td><td><span class="badge open">In spec 0.31, ignored in test</span></td></tr>
             <tr><td>13</td><td><a href="#card-setup-webhooks-and-failure-reason">Card setup webhooks and failure reason</a></td><td>Payment methods</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>14</td><td><a href="#scheduled-charges-on-the-status-endpoint">Scheduled charges on the status endpoint</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge verified">Seen in test 2026-10-19</span></td></tr>
-            <tr><td>15</td><td><a href="#pagination">Pagination</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">Partly delivered 2026-09-22</span></td></tr>
+            <tr><td>15</td><td><a href="#pagination">Pagination</a></td><td>Subscriptions</td><td>Medium</td><td><span class="badge verified">Partly delivered 2026-11-09</span></td></tr>
+            <tr><td>16</td><td><a href="#merchantorgnr-on-reads">merchantOrgNr on reads</a></td><td>Payments, subscriptions</td><td>Low</td><td><span class="badge verified">KYC state delivered 2026-11-09</span></td></tr>
             <tr><td>17</td><td><a href="#machine-readable-error-codes">Machine-readable error codes</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>18</td><td><a href="#changelog-and-versioning">Changelog and versioning</a></td><td>Platform</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>19</td><td><a href="#charge-after-resume">Charge after resume</a></td><td>Subscriptions</td><td>High</td><td><span class="badge stated">Answered 2026-10-14</span></td></tr>
@@ -54,6 +54,8 @@
             <tr><td>22</td><td><a href="#paid-link-second-payment-and-refund-target">Second payment on a paid link and the refund target</a></td><td>Payments</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>23</td><td><a href="#external-id-filter-with-tenant-id">externalId filter with tenantId</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Reported 2026-10-20</span></td></tr>
             <tr><td>24</td><td><a href="#move-the-billing-day-and-restart-billing">Move the billing day and restart billing</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>25</td><td><a href="#shopper-reference-on-payment-links">shopperReference on payment links</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Reported 2026-11-09</span></td></tr>
+            <tr><td>26</td><td><a href="#fresh-transaction-rows">Fresh transaction rows</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Reported 2026-11-09</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -69,9 +71,11 @@ Idempotency-Key: acme-order-1001-attempt-1
 X-Environment: test</code></pre>
       <pre data-title="Replayed response"><code class="lang-http">HTTP/1.1 200 OK
 Idempotent-Replayed: true</code></pre>
+      <p><span class="badge open">In spec 0.31, not honoured in test</span> Spec 0.31 lists <code>Idempotency-Key</code> on <code>POST /payments/refund</code> and <code>POST /subscriptions/{id}/charge</code>. In test, three charge calls with one key made three charge rows and moved <code>nextChargeAt</code> three months. A reused key with a different amount was booked as <code>authorised</code>, not refused with <code>409</code>. <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="field-notes.html#idempotency-key-not-honoured">Field notes</a>.</p>
 
       <h3 id="refusal-reason">5. Refusal reason</h3>
-      <p><span class="badge stated">Promised by Plorea</span> Plorea has stated that <code>refusalReason</code> is coming on <code>GET /payments/status/{reference}</code>.</p>
+      <p><span class="badge verified">Delivered 2026-10-06 (test)</span> <code>GET /payments/status/{reference}</code> has <code>refusalReason</code>. On 2026-10-17 it held the decline text (code 907) after a decline, and went back to <code>null</code> after a good second try. <span class="badge verified">Verified</span></p>
+      <p><strong>What is still open.</strong> The <code>payment.failed</code> webhook has no reason. No stable code or category exists. The payment method and the charge have no reason. The text below is the original proposal.</p>
       <p><strong>Problem.</strong> A declined payment shows only <code>status: "failed"</code> and <code>webhookSuccess: false</code>. No reason exists on the payment, the webhook, the payment method or the charge.</p>
       <p><strong>Impact.</strong> Integrators cannot tell the customer what to do. "Insufficient funds" needs a different message than "card expired" or "3-D Secure failed". Support cannot answer "why was I declined?".</p>
       <p><strong>Proposal.</strong> Add Adyen's refusal data to the payment, the <code>payment.failed</code> webhook, the payment method and each charge. Keep the raw code and add a stable category.</p>
@@ -95,6 +99,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Problem.</strong> The payment shows only the <em>last</em> refund. <code>refundPspReference</code> exists only on the refund response. The payment carries only last-refund fields. <span class="badge verified">Verified</span> So a second partial refund would hide the first one. We infer this from the shape; we did not run two partial refunds.</p>
       <p><strong>Impact.</strong> Integrators cannot reconcile several partial refunds. A lost refund response loses the refund's own reference forever.</p>
       <p><strong>Proposal.</strong> Return a list of refunds on the payment, each with its own status.</p>
+      <p><span class="badge verified">Largely delivered 2026-11-09 (test)</span> The status body now has <code>refunds</code>, with <code>amount</code>, <code>currency</code>, <code>eventCode</code>, <code>refundPspReference</code>, <code>refundReference</code>, <code>settledAt</code>, <code>source</code> and <code>status</code> (<code>refunded</code> or <code>refund_failed</code>) per refund. A <code>refundable</code> block gives the remaining amount. A fully refunded payment showed an empty list, so <code>lastRefund*</code> is still needed there. See <a href="objects.html#payment">Objects</a>.</p>
       <pre><code class="lang-json">{
   "reference": "order-1001",
   "status": "authorised",
@@ -180,6 +185,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Proposal.</strong> An optional <code>proration</code> flag on <code>PATCH</code>, and a preview endpoint.</p>
       <pre data-title="PATCH /subscriptions/{id}"><code class="lang-json">{ "amount": { "value": 49900, "currency": "NOK" }, "proration": "charge_now" }</code></pre>
       <pre data-title="Response (excerpt)"><code class="lang-json">{ "prorationCharge": { "chargeId": "chg_test_example_4", "amount": { "value": 13300, "currency": "NOK" } } }</code></pre>
+      <p><span class="badge open">In spec 0.31, ignored in test</span> Spec 0.31 has <code>billingAnchor</code> and <code>proration</code> on create, and prorated fields on charge webhooks. In test, eight subscriptions created with <code>trialDays</code>, <code>billingAnchor</code> or <code>proration</code> were <code>active</code> with an immediate charge date. <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="field-notes.html#trial-anchor-proration-ignored">Field notes</a>.</p>
 
       <h3 id="scheduled-charges-on-the-status-endpoint">14. Scheduled charges on the status endpoint</h3>
       <p><span class="badge open">Reported to Plorea</span></p>
@@ -200,6 +206,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> A truncated list looks the same as a full list. A monthly subscription grows its history forever.</p>
       <p><strong>Proposal.</strong> Cursor pagination with a documented default and maximum.</p>
       <pre data-title="GET /subscriptions/{id}/charges?limit=50&amp;startingAfter=chg_…"><code class="lang-json">{ "subscriptionId": "sub_test_example", "items": [], "hasMore": true, "nextCursor": "chg_test_example_51" }</code></pre>
+      <p><span class="badge verified">Partly delivered 2026-11-09</span> The new <code>GET /transactions</code> (limit 1–1000) and <code>GET /partners/merchants</code> (limit 1–100) have a <code>nextCursor</code>. The subscription list and the charge history still have none.</p>
 
       <h3 id="merchantorgnr-on-reads">16. <code>merchantOrgNr</code> on reads</h3>
       <p><span class="badge verified">Partly delivered 2026-09-22</span> <code>GET /subscriptions/{id}</code> and each item of <code>GET /subscriptions</code> now return <code>merchantOrgNr</code>. <code>GET /subscriptions/{id}/charges</code> returns it once, on the envelope. A subscription without a merchant returns <code>null</code>.</p>
@@ -207,6 +214,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> Integrators cannot fully check which company a payment pays out to. They must keep their own copy of the merchant name.</p>
       <p><strong>Proposal.</strong> Return <code>merchantOrgNr</code>, <code>merchantName</code> and a KYC state on every read of a payment, link, subscription and charge.</p>
       <pre><code class="lang-json">{ "merchantOrgNr": "999999999", "merchantName": "Acme Gym AS", "merchantKycStatus": "pending" }</code></pre>
+      <p><span class="badge verified">KYC state delivered 2026-11-09</span> <code>GET /partners/merchants/{merchantOrgNr}</code> reports the KYC state, the store and the card methods, with a <code>kycUrl</code>. It is a separate read, live only, not a field on each payment. <span class="badge verified">Verified (production, read only)</span> See <a href="api-reference.html#partner-merchants">Partner merchants</a>.</p>
 
       <h3 id="next-charge-date-on-reactivate">21. Next charge date on reactivate</h3>
       <p><strong>Problem.</strong> <code>POST /subscriptions/{id}/reactivate</code> always sets <code>nextChargeAt</code> to the last charge plus one interval. A <code>nextChargeAt</code> set with <code>PATCH</code> on the canceled subscription is overwritten. The <code>PATCH</code> returned the new date, and the reactivate then set <code>nextChargeAt</code> to the time of the call. The amount from the <code>PATCH</code> was kept. <span class="badge verified">Verified in test 2026-10-14</span> Without an earlier charge, the result was "now". After a long gap we expect the same. <span class="badge open">Open question</span></p>
@@ -267,6 +275,7 @@ Idempotent-Replayed: true</code></pre>
       <p><strong>Impact.</strong> Each integrator repeats the same discovery. Client generation, mock servers and contract tests are not possible.</p>
       <p><strong>Proposal.</strong> Publish an OpenAPI 3.1 file at a stable URL, for example <code>https://payments.plorea.no/openapi.json</code>. These docs and their captured responses are a starting point, free to use.</p>
       <p><span class="badge stated">Stated by Plorea 2026-10-20</span> Plorea referred to OpenAPI 0.14.0 on 2026-10-20, which replaces 0.13.0. A stable public URL is not confirmed here.</p>
+      <p><span class="badge verified">Partly delivered: 0.31.0</span> OpenAPI 0.31.0 exists. It still differs from the wire in places, and test is the better source. See <a href="field-notes.html#spec-0-31-bugs">Spec 0.31 bugs</a>.</p>
 
       <h3 id="machine-readable-error-codes">17. Machine-readable error codes</h3>
       <p><strong>Problem.</strong> Errors carry one English <code>error</code> string. The strings are static templates, and one message can list fields that are present.</p>
@@ -297,7 +306,7 @@ Idempotent-Replayed: true</code></pre>
         <li><strong>Consistent metadata.</strong> An empty <code>metadata</code> returns <code>[]</code>, not <code>{}</code>. Return an object.</li>
         <li><strong>Environment default.</strong> <span class="badge stated">Delivered 2026-10-13</span> The API key now sets the environment. A missing header uses the key's environment, and a header that does not match the key returns <code>403</code>.</li>
         <li><strong>Native 3-D Secure.</strong> <span class="badge stated">Promised by Plorea</span> Request native 3DS2 on iOS and Android sessions.</li>
-        <li><strong>KYC visibility.</strong> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link.</li>
+        <li><strong>KYC visibility.</strong> <span class="badge verified">Delivered 2026-11-09</span> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link. <code>POST</code> and <code>GET /partners/merchants</code> now do this, live only. See <a href="api-reference.html#partner-merchants">Partner merchants</a>.</li>
       </ul>
       <h3 id="external-id-filter-with-tenant-id">23. <code>externalId</code> filter with <code>tenantId</code></h3>
       <p><span class="badge verified">Verified 2026-10-20</span> <code>GET /subscriptions?externalId=…&amp;tenantId=…</code> returned the whole tenant: 120 rows, 2 a match. Without <code>tenantId</code>, the filter worked.</p>
@@ -307,6 +316,16 @@ Idempotent-Replayed: true</code></pre>
       <h3 id="move-the-billing-day-and-restart-billing">24. Move the billing day and restart billing</h3>
       <p><span class="badge verified">Verified 2026-10-20</span> No verified call moves the billing day of a live subscription. <code>PATCH status: "active"</code> on <code>payment_failed</code> returns <code>400</code>. The workaround is to cancel and create a new subscription on the same card, with a trial to the wanted day. It works, but the subscription ID changes and the charge history is split in two.</p>
       <p><strong>Proposal.</strong> Accept <code>nextChargeAt</code> on <code>PATCH</code> as the new billing anchor on <code>active</code> subscriptions. Allow <code>payment_failed</code> → <code>active</code> with a <code>nextChargeAt</code>, without an immediate charge.</p>
+
+      <h3 id="shopper-reference-on-payment-links">25. <code>shopperReference</code> on payment links</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (test)</span> A payment link created with a <code>shopperReference</code> is accepted. Its checkout session fails with Adyen error <code>702</code>: <code>storedPaymentMethodMode</code> is unknown. A plain link's session works.</p>
+      <p><strong>Impact.</strong> A link cannot store the card for later charges. Integrators need a separate card setup.</p>
+      <p><strong>Proposal.</strong> Send a valid <code>storedPaymentMethodMode</code> to Adyen when a link has a <code>shopperReference</code>, or refuse such a link with <code>400</code>.</p>
+
+      <h3 id="fresh-transaction-rows">26. Fresh transaction rows</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (test)</span> On <code>GET /transactions</code>, a subscription charge row read <code>created</code>, with no <code>pspReference</code>, while the status endpoint read <code>authorised</code>. The spec says subscription charges are not in the list at all.</p>
+      <p><strong>Impact.</strong> A reconciliation job built on the list sees paid charges as unpaid.</p>
+      <p><strong>Proposal.</strong> Update the row when the charge changes, or leave subscription charges out, as the spec says.</p>
 
     </article>
   </main>

@@ -191,6 +191,7 @@ const link = await res.json();</code></pre></div>
         <li><strong>Not enforced.</strong> The API accepts a link without <code>merchantOrgNr</code>. It even opens a checkout session on it. The payout then has no owner. <span class="badge verified">Verified</span> The PHP SDK refuses to create such a link and throws <code>PloreaException</code>.</li>
         <li><strong>KYC starts by itself.</strong> The first payment for a new organisation number starts merchant onboarding. The merchant gets an email, at <code>merchantEmail</code> when you send one. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>The link stays payable during KYC.</strong> Plorea holds the payout until KYC is approved. This typically takes 1–5 business days. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Read KYC with the API.</strong> Since November 2026, <code>GET /partners/merchants/{merchantOrgNr}</code> shows the KYC state, the store and a <code>kycUrl</code>. Live only. <span class="badge verified">Verified 2026-11-09 (production, read only)</span> See <a href="api-reference.html#partner-merchants">Partner merchants</a>.</li>
         <li><strong>No store.</strong> Do not send <code>store</code> or a balance account. Plorea resolves both from the organisation number.</li>
       </ul>
       <div class="callout gap">
