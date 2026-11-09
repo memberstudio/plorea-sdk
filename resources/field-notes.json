@@ -160,6 +160,14 @@
         "source": {"file": "docs/errors.md", "heading": "Refund and cancel refusals"}
     },
     {
+        "id": "merchant-other-partner",
+        "title": "Onboarding a company another partner owns is a 409",
+        "triggers": ["MerchantOnboardedByAnotherPartnerException", "409", "onboard", "another partner", "Merchant is onboarded by another partner", "partners/merchants"],
+        "evidence": "VERIFIED 2026-11-09 (live), one company; payout destination UNOBSERVED",
+        "note": "merchants()->onboard()->save() for a company that another Plorea partner already onboarded answers 409 with merchantOrgNr. Nothing is created and no KYC e-mail is sent. The SDK throws MerchantOnboardedByAnotherPartnerException. merchants()->find() answers 404 for the same company, so a 404 does not mean the company is free. A payment link with that org number is still created and its pay page opens. Which balance account receives the money is not observed: ask Plorea before you sell for such a merchant.",
+        "source": {"file": "docs/api-behaviour.md", "heading": "✅ Merchant onboarding state: `partners/merchants` — 2026-11-09 (live)"}
+    },
+    {
         "id": "merchant-not-ready",
         "title": "A merchant without a store is never charged",
         "triggers": ["merchants", "partners/merchants", "KYC", "store", "storeId", "isReadyForPayments", "cardMethods", "no_store", "action_required"],

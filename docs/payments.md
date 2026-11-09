@@ -90,7 +90,7 @@ of the first payment. Plorea states how it works; a successful call has not
 been seen yet. A test key gets `400`: the partner routes are live only.
 
 A company that another Plorea partner already onboarded answers `409`
-"Merchant is onboarded by another partner" (`RequestException`, status 409).
+"Merchant is onboarded by another partner" (`MerchantOnboardedByAnotherPartnerException`, status 409).
 Nothing is created. `find()` answers `404` for that company. The 409 does not
 block payment links: a live link with the same org number was created, and
 its pay page opened (2026-11-09). Which balance account receives the money

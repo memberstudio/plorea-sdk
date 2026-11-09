@@ -14,6 +14,7 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | `NotFoundException` | 404 — unknown reference or id |
 | `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is a plain `RequestException` |
 | `PaymentAlreadyCapturedException` | 409 on `cancel()` — the payment or charge is captured; refund it. `paymentStatus()` returns the status in the body |
+| `MerchantOnboardedByAnotherPartnerException` | 409 on `merchants()->onboard()->save()` — another Plorea partner already onboarded the company; nothing is created. `merchantOrgNr()`. Captured live 2026-11-09 |
 | `ServerException` | 5xx — Plorea-side error |
 | `ConnectionException` | The API could not be reached |
 | `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |
@@ -21,7 +22,7 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 
 `ValidationException`, `AuthenticationException`, `ChargeFailedException`,
 `NotFoundException`, `NextChargeInPaidPeriodException`,
-`PaymentAlreadyCapturedException` and `ServerException` all extend `RequestException`, which
+`PaymentAlreadyCapturedException`, `MerchantOnboardedByAnotherPartnerException` and `ServerException` all extend `RequestException`, which
 exposes the response:
 
 ```php
@@ -130,7 +131,7 @@ Captured in test on 2026-11-09 (API 0.31).
   `PaymentLinkCancelledException`.
 - **Onboarding a company that another partner onboarded** answers `409`
   "Merchant is onboarded by another partner". The spec does not list it. The
-  SDK throws `RequestException` (409). Payment links for that company still
+  SDK throws `MerchantOnboardedByAnotherPartnerException` (409); `merchantOrgNr()` returns the org number. Payment links for that company still
   work (2026-11-09, live). Where the money goes is not observed.
 - The spec also lists a `422` for a split refund and a `409` when a
   sub-merchant's balance account cannot be resolved. Nobody has seen either.

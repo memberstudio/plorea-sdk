@@ -101,7 +101,7 @@ Live only: a test key gets `400`.
 | `find(string $merchantOrgNr, ?string $tenantId = null)` | `Data\PartnerMerchant` |
 | `list(?int $limit = null, ?string $cursor = null, ?string $tenantId = null)` | `Data\PartnerMerchantPage` — `$limit` 1–100 |
 | `all(int $pageSize = 100, ?string $tenantId = null)` | `LazyCollection<Data\PartnerMerchant>` |
-| `onboard(string $merchantOrgNr, string $email)` | `PendingMerchantOnboarding` — success not yet seen live; `409` (`RequestException`) when another partner onboarded the company |
+| `onboard(string $merchantOrgNr, string $email)` | `PendingMerchantOnboarding` — success not yet seen live; `MerchantOnboardedByAnotherPartnerException` (409) when another partner onboarded the company |
 
 ---
 
@@ -439,6 +439,7 @@ All extend `Exceptions\PloreaException`.
 | `ChargeFailedException` | 402 |
 | `NotFoundException` | 404 |
 | `PaymentAlreadyCapturedException` | 409 on cancel — `paymentStatus()` |
+| `MerchantOnboardedByAnotherPartnerException` | 409 on `merchants()->onboard()->save()` — `merchantOrgNr()` |
 | `ServerException` | 5xx |
 | `ConnectionException` | — (unreachable) |
 | `PaymentAlreadyPaidException` | — (SDK guard; carries `$status`) |

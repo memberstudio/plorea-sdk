@@ -41,6 +41,7 @@ class RequestException extends PloreaException
             $status === 404 => new NotFoundException($message, $status, $response),
             $status === 409 && array_key_exists('paidUntil', $body) => new NextChargeInPaidPeriodException($message, $status, $response),
             $status === 409 && array_key_exists('refundedTotal', $body) && is_string($body['status'] ?? null) && str_contains(strtolower($message), 'captured') => new PaymentAlreadyCapturedException($message, $status, $response),
+            $status === 409 && is_string($body['merchantOrgNr'] ?? null) && str_contains(strtolower($message), 'another partner') => new MerchantOnboardedByAnotherPartnerException($message, $status, $response),
             $status >= 500 => new ServerException($message, $status, $response),
             default => new self($message, $status, $response),
         };

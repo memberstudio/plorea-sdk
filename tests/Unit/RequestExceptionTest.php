@@ -8,6 +8,7 @@ use GuzzleHttp\Psr7\Request as Psr7Request;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\Response;
+use MemberFlow\Plorea\Exceptions\MerchantOnboardedByAnotherPartnerException;
 use MemberFlow\Plorea\Exceptions\PaymentAlreadyCapturedException;
 use MemberFlow\Plorea\Exceptions\PaymentLinkCancelledException;
 use MemberFlow\Plorea\Exceptions\RequestException;
@@ -51,6 +52,35 @@ class RequestExceptionTest extends TestCase
             'error' => 'Charge has been captured; use refund',
             'status' => 'authorised',
             'refundedTotal' => null,
+        ])));
+    }
+
+    /**
+     * Only the captured live body is typed. A 409 that names an org number
+     * but not another partner, or the message without an org number, stays
+     * generic.
+     */
+    public function test_only_the_another_partner_409_is_typed(): void
+    {
+        $this->assertInstanceOf(MerchantOnboardedByAnotherPartnerException::class, RequestException::fromResponse($this->response(409, [
+            'error' => 'Merchant is onboarded by another partner',
+            'merchantOrgNr' => '999999995',
+        ])));
+
+        foreach ([
+            ['error' => 'Balance account cannot be resolved', 'merchantOrgNr' => '999999995'],
+            ['error' => 'Merchant is onboarded by another partner'],
+            ['error' => 'Merchant is onboarded by another partner', 'merchantOrgNr' => null],
+        ] as $body) {
+            $exception = RequestException::fromResponse($this->response(409, $body));
+
+            $this->assertSame(RequestException::class, $exception::class);
+            $this->assertSame(409, $exception->status);
+        }
+
+        $this->assertNotInstanceOf(MerchantOnboardedByAnotherPartnerException::class, RequestException::fromResponse($this->response(400, [
+            'error' => 'Merchant is onboarded by another partner',
+            'merchantOrgNr' => '999999995',
         ])));
     }
 

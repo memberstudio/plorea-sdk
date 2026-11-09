@@ -39,7 +39,9 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   `PaymentRefund::$eventCode` and `isFailed()`.
 - `payments()->status()` and `refund()` take an optional `$tenantId`.
 - `RefundAmountExceededException` (400), `PaymentLinkCancelledException`
-  (400/410) and `PaymentAlreadyCapturedException` (409 on cancel).
+  (400/410), `PaymentAlreadyCapturedException` (409 on cancel) and
+  `MerchantOnboardedByAnotherPartnerException` (409 on `merchants()->onboard()`, captured
+  live).
 - The webhook middleware accepts `X-Plorea-Signature-Next` during a secret
   rotation.
 - `Plorea::fake()` answers the transaction and partner-merchant routes.

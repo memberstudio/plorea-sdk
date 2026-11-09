@@ -698,7 +698,7 @@ Plorea states that it creates what is missing and e-mails the KYC link.
 already onboarded answers `409` "Merchant is onboarded by another partner",
 with `merchantOrgNr`. Nothing is created. `GET partners/merchants/{orgNr}`
 answered `404` for the same company, so a `404` does not mean the company is
-free to onboard. The SDK throws `RequestException` with status 409.
+free to onboard. The SDK throws `MerchantOnboardedByAnotherPartnerException` (status 409).
 
 **✅ Observed 2026-11-09 (live):** the 409 does not block payment links. A
 10 kr link with the same organisation number answered `200`. The create

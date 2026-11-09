@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use MemberFlow\Plorea\Data\PartnerMerchant;
+use MemberFlow\Plorea\Exceptions\MerchantOnboardedByAnotherPartnerException;
 use MemberFlow\Plorea\Exceptions\RequestException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Testing\RecordedRequest;
@@ -139,10 +140,11 @@ class PartnerMerchantResourceTest extends TestCase
         try {
             Plorea::merchants()->onboard('999999995', 'owner@example.com')->save();
             $this->fail('Expected the onboarding to be refused.');
-        } catch (RequestException $exception) {
-            $this->assertSame(RequestException::class, $exception::class);
+        } catch (MerchantOnboardedByAnotherPartnerException $exception) {
+            $this->assertInstanceOf(RequestException::class, $exception);
             $this->assertSame(409, $exception->status);
             $this->assertSame('Merchant is onboarded by another partner', $exception->getMessage());
+            $this->assertSame('999999995', $exception->merchantOrgNr());
         }
     }
 

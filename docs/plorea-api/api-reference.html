@@ -63,7 +63,7 @@
             <tr><td><code>402</code></td><td>The card was declined on a subscription charge. Nothing else returns 402.</td><td><code>ChargeFailedException</code></td></tr>
             <tr><td><code>403</code></td><td><code>Tenant mismatch</code>: the object belongs to another tenant.</td><td><code>AuthenticationException</code></td></tr>
             <tr><td><code>404</code></td><td>Unknown reference or ID.</td><td><code>NotFoundException</code></td></tr>
-            <tr><td><code>409</code></td><td>A conflict with the object's state: a cancel of a captured payment or charge, or a <code>nextChargeAt</code> inside a paid period. <span class="badge verified">Verified</span></td><td><code>PaymentAlreadyCapturedException</code>, <code>NextChargeInPaidPeriodException</code></td></tr>
+            <tr><td><code>409</code></td><td>A conflict with the object's state: a cancel of a captured payment or charge, or a <code>nextChargeAt</code> inside a paid period, or an onboarding of a company that another partner already onboarded. <span class="badge verified">Verified</span></td><td><code>PaymentAlreadyCapturedException</code>, <code>NextChargeInPaidPeriodException</code>, <code>MerchantOnboardedByAnotherPartnerException</code></td></tr>
             <tr><td><code>410</code></td><td>The pay page of a withdrawn link. <span class="badge verified">Verified</span></td><td><code>PaymentLinkCancelledException</code></td></tr>
             <tr><td><code>5xx</code></td><td>Plorea or Adyen failed.</td><td><code>ServerException</code></td></tr>
           </tbody>
