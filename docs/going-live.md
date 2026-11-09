@@ -46,6 +46,9 @@ is something that has either failed silently or cost real money when missed.
 - [ ] **Merchants know about KYC.** The first live payment for a new org number
       starts onboarding by email. The payment succeeds, but the payout is held
       until KYC is approved, which takes 1 to 5 business days.
+- [ ] **Every merchant is ready before its first charge.** Read
+      `Plorea::merchants()->find($orgNr)->isReadyForPayments()`. A live
+      subscription for a merchant without a store was never charged.
 
 ## Money-handling code
 

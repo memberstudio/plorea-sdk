@@ -36,7 +36,7 @@
       <ul>
         <li>The status string is <code>failed</code>. The string <code>refused</code> never appears.</li>
         <li>The decline shows in the inbound-webhook fields. They describe the Adyen event that Plorea received.</li>
-        <li>No reason field exists on the payment. <code>status</code> is the only signal.</li>
+        <li>No reason field existed on the payment then. Since 2026-10-06, <code>refusalReason</code> carries it. See <a href="#status-endpoint-0-31">API 0.31</a>.</li>
       </ul>
 
       <h3>No idempotency on duplicate references</h3>
@@ -57,14 +57,14 @@
         <p class="callout-title">Set your polling horizon in hours</p>
         <p>A job that polls for one hour and then marks the refund as failed will be wrong. Wait for the webhook. Use polling as a backstop, on a scale of hours. Never reverse a refund in your books on a timeout.</p>
       </div>
-      <p><span class="badge verified">Verified 2026-09-09</span> There is no status per refund. Three captures of a refund-requested payment returned identical 29-key bodies. <code>refundPspReference</code> exists only on the refund response. Store it.</p>
+      <p><span class="badge verified">Verified 2026-09-09</span> There is no status per refund. Three captures of a refund-requested payment returned identical 29-key bodies. <code>refundPspReference</code> exists only on the refund response. Store it. <span class="badge verified">Superseded 2026-11-09</span> Payment links now have a <code>refunds</code> list with a status per refund. See <a href="#status-endpoint-0-31">API 0.31</a>.</p>
       <p><span class="badge verified">Verified 2026-09-19</span> A refund and a cancel were both still pending after more than 24 hours. <span class="badge stated">Stated 2026-09-21</span> Plorea states this is expected, and that the final statuses are <code>refunded</code> and <code>cancelled</code>. Book on the request. Do not wait for the final status.</p>
       <h3 id="subscription-charge-refund">A subscription charge refunds, and a refused cancel reads <code>cancelled</code></h3>
       <p><span class="badge verified">Verified 2026-10-19 (test)</span> One scheduled charge, charged nine days earlier:</p>
       <ul>
         <li><code>GET /payments/status/{subscriptionId}-{chargeId}</code> resolved. It has <code>platform: "subscription"</code>, <code>subscriptionId</code>, <code>chargeId</code>, <code>refundedTotal</code>, <code>refundStatus</code>, a <code>refunds</code> list and a <code>cancel*</code> group. The <code>lastRefund*</code> and <code>lastCancel*</code> fields are absent.</li>
         <li>A partial refund through <code>POST /payments/refund</code> answered <code>refund_requested</code>. Its entry in <code>refunds</code> turned <code>refunded</code>, with <code>settledAt</code> 34 seconds after <code>requestedAt</code>.</li>
-        <li><code>POST /payments/cancel</code> answered <code>cancel_requested</code>, not <code>409</code>. Adyen refused the cancel: <code>webhookEventCode: "CANCELLATION"</code> with <code>webhookSuccess: false</code>. The status and the charge in <code>GET /subscriptions/{id}/charges</code> still turned <code>cancelled</code>. The money stayed charged.</li>
+        <li><code>POST /payments/cancel</code> answered <code>cancel_requested</code>, not <code>409</code>. <span class="badge verified">Superseded 2026-11-09</span> The same call now gets <code>409</code> "Charge has been captured; use refund". See <a href="#refund-and-cancel-0-31">API 0.31</a>. Adyen refused the cancel: <code>webhookEventCode: "CANCELLATION"</code> with <code>webhookSuccess: false</code>. The status and the charge in <code>GET /subscriptions/{id}/charges</code> still turned <code>cancelled</code>. The money stayed charged.</li>
         <li>No <code>payment.refunded</code> webhook arrived for the refund.</li>
       </ul>
       <div class="callout warning">
@@ -78,7 +78,7 @@
       <ul>
         <li>Each payment sends its own <code>payment.authorised</code> webhook with <code>success: true</code>. The <code>reference</code> and <code>paymentLinkId</code> are the same. The <code>pspReference</code> is different.</li>
         <li><code>GET /payments/status/{reference}</code> keeps the <strong>first</strong> <code>pspReference</code>. Only <code>updatedAt</code> and <code>lastWebhookAt</code> move. The status shows no count, amount or PSP reference of the second payment.</li>
-        <li>A refund of the full amount targets the first payment. A second refund of the full amount fails with <code>422</code> and "Refund amount exceeds original payment amount", because <code>refundedTotal</code> caps refunds per reference at the link amount. The second payment cannot be refunded through the API.</li>
+        <li>A refund of the full amount targets the first payment. A second refund of the full amount failed on 2026-10-17 with <code>422</code> and "Refund amount exceeds original payment amount", because <code>refundedTotal</code> caps refunds per reference at the link amount. The second payment cannot be refunded through the API. <span class="badge verified">Verified 2026-11-09 (test)</span> The status is now <code>400</code>, with the amounts in the body.</li>
       </ul>
       <div class="callout warning">
         <p class="callout-title">Store the PSP reference of every payment</p>
@@ -109,6 +109,7 @@
       <h3><code>merchantOrgNr</code> on payment links</h3>
       <p><span class="badge verified">Verified 2026-09-07</span> The create response omits <code>merchantOrgNr</code> and <code>merchantName</code>. Both appear on <code>GET /pay/{id}</code>, together with a populated <code>partnerSplits</code>.</p>
       <p><span class="badge stated">Stated 2026-08-30</span> The field is contractually required. The API does not enforce it: a link without it is accepted and can open a session. KYC for a new organisation starts on its first payment.</p>
+      <p><span class="badge verified">Verified 2026-11-09</span> KYC now has an API: the partners endpoints. See <a href="#kyc-has-an-api">KYC has an API</a>.</p>
 
       <h3>The <code>platform</code> field</h3>
       <p><span class="badge stated">Stated 2026-09-15</span> Send <code>platform</code> on every request: in the body on <code>POST</code> and <code>PATCH</code>, in the query string on <code>GET</code>. Plorea uses it for logging and reporting only.</p>
@@ -155,7 +156,7 @@
       <h3>An abandoned session never ends</h3>
       <p><span class="badge verified">Verified 2026-09-17</span> A session that the customer never submits still reads <code>created</code> an hour later, with no webhook fields. Time the attempt out yourself. Open a new session for the next attempt.</p>
 
-      <h2>Payment methods</h2>
+      <h2 id="payment-methods">Payment methods</h2>
       <h3>Statuses</h3>
       <p><span class="badge verified">Verified 2026-09-04</span> <code>pending_setup</code> → <code>active</code> or <code>failed</code>. <code>failed</code> is final. It means the 1 NOK verification was refused, so no card was stored and <code>storedPaymentMethodId</code> stays null.</p>
       <h3><code>failureReason</code> is always null</h3>
@@ -191,7 +192,7 @@
       <h3><code>merchantOrgNr</code> on subscriptions</h3>
       <p><span class="badge verified">Verified 2026-09-21</span> <code>POST /subscriptions</code> accepts <code>merchantOrgNr</code>, <code>merchantName</code> and <code>merchantEmail</code>. The create response echoes only <code>merchantOrgNr</code>. A value that is not nine digits returns <code>400</code>.</p>
       <p><span class="badge verified">Verified 2026-09-22</span> Reads now return <code>merchantOrgNr</code>: <code>GET /subscriptions/{id}</code> and each item of <code>GET /subscriptions</code>. <code>GET /subscriptions/{id}/charges</code> returns it once, on the envelope <code>{subscriptionId, merchantOrgNr, items}</code>, not on each charge. A subscription without a merchant returns <code>null</code>. No read returns the name or the email. Keep your own record of those.</p>
-      <p><span class="badge stated">Stated 2026-09-21</span> Every charge inherits the company. KYC and settlement splits start on the first charge. A stored card belongs to the shopper, not the company, so one card can pay for several companies in one tenant. No API exists to start or read KYC. To onboard a company early, create a payment link with its organisation number and pay it yourself.</p>
+      <p><span class="badge stated">Stated 2026-09-21</span> Every charge inherits the company. KYC and settlement splits start on the first charge. A stored card belongs to the shopper, not the company, so one card can pay for several companies in one tenant. No API exists to start or read KYC. To onboard a company early, create a payment link with its organisation number and pay it yourself. This advice is out of date since November 2026; see <a href="#kyc-has-an-api">KYC has an API</a>.</p>
       <h3>Charge shapes</h3>
       <p><span class="badge verified">Verified 2026-09-04</span> <code>POST …/charge</code> returns <code>status: "charge_created"</code> and Adyen's <code>resultCode</code>. History items show <code>status: "authorised"</code> and <code>reason</code> <code>manual_charge</code> or <code>scheduled_charge</code>. The reference is <code>{subscriptionId}-{chargeId}</code>.</p>
       <h3>A failed scheduled charge: <code>past_due</code></h3>
@@ -262,7 +263,57 @@
         <li><span class="badge stated">Stated 2026-09-21</span> Registration is manual and per tenant. Plorea can register one URL per environment on request. Before that, one URL received both.</li>
         <li><span class="badge stated">Stated 2026-09-21</span> The same signing secret can serve both environments. Ask; do not assume.</li>
         <li><span class="badge stated">Stated 2026-09-21</span> A failed delivery is <strong>not</strong> retried. A <code>500</code> from your endpoint loses the event.</li>
-        <li><span class="badge stated">Stated 2026-09-09</span> Four event types exist. Nothing is sent for card setup, cancel or reactivate. Plorea said the same of a failed scheduled charge, but see below.</li>
+        <li><span class="badge stated">Spec 0.31</span> A delivered event is no longer sent again when another event in its batch fails. Deliveries carry <code>X-Plorea-Delivery-Attempt</code>, from 1. See <a href="webhooks.html">Webhooks</a>.</li>
+        <li><span class="badge stated">Stated 2026-09-09</span> Four event types exist. Spec 0.31 lists more; see <a href="webhooks.html">Webhooks</a>. Nothing is sent for card setup, cancel or reactivate. Plorea said the same of a failed scheduled charge, but see below.</li>
+      </ul>
+
+      <h2 id="api-0-31">API 0.31, November 2026</h2>
+      <p>OpenAPI 0.31.0 is the first spec we checked line by line against test. Where the spec and the wire differ, these notes follow the wire.</p>
+
+      <h3 id="kyc-has-an-api">KYC has an API</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (production, read only)</span> <code>GET /partners/merchants</code> and <code>GET /partners/merchants/{merchantOrgNr}</code> report each onboarding step: <code>merchant</code>, <code>legalEntity</code>, <code>kyc</code>, <code>balanceAccount</code>, <code>store</code>, <code>cardMethods</code> and <code>partnerRow</code>. Each merchant has a <code>kycUrl</code>; the list has a <code>kycDeferred</code> count. <code>limit</code> is 1 to 100; <code>101</code> gets <code>400</code>.</p>
+      <ul>
+        <li>A test key gets <code>400</code>. The partners endpoints are live only. <span class="badge verified">Verified</span></li>
+        <li>An approved <code>kyc</code> step can still list <code>problems</code>. <span class="badge verified">Verified</span></li>
+        <li>A subscription for a merchant without a store was never charged. <span class="badge verified">Verified Nov 2026 (production)</span> We take the missing store as the cause. <span class="badge open">Open question</span></li>
+        <li><span class="badge stated">Stated by Plorea</span> <code>POST /partners/merchants</code> is idempotent on the org number. It requires <code>merchantOrgNr</code>, with a valid mod-11 check digit, and <code>email</code>. <code>name</code>, <code>phone</code> and <code>cardDescriptor</code> (at most 22 characters, no æ, ø or å) are optional. It does not create a store for a merchant that exists without one. We have not sent it.</li>
+      </ul>
+
+      <h3 id="status-endpoint-0-31">The status endpoint: refusal reason and refunds</h3>
+      <ul>
+        <li><span class="badge verified">Verified (test)</span> <code>refusalReason</code> is on the status body since 2026-10-06. On 2026-10-17 it held the decline text after a decline and went back to <code>null</code> after a good second try. The webhook does not carry it.</li>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> A <code>refundable</code> block: <code>{originalAmount, refundedTotal, remainingAmount, currency, canRequest, reason, mayStillFail}</code>. After a full refund, <code>canRequest</code> is <code>false</code> and <code>reason</code> is "The whole payment has already been refunded.".</li>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> Payment links now have <code>refunds</code>: one item per refund with <code>amount</code>, <code>currency</code>, <code>eventCode</code>, <code>refundPspReference</code>, <code>refundReference</code>, <code>settledAt</code>, <code>source</code> and <code>status</code> (<code>refunded</code> or <code>refund_failed</code>). A fully refunded payment read <code>status: "refunded"</code> with an empty list. A partly refunded one read <code>status: "refund_requested"</code> and <code>refundStatus: "partially_refunded"</code>.</li>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> <code>settledChargeTotal</code> on every payment. On a subscription charge also <code>merchantOrgNr</code>, <code>reason</code> (for example <code>manual_charge</code>), <code>retryNumber</code> and <code>failureReason</code>.</li>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> With <code>?tenantId=</code>, another tenant's reference gets <code>404</code>.</li>
+      </ul>
+
+      <h3 id="refund-and-cancel-0-31">Refund over the remaining amount, and cancel</h3>
+      <ul>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> A refund over the remaining amount gets <code>400</code> "Refund amount exceeds original payment amount", with <code>originalAmount</code>, <code>alreadyRefunded</code>, <code>requestedAmount</code>, <code>remainingAmount</code> and <code>currency</code>. On 2026-10-17 the same case gave <code>422</code>.</li>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> A cancel on an unpaid link withdraws it: <code>status: "cancelled"</code> with <code>paymentLinkId</code>, <code>orderId</code>, <code>amount</code>, <code>currency</code> and <code>cancelledAt</code>. A second cancel adds <code>alreadyCancelled: true</code>. The pay page then gives <code>410</code> and a new session gives <code>400</code>, both "Payment link was cancelled" with <code>cancelledAt</code>.</li>
+        <li><span class="badge verified">Verified 2026-11-09 (test)</span> A cancel on a captured payment gets <code>409</code> "Payment has been captured; use /payments/refund". On a captured subscription charge it gets <code>409</code> "Charge has been captured; use refund", with <code>subscriptionId</code> and <code>chargeId</code>. This replaces the behaviour of <a href="#subscription-charge-refund">2026-10-19</a>.</li>
+      </ul>
+
+      <h3 id="idempotency-key-not-honoured"><code>Idempotency-Key</code> is in the spec, not honoured in test</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (test)</span> Spec 0.31 lists an <code>Idempotency-Key</code> header on <code>POST /payments/refund</code> and <code>POST /subscriptions/{id}/charge</code>. Three charge calls with one key created three charge rows and moved <code>nextChargeAt</code> three months. Adyen returned one PSP reference. A reused key with a different amount was booked as <code>authorised</code>. Do not rely on the header. The PHP SDK does not send it. Reported to Plorea.</p>
+
+      <h3 id="trial-anchor-proration-ignored"><code>trialDays</code>, <code>billingAnchor</code> and <code>proration</code> are ignored in test</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (test)</span> Spec 0.31 lists these fields on <code>POST /subscriptions</code>. Eight test subscriptions sent them. Each was created <code>active</code> with an immediate charge date, as if the fields were absent. We cancelled them. Use <code>trialEndsAt</code> for a trial.</p>
+
+      <h3 id="shopper-reference-on-a-link"><code>shopperReference</code> on a payment link breaks the session</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (test)</span> <code>POST /payments/link</code> with a <code>shopperReference</code> is accepted. <code>POST /payments/session</code> for that link then fails with Adyen error <code>702</code>: <code>storedPaymentMethodMode</code> is unknown. A plain link's session works. The PHP SDK does not send <code>shopperReference</code> on links. Reported to Plorea.</p>
+
+      <h3 id="stale-transaction-rows">Transaction rows for subscription charges are stale</h3>
+      <p><span class="badge verified">Verified 2026-11-09 (test)</span> <code>GET /transactions</code> takes <code>limit</code> 1 to 1000, a cursor and a <code>status</code> filter. Without a tenant it gives <code>404</code>. The spec says subscription charges are absent, but rows named <code>{subscriptionId}-{chargeId}</code> appear. One read <code>created</code> while the status endpoint read <code>authorised</code> for the same reference. Card-setup rows read <code>platform: "unknown"</code>. Read the status endpoint before you act on a row.</p>
+
+      <h3 id="spec-0-31-bugs">Spec 0.31 bugs</h3>
+      <ul>
+        <li><code>country</code> on <code>POST /partners/merchants</code> has <code>default: false</code> and <code>example: false</code>. It should be a country code.</li>
+        <li>The spec has no <code>DELETE /payment-methods/{id}</code>. The route exists and works; see <a href="#payment-methods">Payment methods</a>.</li>
+        <li><code>settledBy</code>, <code>settledAt</code> and the <code>settledCharges</code> items are on the wire, not in the spec.</li>
+        <li>The two <code>409</code> cancel messages differ: "Payment has been captured; use /payments/refund" and "Charge has been captured; use refund". Branch on the status and the body keys, not on the text.</li>
+        <li>The spec says <code>GET /transactions</code> leaves out subscription charges. They appear.</li>
       </ul>
 
       <h2>What test cannot reproduce</h2>

@@ -15,6 +15,8 @@ All classes live under `MemberFlow\Plorea\`.
 | `paymentMethods()` | `Resources\PaymentMethodResource` |
 | `subscriptions()` | `Resources\SubscriptionResource` |
 | `payByLink()` | `Resources\PayByLinkResource` |
+| `transactions()` | `Resources\TransactionResource` |
+| `merchants()` | `Resources\PartnerMerchantResource` (live only) |
 | `client()` | `Contracts\Client` |
 | `fake(array $stubs = [])` | `Testing\FakeClient` |
 | `isFaked()` | `bool` |
@@ -33,9 +35,9 @@ All classes live under `MemberFlow\Plorea\`.
 | Method | Returns |
 | --- | --- |
 | `link(string $reference, string $product, Amount $amount, string $returnUrl)` | `PendingPaymentLink` |
-| `status(string $reference)` | `Data\PaymentStatus` |
-| `refund(string $reference, string $modificationReference, Amount\|int\|null $amount = null, ?string $reason = null)` | `Data\Refund` |
-| `cancel(string $reference, string $modificationReference)` | `Data\PaymentCancellation` |
+| `status(string $reference, ?string $tenantId = null)` | `Data\PaymentStatus` |
+| `refund(string $reference, string $modificationReference, Amount\|int\|null $amount = null, ?string $reason = null, ?string $tenantId = null)` | `Data\Refund` — throws `RefundAmountExceededException` over the remaining amount |
+| `cancel(string $reference, string $modificationReference)` | `Data\PaymentCancellation` — withdraws an unpaid link; throws `PaymentAlreadyCapturedException` on a captured payment |
 
 `refund()` refunds the full amount when `$amount` is omitted. A partial refund
 works, and a refund on an `authorised` payment stays a refund (verified
@@ -77,6 +79,29 @@ been observed to paginate, and neither sends paging parameters; see
 | --- | --- |
 | `find(string $paymentLinkId)` | `Data\PaymentLink` |
 | `session(string $paymentLinkId, ?string $returnUrl = null, ?Channel $channel = null)` | `Data\PaymentSession` |
+
+Both throw `PaymentLinkCancelledException` once the link is withdrawn.
+
+### `TransactionResource` — `Plorea::transactions()`
+
+| Method | Returns |
+| --- | --- |
+| `list(?string $status = null, ?int $limit = null, ?string $cursor = null, ?string $tenantId = null)` | `Data\TransactionPage` — `$limit` 1–1000 |
+| `all(?string $status = null, int $pageSize = 1000, ?string $tenantId = null)` | `LazyCollection<Data\Transaction>`, following the cursor |
+
+A row can be stale. Read `payments()->status()` before you act on one. See
+[the field notes](api-behaviour.md#-transactions-get-transactions--2026-11-09-test).
+
+### `PartnerMerchantResource` — `Plorea::merchants()`
+
+Live only: a test key gets `400`.
+
+| Method | Returns |
+| --- | --- |
+| `find(string $merchantOrgNr, ?string $tenantId = null)` | `Data\PartnerMerchant` |
+| `list(?int $limit = null, ?string $cursor = null, ?string $tenantId = null)` | `Data\PartnerMerchantPage` — `$limit` 1–100 |
+| `all(int $pageSize = 100, ?string $tenantId = null)` | `LazyCollection<Data\PartnerMerchant>` |
+| `onboard(string $merchantOrgNr, string $email)` | `PendingMerchantOnboarding` — not yet sent live |
 
 ---
 
@@ -154,6 +179,18 @@ Only the fields you set are sent. The billing interval cannot be changed.
 
 ---
 
+### `PendingMerchantOnboarding`
+
+| Method | Notes |
+| --- | --- |
+| `tenant(string $tenantId)` | Overrides the configured tenant |
+| `name(string $name)` | Plorea looks it up from the org number when omitted |
+| `phone(string $phone)` | |
+| `country(string $country)` | ISO 3166-1 alpha-2, upper-cased |
+| `cardDescriptor(string $cardDescriptor)` | 1–22 characters from a-z, A-Z, 0-9, space and `.,'_-?+*`; anything else throws `InvalidArgumentException` |
+| `toPayload()` | The body, without unset keys |
+| `save()` | Sends it; returns `Data\PartnerMerchant` |
+
 ## Data objects
 
 Every DTO is `final readonly`, is built by `fromArray()`, and keeps the
@@ -210,6 +247,13 @@ signal), `$raw`.
 | `$webhookEventCode`, `$webhookSuccess`, `$lastWebhookAt` | Plorea's **inbound** Adyen webhook |
 | `$lastRefundReference`, `$lastRefundRequestPspReference`, `$lastRefundAmount`, `$lastRefundReason`, `$lastRefundRequestedAt` | Last refund |
 | `$lastCancelReference`, `$lastCancelRequestPspReference`, `$lastCancelRequestedAt` | Last cancellation |
+| `$subscriptionId`, `$chargeId` | Set on a subscription charge |
+| `$refundedTotal`, `$refundStatus`, `$refunds` | `?Amount`, `?string`, `list<PaymentRefund>` (`isRefunded()`, `isFailed()`, `$eventCode`) |
+| `$cancelStatus`, `$cancelReference`, `$cancelPspReference`, `$cancelRequestedAt` | Cancel group |
+| `$refusalReason` | `?string` — Adyen's reason for a refused payment (API 0.31) |
+| `$refundable` | `?Refundability` — `$originalAmount`, `$refundedTotal`, `$remainingAmount`, `$canRequest`, `$reason`, `$mayStillFail` |
+| `$settledChargeTotal` | `?Amount` |
+| `$merchantOrgNr`, `$reason`, `$retryNumber`, `$failureReason` | Set on a subscription charge |
 
 | Helper | True for |
 | --- | --- |
@@ -219,19 +263,40 @@ signal), `$raw`.
 | `isRefundRequested()` | `refund_requested` |
 | `isCancelRequested()` | `cancel_requested` |
 | `is(string $status)` | Exact match on the raw string |
+| `canRequestRefund()` | `refundable.canRequest` is true |
 
-A refusal is `failed` — use `is('failed')`. There is no `failureReason` field
-on this shape.
+A refusal is `failed` — use `is('failed')` and read `$refusalReason`.
+`$failureReason` is set on a failed subscription charge only.
 
 ### `Refund`
 
 `$status`, `$reference`, `$modificationReference`, `$refundPspReference`,
-`$paymentPspReference`, `$amount`, `$environment`, `$raw`.
+`$paymentPspReference`, `$amount`, `$environment`, `$raw`, `$subscriptionId`,
+`$chargeId`, `$refundedTotal`, `$refundStatus`, `$splits`, `$splitsSource`,
+`$adyenStatus` (Adyen's receipt of the request, not the outcome).
 
 ### `PaymentCancellation`
 
 `$status`, `$reference`, `$modificationReference`, `$cancelPspReference`,
-`$paymentPspReference`, `$environment`, `$raw`.
+`$paymentPspReference`, `$environment`, `$raw`, `$subscriptionId`, `$chargeId`,
+`$paymentLinkId`, `$orderId`, `$amount`, `$cancelledAt`, `$alreadyCancelled`.
+`isLinkWithdrawn()` is true when the cancel withdrew an unpaid link.
+
+### `Transaction` and `TransactionPage`
+
+`Transaction`: `$reference`, `$status`, `$amount`, `$pspReference`,
+`$paymentLinkId`, `$paymentLinkUrl`, `$webhookEventCode` and the other row
+fields, `$raw`. Helpers: `is()`, `isSubscriptionCharge()`, `isCardSetup()`.
+`TransactionPage`: `$tenantId`, `$count`, `$nextCursor`, `$items`, `hasMore()`.
+
+### `PartnerMerchant` and `PartnerMerchantPage`
+
+`PartnerMerchant`: `$merchantOrgNr`, `$tenantId`, `$name`, `$email`,
+`$kycUrl`, `$storeId`, `$steps` (`PartnerMerchantStep` by name, see
+`PartnerMerchant::STEPS`), `$checkedAt`, `$created`, `$raw`. Helpers:
+`step()`, `isReadyForPayments()`, `needsKycAction()`, `isKycDeferred()`,
+`kycProblems()`. `PartnerMerchantPage`: `$tenantId`, `$count`, `$nextCursor`,
+`$kycDeferred`, `$checkedAt`, `$items`, `hasMore()`.
 
 ### `PaymentSession` — Drop-in for a payment link
 
@@ -368,9 +433,12 @@ All extend `Exceptions\PloreaException`.
 | Exception | HTTP |
 | --- | --- |
 | `ValidationException` | 400 |
+| `RefundAmountExceededException` | 400 with `remainingAmount` — `remainingAmount()`, `alreadyRefunded()`, `requestedAmount()`, `originalAmount()` |
+| `PaymentLinkCancelledException` | 400 / 410 with `cancelledAt` — `cancelledAt()` |
 | `AuthenticationException` | 401 / 403 |
 | `ChargeFailedException` | 402 |
 | `NotFoundException` | 404 |
+| `PaymentAlreadyCapturedException` | 409 on cancel — `paymentStatus()` |
 | `ServerException` | 5xx |
 | `ConnectionException` | — (unreachable) |
 | `PaymentAlreadyPaidException` | — (SDK guard; carries `$status`) |

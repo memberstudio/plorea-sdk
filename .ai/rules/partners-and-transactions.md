@@ -1,0 +1,55 @@
+# Partner merchants and transactions
+
+Both endpoints arrived with API 0.31. Read through `Plorea::merchants()` and
+`Plorea::transactions()`.
+
+## Partner merchants are live only — VERIFIED 2026-11-09
+
+- A test key gets `400` "Partner merchants are live only" on the list and `404`
+  on a single merchant. The reads are captured from live and anonymised
+  (`partner-merchant.json`, `partner-merchants-page.json`). **Never commit a
+  real org number, `kycUrl`, store id or e-mail** (see
+  [security.md](security.md)).
+- `limit` is 1–100. `101` gets `400`. A cursor from another endpoint gets `400`.
+- The step names, in order: `merchant`, `legalEntity`, `kyc`,
+  `balanceAccount`, `store`, `cardMethods`, `partnerRow`
+  (`PartnerMerchant::STEPS`). Statuses seen live: `existed`, `approved`,
+  `action_required`, `ready`, `no_store`. Model only what was seen.
+- `kyc` can read `deferred`: the list ran out of time before it read KYC. The
+  page counts these in `kycDeferred`. It is not a verification status. Ask
+  again.
+- The single read carries `tenantId` and `checkedAt`; a list item carries
+  `email` instead. Do not "fix" one shape to match the other.
+
+## A merchant without a store is never charged — OBSERVED live 2026-11-06 to 2026-11-09
+
+A live subscription for a merchant with approved KYC but no store was never
+charged. `isReadyForPayments()` needs KYC `approved`, a `storeId` and `ready`
+card methods. Do not loosen it to KYC alone.
+
+## `onboard()` is stated, not sent — UNOBSERVED
+
+`POST partners/merchants` is built from the 0.31 spec. Plorea states that it
+creates what is missing, e-mails the KYC link, and answers `created: false` on
+a repeat. **Nobody has sent it.** It is live only, so a test means a real
+merchant: **do not send it without the user's explicit OK.** After the first
+real call, capture and anonymise the answer as a fixture.
+
+Spec bug: the POST schema gives `country` `default: false` and `example: false`.
+It is an ISO 3166-1 alpha-2 string. `PendingMerchantOnboarding` sends it
+upper-cased and only when set.
+
+`cardDescriptor` is checked before the request: 1–22 characters from a-z, A-Z,
+0-9, space and `.,'_-?+*` (spec pattern). `&` is refused.
+
+## Transactions — VERIFIED 2026-11-09 (test)
+
+- `limit` is 1–1000; a page of 705 came back in one call. Without a tenant
+  Plorea answers `404`, so the SDK always sends the configured tenant.
+- The spec says subscription charges are absent. Rows named
+  `{subscriptionId}-{chargeId}` **do** appear, and their status can be stale
+  (`created` while `payments/status` read `authorised`). Never act on a row:
+  read `payments()->status()` first. Do not filter these rows out either; the
+  list is Plorea's, not ours.
+- `webhookEventCode` is the last inbound Adyen event, not a webhook to you.
+- Card-setup rows read `platform: "unknown"`.

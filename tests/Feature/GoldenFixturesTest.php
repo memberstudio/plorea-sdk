@@ -13,7 +13,10 @@ use MemberFlow\Plorea\Enums\Channel;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\AuthenticationException;
 use MemberFlow\Plorea\Exceptions\NotFoundException;
+use MemberFlow\Plorea\Exceptions\PaymentAlreadyCapturedException;
+use MemberFlow\Plorea\Exceptions\PaymentLinkCancelledException;
 use MemberFlow\Plorea\Exceptions\PaymentMethodInUseException;
+use MemberFlow\Plorea\Exceptions\RefundAmountExceededException;
 use MemberFlow\Plorea\Exceptions\ValidationException;
 use MemberFlow\Plorea\Facades\Plorea;
 use MemberFlow\Plorea\Tests\TestCase;
@@ -1394,5 +1397,181 @@ class GoldenFixturesTest extends TestCase
         } catch (ValidationException $caught) {
             $this->assertSame('channel must be one of Web, iOS, Android', $caught->getMessage());
         }
+    }
+
+    /**
+     * Captured 2026-11-09 in test (API 0.31). A partial refund leaves the
+     * rest refundable; `status` still reads `refund_requested`, so read
+     * `refundStatus` and `refundable` instead.
+     */
+    public function test_it_parses_a_real_partially_refunded_payment(): void
+    {
+        Http::fake(['payments.plorea.no/payments/status*' => Http::response($this->fixture('payment-status-partially-refunded'))]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-010');
+
+        $this->assertSame('refund_requested', $status->status);
+        $this->assertSame('partially_refunded', $status->refundStatus);
+        $this->assertNull($status->refusalReason);
+        $this->assertSame(0, $status->settledChargeTotal?->value);
+        $this->assertTrue($status->canRequestRefund());
+        $this->assertSame(99900, $status->refundable?->originalAmount?->value);
+        $this->assertSame(96678, $status->refundable?->refundedTotal?->value);
+        $this->assertSame(3222, $status->refundable?->remainingAmount?->value);
+        $this->assertNotNull($status->refundable?->mayStillFail);
+
+        $this->assertCount(1, $status->refunds);
+        $this->assertSame('REFUND', $status->refunds[0]->eventCode);
+        $this->assertSame('adyen', $status->refunds[0]->source);
+        $this->assertFalse($status->refunds[0]->isFailed());
+    }
+
+    /**
+     * Captured 2026-11-09 in test. A fully refunded payment says why no
+     * further refund is possible.
+     */
+    public function test_it_parses_a_real_fully_refunded_payment(): void
+    {
+        Http::fake(['payments.plorea.no/payments/status*' => Http::response($this->fixture('payment-status-fully-refunded'))]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-011');
+
+        $this->assertTrue($status->is('refunded'));
+        $this->assertFalse($status->canRequestRefund());
+        $this->assertSame(0, $status->refundable?->remainingAmount?->value);
+        $this->assertSame('The whole payment has already been refunded.', $status->refundable?->reason);
+        $this->assertSame([], $status->refunds);
+    }
+
+    /**
+     * Captured 2026-11-09 in test. A failed refund leaves the full amount
+     * refundable.
+     */
+    public function test_it_parses_a_real_refund_failed_payment(): void
+    {
+        Http::fake(['payments.plorea.no/payments/status*' => Http::response($this->fixture('payment-status-refund-failed'))]);
+
+        $status = Plorea::payments()->status('GOLDEN-2026-012');
+
+        $this->assertTrue($status->is('refund_failed'));
+        $this->assertSame('refund_failed', $status->refundStatus);
+        $this->assertTrue($status->canRequestRefund());
+        $this->assertSame(1000, $status->refundable?->remainingAmount?->value);
+        $this->assertTrue($status->refunds[0]->isFailed());
+    }
+
+    /**
+     * Captured 2026-11-09 in test. A subscription charge carries why it ran
+     * and which retry it was.
+     */
+    public function test_it_parses_a_real_subscription_charge_status(): void
+    {
+        Http::fake(['payments.plorea.no/payments/status*' => Http::response($this->fixture('payment-status-subscription-charge-refundable'))]);
+
+        $status = Plorea::payments()->status('sub_test_golden-chg_test_golden_3', tenantId: 'other-tenant');
+
+        $this->assertSame('sub_test_golden', $status->subscriptionId);
+        $this->assertSame('chg_test_golden_3', $status->chargeId);
+        $this->assertSame('manual_charge', $status->reason);
+        $this->assertSame(0, $status->retryNumber);
+        $this->assertNull($status->failureReason);
+        $this->assertNull($status->merchantOrgNr);
+        $this->assertNull($status->settledChargeTotal);
+        $this->assertTrue($status->canRequestRefund());
+        $this->assertSame(29900, $status->refundable?->remainingAmount?->value);
+
+        Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'tenantId=other-tenant'));
+    }
+
+    /**
+     * Captured 2026-11-09 in test. Cancelling an unpaid payment link
+     * withdraws the link; a second cancel answers the same with
+     * `alreadyCancelled`.
+     */
+    public function test_it_parses_a_real_payment_link_withdrawal(): void
+    {
+        Http::fake(['payments.plorea.no/payments/cancel' => Http::sequence()
+            ->push($this->fixture('cancel-payment-link-withdrawn'))
+            ->push($this->fixture('cancel-payment-link-withdrawn-again')),
+        ]);
+
+        $first = Plorea::payments()->cancel('GOLDEN-2026-020', 'GOLDEN-2026-020-CANCEL-1');
+        $again = Plorea::payments()->cancel('GOLDEN-2026-020', 'GOLDEN-2026-020-CANCEL-2');
+
+        $this->assertTrue($first->isLinkWithdrawn());
+        $this->assertFalse($first->alreadyCancelled);
+        $this->assertSame('pl_test_golden_link', $first->paymentLinkId);
+        $this->assertSame(1000, $first->amount?->value);
+        $this->assertSame('2026-11-08T23:35:28+00:00', $first->cancelledAt?->toIso8601String());
+
+        $this->assertTrue($again->isLinkWithdrawn());
+        $this->assertTrue($again->alreadyCancelled);
+    }
+
+    /**
+     * Captured 2026-11-09 in test. A captured payment and a captured
+     * subscription charge both refuse cancel with 409; each needs a refund.
+     */
+    public function test_it_maps_a_real_cancel_of_a_captured_payment_to_already_captured(): void
+    {
+        foreach (['cancel-captured-payment', 'cancel-captured-subscription-charge'] as $fixture) {
+            Http::fake(['payments.plorea.no/payments/cancel' => Http::response($this->fixture($fixture), 409)]);
+
+            try {
+                Plorea::payments()->cancel('GOLDEN-2026-021', 'GOLDEN-2026-021-CANCEL-1');
+                $this->fail("Expected {$fixture} to throw.");
+            } catch (PaymentAlreadyCapturedException $exception) {
+                $this->assertSame(409, $exception->status);
+                $this->assertSame('authorised', $exception->paymentStatus());
+                $this->assertStringContainsString('captured', $exception->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Captured 2026-11-09 in test. Once withdrawn, the pay page answers 410
+     * and the session endpoint 400, both with `cancelledAt`.
+     */
+    public function test_it_maps_a_real_withdrawn_link_to_link_cancelled(): void
+    {
+        Http::fake([
+            'payments.plorea.no/pay/*' => Http::response($this->fixture('pay-page-cancelled'), 410),
+            'payments.plorea.no/payments/session' => Http::response($this->fixture('payment-session-link-cancelled'), 400),
+        ]);
+
+        foreach ([
+            fn () => Plorea::payByLink()->find('pl_test_golden_link'),
+            fn () => Plorea::payByLink()->session('pl_test_golden_link', 'https://example.com/return'),
+        ] as $call) {
+            try {
+                $call();
+                $this->fail('Expected a withdrawn link to throw.');
+            } catch (PaymentLinkCancelledException $exception) {
+                $this->assertSame('Payment link was cancelled', $exception->getMessage());
+                $this->assertSame('2026-11-08T23:35:28+00:00', $exception->cancelledAt()?->toIso8601String());
+            }
+        }
+    }
+
+    /**
+     * Captured 2026-11-09 in test. A refund above what is left answers 400
+     * (it was 422 before API 0.31) with the amounts.
+     */
+    public function test_it_maps_a_real_refund_over_the_remaining_amount(): void
+    {
+        Http::fake(['payments.plorea.no/payments/refund' => Http::response($this->fixture('refund-amount-exceeded'), 400)]);
+
+        try {
+            Plorea::payments()->refund('sub_test_golden-chg_test_golden_3', 'GOLDEN-REFUND-1', 99999999, tenantId: 'other-tenant');
+            $this->fail('Expected the refund to be refused.');
+        } catch (RefundAmountExceededException $exception) {
+            $this->assertSame(29900, $exception->originalAmount()?->value);
+            $this->assertSame(0, $exception->alreadyRefunded()?->value);
+            $this->assertSame(99999999, $exception->requestedAmount()?->value);
+            $this->assertSame(29900, $exception->remainingAmount()?->value);
+            $this->assertSame('NOK', $exception->remainingAmount()?->currency);
+        }
+
+        Http::assertSent(fn (Request $request): bool => $request['tenantId'] === 'other-tenant');
     }
 }

@@ -7,17 +7,21 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | --- | --- |
 | `ValidationException` | 400 — invalid request data, or an operation the current state does not allow |
 | `PaymentMethodInUseException` | 400 on `paymentMethods()->delete()` — subscriptions still use the method; `activeSubscriptionIds()` lists them. Extends `ValidationException` |
+| `PaymentLinkCancelledException` | 410 on `payByLink()->find()`, 400 on `payByLink()->session()` — the link was withdrawn; `cancelledAt()` says when. Extends `ValidationException` |
+| `RefundAmountExceededException` | 400 on `refund()` — the amount is more than what is left; `remainingAmount()`, `alreadyRefunded()`, `requestedAmount()`, `originalAmount()`. Extends `ValidationException` |
 | `AuthenticationException` | 401 / 403 — invalid or missing API key, a tenant mismatch, or a request that reached the wrong environment |
 | `ChargeFailedException` | 402 — a subscription charge was declined by the acquirer |
 | `NotFoundException` | 404 — unknown reference or id |
 | `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is a plain `RequestException` |
+| `PaymentAlreadyCapturedException` | 409 on `cancel()` — the payment or charge is captured; refund it. `paymentStatus()` returns the status in the body |
 | `ServerException` | 5xx — Plorea-side error |
 | `ConnectionException` | The API could not be reached |
 | `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |
 | `PloreaException` | Everything else, including the SDK's own guards |
 
 `ValidationException`, `AuthenticationException`, `ChargeFailedException`,
-`NotFoundException`, `NextChargeInPaidPeriodException` and `ServerException` all extend `RequestException`, which
+`NotFoundException`, `NextChargeInPaidPeriodException`,
+`PaymentAlreadyCapturedException` and `ServerException` all extend `RequestException`, which
 exposes the response:
 
 ```php
@@ -110,6 +114,24 @@ This one is deliberately loud. Silently creating a fresh link for a settled
 invoice makes it payable twice; there is no safe default, so the SDK refuses to
 pick one.
 
+## Refund and cancel refusals
+
+Captured in test on 2026-11-09 (API 0.31).
+
+- **A refund over the remaining amount** answers `400` with the amounts.
+  The SDK throws `RefundAmountExceededException`. Before API 0.31 the same
+  refusal was a `422`. Read `remainingAmount()` and refund at most that.
+  Ask first with `status($reference)->canRequestRefund()`.
+- **A cancel on a captured payment or charge** answers `409`. The SDK throws
+  `PaymentAlreadyCapturedException`. Refund instead. The two messages
+  differ ("use /payments/refund" and "use refund"), so match on the class.
+- **A cancel on an unpaid link** withdraws the link. It is not an error.
+  After that, the pay page answers `410` and a new session `400`; both throw
+  `PaymentLinkCancelledException`.
+- The spec also lists a `422` for a split refund and a `409` when a
+  sub-merchant's balance account cannot be resolved. Nobody has seen either.
+  They reach you as `RequestException` (422) and `RequestException` (409).
+
 ## Retries and idempotency
 
 `PLOREA_RETRY_TIMES` retries connection errors and 5xx responses. Default is
@@ -122,6 +144,11 @@ pick one.
 | `refund()`, `cancel()` | Yes, with the *same* `modificationReference` |
 | `subscriptions()->charge()` | **No** — no idempotency key exists |
 | `create()` a subscription | **No** |
+
+API 0.31 documents an `Idempotency-Key` header. **Do not rely on it.** In
+test on 2026-11-09 a repeated key created a second row, moved
+`nextChargeAt`, and a reused key with a different amount was booked as
+authorised. The SDK does not send the header.
 
 For payment links, use `firstOrCreate()` rather than retrying. For anything
 else non-idempotent, fail and reconcile by reading state back.

@@ -97,8 +97,8 @@ modifications asynchronously, and that the final statuses are `refunded` and
 `cancelled`. Book on the request; do not wait for the final status.
 
 Status bodies seen since 2026-10-06 also carry `refusalReason` and
-`refundedTotal` (minor units). `PaymentStatus` does not type them yet; read
-them from `$status->raw`.
+`refundedTotal` (minor units). Since API 0.31 `PaymentStatus` types them. See
+"Status, refund and cancel in API 0.31" below.
 
 ### ✅ Partial and full refunds on an `authorised` payment — 2026-10-09 (test)
 
@@ -178,6 +178,7 @@ two separate links.
 - A refund of the full amount targets the first psp (`paymentPspReference` =
   first). A second refund of the full amount fails with `422`
   `ValidationException` "Refund amount exceeds original payment amount".
+  Since API 0.31 this is `400`, `RefundAmountExceededException`.
   `refundedTotal` caps refunds per reference at the link amount. **The second
   payment cannot be refunded through the API.**
 
@@ -421,8 +422,8 @@ of the 2026-09-17 entries above:
   channel `iOS` / `Android`, in an upcoming deploy. Until it is observed, a native app
   must keep handling the redirect.
 - **`refusalReason` is coming** on `GET payments/status/{reference}`, same
-  deploy. Until it is observed, `failed` still has no reason — do not model the
-  field.
+  deploy. **Delivered:** seen on status bodies since 2026-10-06 and typed on
+  `PaymentStatus` since API 0.31.
 - **Customers' own domains: route the payment step through your own
   whitelisted subdomain.** The wildcard covers every subdomain; no API for
   registering single origins is planned.
@@ -443,6 +444,78 @@ Plorea reported it resolved on 2026-09-18. Re-tested the day after:
 
 Still unobserved: a live `environment` value, a live client key, and any
 Android channel on a device.
+
+### ✅ Status, refund and cancel in API 0.31 — 2026-11-09 (test)
+
+Captured in test against API 0.31. `PaymentStatus` now types `refusalReason`,
+`refundedTotal`, `refundable`, `settledChargeTotal` and `merchantOrgNr`. A
+charge item also carries `reason`, `retryNumber` and `failureReason`.
+
+- **`refundable`** answers "can I refund now?": `originalAmount`,
+  `refundedTotal`, `remainingAmount`, `canRequest`, `reason` and
+  `mayStillFail`. A fully refunded payment reads `canRequest: false` with a
+  reason. Read it with `canRequestRefund()`.
+- **Statuses observed:** a partial refund reads `refund_requested` with
+  `refundStatus: "partially_refunded"`. A full refund and a failed refund
+  turned `refunded` and `refund_failed`. `refunds[]` items carry `eventCode`.
+- **`status()` and `refund()` take a `tenantId`.** Another tenant's reference
+  answers `404`.
+- **Refund over the remaining amount:** `400` (was `422`) with
+  `originalAmount`, `alreadyRefunded`, `requestedAmount` and
+  `remainingAmount`. The SDK throws `RefundAmountExceededException`.
+- **Cancel on an unpaid link withdraws it.** The answer is `cancelled` with
+  `cancelledAt`. A second cancel answers the same with `alreadyCancelled:
+  true`. The pay page then answers `410` and `payments/session` `400`:
+  `PaymentLinkCancelledException`.
+- **Cancel on a captured payment or charge:** `409`,
+  `PaymentAlreadyCapturedException`. The two messages differ ("Payment has
+  been captured; use /payments/refund" and "Charge has been captured; use
+  refund"). This replaces the 2026-10-19 behaviour at the top of this page.
+
+**Not in the spec, but on the wire:** `settledBy`, `settledAt` and the
+`settledCharges` items. The SDK leaves them in `raw`.
+
+**❓ Unobserved:** the spec's `422` split-refund body and `409`
+balance-account body. They fall through to the generic exceptions.
+
+Fixtures: `payment-status-partially-refunded.json`,
+`payment-status-fully-refunded.json`, `payment-status-refund-failed.json`,
+`payment-status-subscription-charge-refundable.json`,
+`refund-amount-exceeded.json`, `cancel-payment-link-withdrawn*.json`,
+`cancel-captured-*.json`, `pay-page-cancelled.json`,
+`payment-session-link-cancelled.json`.
+
+### ✅ `Idempotency-Key` does not work — 2026-11-09 (test)
+
+API 0.31 documents an `Idempotency-Key` header. In test, a repeated key
+created a second row and moved `nextChargeAt`. A reused key with a different
+amount was booked as `authorised`. The SDK does not send the header. See
+[errors.md](errors.md#retries-and-idempotency). Reported to Plorea.
+
+### ✅ A stored-card payment link has no working session — 2026-11-09 (test)
+
+A payment link created with a `shopperReference` is accepted. Its
+`payments/session` then fails with Adyen error `702`
+(`storedPaymentMethodMode` unknown). A plain link's session works. The SDK
+does not expose `shopperReference` on links. Reported to Plorea.
+
+### ✅ Transactions: `GET transactions` — 2026-11-09 (test)
+
+`Plorea::transactions()->list()` and `all()` read the tenant's payment rows,
+newest first: payment links, card setups and refunds.
+
+- `limit` is 1–1000. A page of 705 rows came back in one call. A cursor from
+  another endpoint gets `400`. Without a tenant Plorea answers `404`, so the
+  SDK sends the configured one.
+- The spec says subscription charges are absent. Rows named
+  `{subscriptionId}-{chargeId}` do appear. **Their status can be stale:** one
+  read `created` while `payments/status` for the same reference read
+  `authorised`. Read `payments()->status()` before you act on a row.
+- Card-setup rows read `platform: "unknown"`.
+- `webhookEventCode` is the last Adyen event Plorea received, not a webhook it
+  sent you.
+
+Fixture: `transactions-page.json`.
 
 ---
 
@@ -595,6 +668,34 @@ There is no API for starting or reading KYC. To onboard a company ahead of its
 first real charge, Plorea suggests creating a payment link that carries its
 organisation number and sending it to yourself; that starts KYC the ordinary
 way.
+
+**Changed in API 0.31 (2026-11-09):** the onboarding can now be read, and
+started, through `partners/merchants`. See the next entry.
+
+### ✅ Merchant onboarding state: `partners/merchants` — 2026-11-09 (live)
+
+`GET partners/merchants` and `GET partners/merchants/{merchantOrgNr}` return
+each merchant with its onboarding steps: `merchant`, `legalEntity`, `kyc`,
+`balanceAccount`, `store`, `cardMethods` and `partnerRow`. The SDK reads them
+with `Plorea::merchants()->list()`, `all()` and `find()`.
+
+- The routes are live only. A test key gets `400` "Partner merchants are live
+  only" on the list and `404` on a single merchant.
+- The list accepts `limit` 1–100. `101` gets `400`. A cursor from another
+  endpoint gets `400`.
+- The `kyc` step reads `approved`, `action_required` (with up to ten
+  `problems`, for example code `2_8036` "'bankAccount' was missing.") or
+  `deferred`. `deferred` means the list ran out of time before it read KYC.
+  The page counts these in `kycDeferred`. Ask again.
+- A merchant can read `approved` with no store. A live subscription for such
+  a merchant was never charged (2026-11-06 to 2026-11-09). Check
+  `isReadyForPayments()` before you route money to a merchant.
+
+**📋 Not observed:** `POST partners/merchants` (`onboard()`). Plorea states
+that it creates what is missing and e-mails the KYC link. The SDK has not sent
+it live.
+
+Fixture: `partner-merchants-page.json`, `partner-merchant.json` (anonymised).
 
 ### ✅ Charge shapes — 2026-09-04
 
@@ -896,6 +997,13 @@ call with raw `curl` — including debugging a refund against a copied request.
 `test_it_requests_a_refund` pins the header on the endpoint where getting it
 wrong is most expensive.
 
+### ✅ `trialDays`, `billingAnchor` and `proration` are ignored — 2026-11-09 (test)
+
+API 0.31 adds the three fields to subscription create. Test ignored all three:
+eight subscriptions came back `active` with an immediate charge date. The SDK
+does not send them. Do not use them until they are observed working. Reported
+to Plorea.
+
 ---
 
 ## Webhooks
@@ -969,6 +1077,25 @@ verified on the wire.
 `subscription.charge_succeeded`. More are planned. Three have now been observed
 on the wire; only `payment.refunded` is still routed on the shared envelope
 alone.
+
+**Changed in API 0.31 (spec of 2026-11):** the spec now lists
+`payment.authorised`, `payment.failed`, `payment.captured`,
+`payment.refunded`, `payment.refund_failed`, `payment.cancelled`,
+`payment.cancel_failed`, `payment.cancelled_or_refunded` and
+`payment.updated`, plus `subscription.charge_succeeded`,
+`subscription.charge_failed` and `subscription.trial_will_end` (opt-in per
+tenant). `payment.updated` carries chargebacks and split refunds; `data.status`
+tells them apart. Every `payment.*` type raises `PaymentStatusUpdated`. Only
+the captured types have fixtures; the rest are routed on the shared envelope.
+
+### 📋 Signature rotation and delivery attempts — API 0.31 spec
+
+- During a secret rotation Plorea also sends `X-Plorea-Signature-Next`: the
+  same HMAC under the next secret. The middleware accepts a delivery when
+  either header verifies. You can switch `PLOREA_WEBHOOK_SECRET` at any point
+  during the rotation. No rotation observed yet.
+- `X-Plorea-Delivery-Attempt` counts the tries. It is not signed. Use it for
+  logging only, never for deduplication.
 
 ### ✅ `payment.failed` delivery — captured 2026-09-09
 

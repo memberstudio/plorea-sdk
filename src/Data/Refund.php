@@ -19,6 +19,9 @@ final readonly class Refund
      * @param  ?string  $chargeId  Set when the refund is for a subscription charge. Seen in test 2026-10-19.
      * @param  ?Amount  $refundedTotal  The total refunded on the payment, this refund included. Seen on a subscription charge in test 2026-10-19.
      * @param  ?string  $refundStatus  For example `partially_refunded`. Seen on a subscription charge in test 2026-10-19.
+     * @param  ?array<int, mixed>  $splits  The split lines the refund was sent with. Null for a payment without splits (test 2026-11-09); a split refund is unobserved.
+     * @param  ?string  $splitsSource  Where the split lines came from: `link`, `charge`, `rebuilt` or `none`. Only `none` has been seen (test 2026-11-09).
+     * @param  ?string  $adyenStatus  Adyen's answer to the request, `received` in test 2026-11-09. Not the outcome: that arrives later on the status.
      */
     public function __construct(
         public ?string $status,
@@ -33,6 +36,9 @@ final readonly class Refund
         public ?string $chargeId = null,
         public ?Amount $refundedTotal = null,
         public ?string $refundStatus = null,
+        public ?array $splits = null,
+        public ?string $splitsSource = null,
+        public ?string $adyenStatus = null,
     ) {}
 
     /**
@@ -57,6 +63,9 @@ final readonly class Refund
             chargeId: self::string($data['chargeId'] ?? null),
             refundedTotal: $refundedTotal === null ? null : new Amount($refundedTotal, $currency),
             refundStatus: self::string($data['refundStatus'] ?? null),
+            splits: is_array($data['splits'] ?? null) ? $data['splits'] : null,
+            splitsSource: self::string($data['splitsSource'] ?? null),
+            adyenStatus: self::string($data['adyenStatus'] ?? null),
         );
     }
 }

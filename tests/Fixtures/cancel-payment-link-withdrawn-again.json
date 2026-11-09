@@ -1,0 +1,11 @@
+{
+    "status": "cancelled",
+    "reference": "GOLDEN-2026-020",
+    "paymentLinkId": "pl_test_golden_link",
+    "orderId": null,
+    "amount": 1000,
+    "currency": "NOK",
+    "cancelledAt": "2026-11-08T23:35:28.387Z",
+    "environment": "test",
+    "alreadyCancelled": true
+}

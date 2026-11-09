@@ -44,6 +44,11 @@ Two rules keep those answers honest:
   with a state the API would never have returned makes a green suite prove
   nothing.
 
+The fake also answers `GET transactions`, `GET partners/merchants`,
+`GET partners/merchants/{orgNr}` and `POST partners/merchants` (since API
+0.31). The merchant answers are ready for payments. The real partner routes
+are live only, so the fake is the only way to exercise them in a test suite.
+
 ## Gotchas
 
 - **`TestCase::status()` is final in PHPUnit 12** — name test helpers something

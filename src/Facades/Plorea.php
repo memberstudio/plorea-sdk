@@ -11,6 +11,8 @@ use MemberFlow\Plorea\PloreaManager;
  * @method static \MemberFlow\Plorea\Resources\PaymentResource payments()
  * @method static \MemberFlow\Plorea\Resources\PaymentMethodResource paymentMethods()
  * @method static \MemberFlow\Plorea\Resources\SubscriptionResource subscriptions()
+ * @method static \MemberFlow\Plorea\Resources\TransactionResource transactions()
+ * @method static \MemberFlow\Plorea\Resources\PartnerMerchantResource merchants()
  * @method static \MemberFlow\Plorea\Resources\PayByLinkResource payByLink()
  * @method static \MemberFlow\Plorea\Contracts\Client client()
  * @method static \MemberFlow\Plorea\Testing\FakeClient fake(array<string, array<string, mixed>|callable|\Throwable> $stubs = [])

@@ -89,6 +89,10 @@ With no stub, the fake answers these routes:
 | `GET subscriptions/{id}/charges` | A charge history |
 | `POST subscriptions/{id}/cancel` | A cancellation |
 | `POST subscriptions/{id}/reactivate` | The subscription, `active` |
+| `GET transactions` | One authorised payment-link row, no next page |
+| `GET partners/merchants` | One merchant ready for payments, no next page |
+| `GET partners/merchants/{orgNr}` | That merchant, ready for payments |
+| `POST partners/merchants` | The merchant, `created: true` |
 
 Anything else throws `PloreaException` naming the route, so a typo or a new
 endpoint fails loudly instead of silently returning nothing.

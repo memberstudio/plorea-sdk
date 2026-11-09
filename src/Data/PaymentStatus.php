@@ -22,6 +22,13 @@ final readonly class PaymentStatus
      * @param  ?string  $refundStatus  For example `partially_refunded`. Seen in test 2026-10-19.
      * @param  list<PaymentRefund>  $refunds  Each refund on the payment. Empty when Plorea sends no `refunds` list. On a subscription charge in test 2026-10-19, refunds showed here and the `lastRefund*` fields were absent. An older manual-charge capture had `lastRefund*` and no list, so fall back to `lastRefund*` when this is empty.
      * @param  ?string  $cancelStatus  The state of the last cancel request, for example `cancel_requested`. Seen in test 2026-10-19.
+     * @param  ?string  $refusalReason  Adyen's reason for a refused payment. Present and null on every payment link status captured in test 2026-11-09; absent on a subscription charge.
+     * @param  ?Refundability  $refundable  Whether and how much can still be refunded. Seen on links and charges in test 2026-11-09.
+     * @param  ?Amount  $settledChargeTotal  What subscription charges settled against this payment link. Always 0 in test 2026-11-09, with an empty `settledCharges` list whose item shape is unobserved (read it from `raw`).
+     * @param  ?string  $merchantOrgNr  The merchant a subscription charge was made for. Set on a charge only.
+     * @param  ?string  $reason  The reason sent with a subscription charge, for example `manual_charge`. Set on a charge only.
+     * @param  ?int  $retryNumber  The retry attempt of a subscription charge, 0 for the first. Set on a charge only.
+     * @param  ?string  $failureReason  The provider's message for a failed subscription charge. Free text, not a stable code.
      */
     public function __construct(
         public string $reference,
@@ -65,6 +72,13 @@ final readonly class PaymentStatus
         public ?string $cancelReference = null,
         public ?string $cancelPspReference = null,
         public ?CarbonImmutable $cancelRequestedAt = null,
+        public ?string $refusalReason = null,
+        public ?Refundability $refundable = null,
+        public ?Amount $settledChargeTotal = null,
+        public ?string $merchantOrgNr = null,
+        public ?string $reason = null,
+        public ?int $retryNumber = null,
+        public ?string $failureReason = null,
     ) {}
 
     /**
@@ -75,6 +89,7 @@ final readonly class PaymentStatus
         $value = self::int($data['amount'] ?? null);
         $currency = self::string($data['currency'] ?? null) ?? 'NOK';
         $refundedTotal = self::int($data['refundedTotal'] ?? null);
+        $settledChargeTotal = self::int($data['settledChargeTotal'] ?? null);
         $refunds = is_array($data['refunds'] ?? null) ? $data['refunds'] : [];
 
         return new self(
@@ -120,6 +135,13 @@ final readonly class PaymentStatus
             cancelReference: self::string($data['cancelReference'] ?? null),
             cancelPspReference: self::string($data['cancelPspReference'] ?? null),
             cancelRequestedAt: self::date($data['cancelRequestedAt'] ?? null),
+            refusalReason: self::string($data['refusalReason'] ?? null),
+            refundable: Refundability::fromArray(is_array($data['refundable'] ?? null) ? $data['refundable'] : null),
+            settledChargeTotal: $settledChargeTotal === null ? null : new Amount($settledChargeTotal, $currency),
+            merchantOrgNr: self::string($data['merchantOrgNr'] ?? null),
+            reason: self::string($data['reason'] ?? null),
+            retryNumber: self::int($data['retryNumber'] ?? null),
+            failureReason: self::string($data['failureReason'] ?? null),
         );
     }
 
@@ -179,6 +201,28 @@ final readonly class PaymentStatus
         return $this->webhookEventCode !== null
             && strcasecmp($this->webhookEventCode, 'CANCELLATION') === 0
             && $this->webhookSuccess === false;
+    }
+
+    /**
+     * Whether the payment was cancelled: an unpaid link withdrawn through
+     * payments()->cancel(), or an authorisation Adyen cancelled.
+     *
+     * Check isCancellationRefused() too: in test on 2026-10-19 a refused
+     * cancel on a charged subscription charge also read `cancelled`.
+     */
+    public function isCancelled(): bool
+    {
+        return $this->is('cancelled');
+    }
+
+    /**
+     * Whether a refund can be requested now. Reads `refundable.canRequest`;
+     * false when Plorea sent no `refundable` block. A true answer can still
+     * end in a 409, see Refundability::$mayStillFail.
+     */
+    public function canRequestRefund(): bool
+    {
+        return $this->refundable?->canRequest === true;
     }
 
     /**

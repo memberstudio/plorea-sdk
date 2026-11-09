@@ -1,0 +1,11 @@
+{
+    "error": "Refund amount exceeds original payment amount",
+    "reference": "sub_test_golden-chg_test_golden_3",
+    "subscriptionId": "sub_test_golden",
+    "chargeId": "chg_test_golden_3",
+    "originalAmount": 29900,
+    "alreadyRefunded": 0,
+    "requestedAmount": 99999999,
+    "remainingAmount": 29900,
+    "currency": "NOK"
+}

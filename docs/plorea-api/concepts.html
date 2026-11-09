@@ -88,6 +88,7 @@ flowchart TB
         <li>On a subscription the field is optional. Every charge inherits the company. A subscription without it behaves as before. <span class="badge stated">Stated by Plorea</span></li>
         <li>On subscriptions the value must be nine digits. Otherwise the API answers <code>400</code>. <span class="badge verified">Verified</span></li>
         <li>The first payment for a new organisation number starts KYC automatically. The payout waits until KYC is approved, usually 1–5 business days. The link stays payable. <span class="badge stated">Stated by Plorea</span></li>
+        <li>Since November 2026, the partners endpoints start and read KYC ahead of the first payment. They are live only. See <a href="api-reference.html#partner-merchants">Partner merchants</a>. A subscription for a merchant without a store was never charged. <span class="badge verified">Verified Nov 2026 (production)</span> We take the missing store as the cause. <span class="badge open">Open question</span></li>
         <li>Reads do not return the merchant on subscriptions, and the link-create response does not echo it. Keep your own record. <span class="badge verified">Verified</span></li>
       </ul>
 

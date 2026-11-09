@@ -344,7 +344,8 @@ $membership-&gt;update(['merchant_org_nr' =&gt; $subscription-&gt;merchantOrgNr]
         <li>A value that is not nine digits returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
         <li>Use the client company's number, never your platform's own number.</li>
         <li>KYC for a new company starts on its first charge. Settlement splits apply from that charge. Charge webhooks carry the organisation number. <span class="badge stated">Stated by Plorea</span></li>
-        <li>There is no API to start or read KYC. To onboard a company before its first real charge, create a payment link with its organisation number and pay it yourself. <span class="badge stated">Stated by Plorea</span></li>
+        <li>To onboard a company before its first real charge, use <code>POST /partners/merchants</code>, and read the state with <code>GET /partners/merchants/{merchantOrgNr}</code>. Live only. See <a href="api-reference.html#partner-merchants">Partner merchants</a>. <span class="badge stated">Stated by Plorea</span> Before November 2026 no KYC API existed, and Plorea suggested a payment link with the organisation number, paid by yourself.</li>
+        <li>A subscription for a merchant without a store was never charged. <span class="badge verified">Verified Nov 2026 (production)</span> We take the missing store as the cause. <span class="badge open">Open question</span> Check <code>storeId</code> on the partner merchant before you create the subscription.</li>
       </ul>
 
       <h2>Read a subscription</h2>

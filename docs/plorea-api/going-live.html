@@ -53,19 +53,20 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
         <p>After deploy, create one link and confirm that the response reads <code>"environment": "live"</code>. We have not observed a live value ourselves. <span class="badge open">Open question</span></p>
       </div>
 
-      <h2>2. Merchants, KYC and payouts</h2>
+      <h2 id="kyc">2. Merchants, KYC and payouts</h2>
       <p>The <code>merchantOrgNr</code> decides who receives the money. Set it to the organisation number of the company that issues the invoice, not your own.</p>
       <ul>
         <li><strong>Send <code>merchantOrgNr</code> on every payment link and subscription.</strong> Plorea requires it by contract. <span class="badge stated">Stated by Plorea</span> The API does not enforce it on payment links: a link without it is accepted. <span class="badge verified">Verified</span> Enforce it in your own code.</li>
         <li><strong>Use nine digits.</strong> On <code>POST /subscriptions</code>, any other value returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
         <li><strong>Tell each merchant about KYC.</strong> The first live payment for a new organisation number starts onboarding by email. The payment succeeds. The payout waits until KYC is approved, which takes 1 to 5 business days. <span class="badge stated">Stated by Plorea</span></li>
-        <li><strong>Onboard a merchant ahead of time if needed.</strong> No API exists to start or read KYC. Plorea suggests a small payment link with the merchant's organisation number, paid by yourself. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Onboard a merchant ahead of time.</strong> Since spec 0.31, <code>POST /partners/merchants</code> starts onboarding and emails the KYC link. <span class="badge stated">Stated by Plorea</span> We have not sent it. <code>GET /partners/merchants/{merchantOrgNr}</code> shows each step: KYC, balance account, store and card methods. <span class="badge verified">Verified 2026-11-09 (production, read only)</span> The endpoints are live only. See <a href="api-reference.html#partner-merchants">Partner merchants</a>. Before November 2026 no KYC API existed, and Plorea suggested a small payment link with the merchant's organisation number, paid by yourself. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Check the store before you sell.</strong> A subscription for a merchant without a store was never charged. <span class="badge verified">Verified Nov 2026 (production)</span> We take the missing store as the cause. <span class="badge open">Open question</span> Read <code>storeId</code> and the <code>store</code> and <code>cardMethods</code> steps. Ask Plorea to create a missing store. A second onboarding call does not create it. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>Keep your own record</strong> of the merchant name and email. Subscription reads return <code>merchantOrgNr</code> since 2026-09-22, but not the name or the email. <span class="badge verified">Verified</span> Compare the returned number with your record.</li>
         <li><strong>Send the merchant on card setup too.</strong> Then the 3-D Secure challenge shows the company's name, not yours. <span class="badge stated">Stated by Plorea</span></li>
       </ul>
       <div class="callout gap">
-        <p class="callout-title">Missing: KYC status</p>
-        <p>An endpoint that reports the KYC and payout status of an organisation number would let you warn a merchant before money is held. <span class="badge proposal">Proposal</span></p>
+        <p class="callout-title">KYC status: delivered in November 2026</p>
+        <p>We proposed an endpoint that reports the KYC and payout status of an organisation number. <code>GET /partners/merchants/{merchantOrgNr}</code> now does this, with a <code>kycUrl</code> to send to the merchant. <span class="badge verified">Verified 2026-11-09 (production, read only)</span> It does not report payouts.</p>
       </div>
 
       <h2>3. Webhooks</h2>

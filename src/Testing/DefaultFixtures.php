@@ -44,6 +44,14 @@ final class DefaultFixtures
             $method === 'POST' && str_ends_with($path, '/charge') => self::charge($request),
             $method === 'GET' && str_ends_with($path, '/charges') => self::chargeList($path, $history),
             $method === 'POST' && str_ends_with($path, '/cancel') => self::subscriptionCanceled($path),
+            $method === 'GET' && $path === 'transactions' => self::transactionPage($request),
+            $method === 'GET' && $path === 'partners/merchants' => self::partnerMerchantPage($request),
+            $method === 'GET' && preg_match('#^partners/merchants/[^/]+$#', $path) === 1 => self::partnerMerchant(rawurldecode(basename($path)), $request->input('tenantId', 'fake-tenant')),
+            $method === 'POST' && $path === 'partners/merchants' => [
+                ...self::partnerMerchant($request->input('merchantOrgNr', '999999999'), $request->input('tenantId', 'fake-tenant')),
+                'name' => $request->input('name', 'Fake Merchant AS'),
+                'created' => true,
+            ],
             $method === 'POST' && str_ends_with($path, '/reactivate') => self::subscription(['subscriptionId' => basename(dirname($path)), 'status' => 'active']),
             default => throw new PloreaException(
                 "No fake response registered for [{$method} {$path}]. Pass a stub to Plorea::fake().",
@@ -170,6 +178,87 @@ final class DefaultFixtures
             'cancelPspReference' => 'FAKECANCEL123',
             'paymentPspReference' => 'FAKEPSP123',
             'environment' => 'test',
+        ];
+    }
+
+    /**
+     * One page with one authorised payment-link row and no next page.
+     *
+     * @return array<string, mixed>
+     */
+    private static function transactionPage(RecordedRequest $request): array
+    {
+        $tenantId = $request->input('tenantId', 'fake-tenant');
+
+        return [
+            'tenantId' => $tenantId,
+            'count' => 1,
+            'nextCursor' => null,
+            'items' => [[
+                'reference' => 'fake-reference',
+                'tenantId' => $tenantId,
+                'platform' => 'fake-platform',
+                'orderId' => 'fake-order',
+                'amount' => 50000,
+                'currency' => 'NOK',
+                'environment' => 'test',
+                'status' => $request->input('status', 'authorised'),
+                'provider' => 'adyen',
+                'pspReference' => 'FAKEPSP123',
+                'paymentLinkId' => 'pl_fake_link',
+                'paymentLinkUrl' => 'https://pay.plorea.no/pl_fake_link',
+                'splitsEnabled' => false,
+                'createdAt' => '2026-01-01T12:00:00.000Z',
+                'updatedAt' => '2026-01-01T12:01:00.000Z',
+            ]],
+        ];
+    }
+
+    /**
+     * One page with one fully onboarded merchant and no next page.
+     *
+     * @return array<string, mixed>
+     */
+    private static function partnerMerchantPage(RecordedRequest $request): array
+    {
+        $tenantId = $request->input('tenantId', 'fake-tenant');
+        $merchant = self::partnerMerchant('999999999', $tenantId);
+
+        unset($merchant['tenantId'], $merchant['checkedAt']);
+
+        return [
+            'tenantId' => $tenantId,
+            'count' => 1,
+            'nextCursor' => null,
+            'kycDeferred' => 0,
+            'checkedAt' => '2026-01-01T12:00:00.000Z',
+            'items' => [[...$merchant, 'email' => 'billing@example.com']],
+        ];
+    }
+
+    /**
+     * A merchant with every onboarding step done.
+     *
+     * @return array<string, mixed>
+     */
+    private static function partnerMerchant(string $merchantOrgNr, string $tenantId): array
+    {
+        return [
+            'merchantOrgNr' => $merchantOrgNr,
+            'tenantId' => $tenantId,
+            'name' => 'Fake Merchant AS',
+            'kycUrl' => 'https://example.test/kyc/fake',
+            'storeId' => 'ST_FAKE_STORE',
+            'steps' => [
+                'merchant' => ['status' => 'existed', 'clientType' => null],
+                'legalEntity' => ['status' => 'existed', 'id' => 'LE_FAKE'],
+                'kyc' => ['status' => 'approved', 'legalEntityId' => 'LE_FAKE', 'verificationStatus' => 'valid', 'problems' => []],
+                'balanceAccount' => ['status' => 'ready', 'id' => 'BA_FAKE'],
+                'store' => ['status' => 'existed', 'storeId' => 'ST_FAKE_STORE', 'merchantAccount' => 'FakeMerchant'],
+                'cardMethods' => ['status' => 'ready', 'methods' => ['visa' => ['state' => 'ready', 'verificationStatus' => 'valid'], 'mc' => ['state' => 'ready', 'verificationStatus' => 'valid']], 'errors' => []],
+                'partnerRow' => ['status' => 'written', 'tenantId' => $tenantId],
+            ],
+            'checkedAt' => '2026-01-01T12:00:00.000Z',
         ];
     }
 

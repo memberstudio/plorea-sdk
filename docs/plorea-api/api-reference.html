@@ -58,11 +58,13 @@
         <table>
           <thead><tr><th>Status</th><th>Meaning</th><th>PHP SDK exception</th></tr></thead>
           <tbody>
-            <tr><td><code>400</code></td><td>Validation failed, or the object is in the wrong state (not chargeable, card not active, not canceled, a status change that is not allowed).</td><td><code>ValidationException</code>. A card still in use on delete: <code>PaymentMethodInUseException</code>, a subclass.</td></tr>
+            <tr><td><code>400</code></td><td>Validation failed, or the object is in the wrong state (not chargeable, card not active, not canceled, a status change that is not allowed).</td><td><code>ValidationException</code>. A card still in use on delete: <code>PaymentMethodInUseException</code>, a subclass. A refund over the remaining amount: <code>RefundAmountExceededException</code>. A session for a withdrawn link: <code>PaymentLinkCancelledException</code>.</td></tr>
             <tr><td><code>401</code></td><td>Bad API key, or wrong environment credentials.</td><td><code>AuthenticationException</code></td></tr>
             <tr><td><code>402</code></td><td>The card was declined on a subscription charge. Nothing else returns 402.</td><td><code>ChargeFailedException</code></td></tr>
             <tr><td><code>403</code></td><td><code>Tenant mismatch</code>: the object belongs to another tenant.</td><td><code>AuthenticationException</code></td></tr>
             <tr><td><code>404</code></td><td>Unknown reference or ID.</td><td><code>NotFoundException</code></td></tr>
+            <tr><td><code>409</code></td><td>A conflict with the object's state: a cancel of a captured payment or charge, or a <code>nextChargeAt</code> inside a paid period. <span class="badge verified">Verified</span></td><td><code>PaymentAlreadyCapturedException</code>, <code>NextChargeInPaidPeriodException</code></td></tr>
+            <tr><td><code>410</code></td><td>The pay page of a withdrawn link. <span class="badge verified">Verified</span></td><td><code>PaymentLinkCancelledException</code></td></tr>
             <tr><td><code>5xx</code></td><td>Plorea or Adyen failed.</td><td><code>ServerException</code></td></tr>
           </tbody>
         </table>
@@ -70,7 +72,7 @@
       <p>See <a href="errors.html">Errors and retries</a> for handling patterns.</p>
 
       <h3 id="retry-safety">Retry safety at a glance</h3>
-      <p>The API has no idempotency keys. Two identical <code>POST</code>s create two objects. <span class="badge verified">Verified</span></p>
+      <p>The API has no working idempotency keys. Two identical <code>POST</code>s create two objects. <span class="badge verified">Verified</span> Spec 0.31 lists an <code>Idempotency-Key</code> header on <code>POST /payments/refund</code> and <code>POST /subscriptions/{id}/charge</code>. Test did not honour it: three charges with one key made three charges. <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="field-notes.html#idempotency-key-not-honoured">Field notes</a>.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Safe to retry</th><th>Not safe to retry blindly</th></tr></thead>
@@ -218,6 +220,14 @@ const link = await res.json();</code></pre></div>
         </tbody>
       </table></div>
 
+      <h4>Query parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>tenantId</code><span class="opt">optional</span></td><td class="type">string</td><td>Scopes the lookup to one tenant. Another tenant's reference then gets <code>404</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+        </tbody>
+      </table></div>
+
       <h4>Request</h4>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/payments/status/INV-2026-1001?platform=acme" \
@@ -227,7 +237,10 @@ const link = await res.json();</code></pre></div>
         <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$payment = Plorea::payments()-&gt;status('INV-2026-1001');
 
 $payment-&gt;isPaid();   // authorised or paid
-$payment-&gt;isOpen();   // created, pending or active</code></pre></div>
+$payment-&gt;isOpen();   // created, pending or active
+$payment-&gt;isCancelled();
+$payment-&gt;canRequestRefund();   // from the refundable block
+$payment-&gt;refusalReason;        // Adyen's decline text, or null</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">const ref = encodeURIComponent('INV-2026-1001');
 const res = await fetch(
   `https://payments.plorea.no/payments/status/${ref}?platform=acme`,
@@ -313,6 +326,36 @@ const payment = await res.json();</code></pre></div>
     "lastRefundReason": "Customer requested refund",
     "lastRefundRequestedAt": "2026-08-26T12:10:00.000Z"
 }</code></pre></div>
+        <div class="tab" data-label="Partly refunded"><pre data-title="200 OK — partly refunded (excerpt)"><code class="lang-json">{
+    "reference": "GOLDEN-2026-010",
+    "status": "refund_requested",
+    "amount": 99900,
+    "refusalReason": null,
+    "refundedTotal": 96678,
+    "refundable": {
+        "originalAmount": 99900,
+        "refundedTotal": 96678,
+        "remainingAmount": 3222,
+        "currency": "NOK",
+        "canRequest": true,
+        "reason": null,
+        "mayStillFail": "A payment settled to a sub-merchant is refused with 409 if its balance account cannot be resolved."
+    },
+    "refundStatus": "partially_refunded",
+    "refunds": [
+        {
+            "amount": 96678,
+            "currency": "NOK",
+            "eventCode": "REFUND",
+            "refundPspReference": "TESTREFUNDPSP100",
+            "refundReference": "GOLDEN-2026-010-REFUND-1",
+            "settledAt": "2026-10-17T00:27:39.940Z",
+            "source": "adyen",
+            "status": "refunded"
+        }
+    ],
+    "settledChargeTotal": 0
+}</code></pre></div>
         <div class="tab" data-label="Cancel requested"><pre data-title="200 OK — cancel requested (excerpt)"><code class="lang-json">{
     "reference": "GOLDEN-2026-002",
     "status": "cancel_requested",
@@ -336,7 +379,7 @@ const payment = await res.json();</code></pre></div>
       <div class="table-wrap"><table>
         <thead><tr><th>Status</th><th>Body</th><th>When</th></tr></thead>
         <tbody>
-          <tr><td><code>404</code></td><td><code>{"error": "Payment not found", "reference": "…"}</code></td><td>Unknown reference. An open link returns <code>200</code>, not 404. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>404</code></td><td><code>{"error": "Payment not found", "reference": "…"}</code></td><td>Unknown reference, or another tenant's reference with <code>?tenantId</code>. An open link returns <code>200</code>, not 404. <span class="badge verified">Verified</span></td></tr>
           <tr><td><code>403</code></td><td><code>{"error": "Tenant mismatch"}</code></td><td>The payment belongs to another tenant.</td></tr>
         </tbody>
       </table></div>
@@ -364,6 +407,7 @@ const payment = await res.json();</code></pre></div>
           <tr><td><code>modificationReference</code><span class="req">required</span></td><td class="type">string</td><td>Your unique ID for this refund attempt, for example <code>INV-2026-1001-refund-1</code>. Reuse it on a retry of the same attempt.</td></tr>
           <tr><td><code>amount</code><span class="opt">optional</span></td><td class="type">integer</td><td>Minor units. Leave out for a full refund. Send less for a partial refund.</td></tr>
           <tr><td><code>reason</code><span class="opt">optional</span></td><td class="type">string</td><td>Free text. Shown as <code>lastRefundReason</code> on status.</td></tr>
+          <tr><td><code>tenantId</code><span class="opt">optional</span></td><td class="type">string</td><td>The tenant that owns the payment. Added in spec 0.31. <span class="badge stated">Spec 0.31</span></td></tr>
         </tbody>
       </table></div>
 
@@ -420,7 +464,8 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
 }</code></pre>
       <ul>
         <li><code>refund_requested</code> means Adyen accepted the refund. Settlement took more than 11 hours in test. Never report a refund as failed because of a timeout. <span class="badge verified">Verified</span></li>
-        <li><code>refundPspReference</code> exists only here. Status carries <code>lastRefundRequestPspReference</code>, which identifies the request. There is no per-refund status. <span class="badge verified">Verified</span></li>
+        <li>Persist <code>refundPspReference</code>. Until November 2026 it existed only here. Status now lists each refund in <code>refunds</code>, with its own <code>refundPspReference</code> and <code>status</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></li>
+        <li>Read <code>refundable</code> on status before you refund. It gives <code>remainingAmount</code> and, when <code>canRequest</code> is false, the <code>reason</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></li>
         <li>The <code>payment.refunded</code> webhook marks settlement.</li>
       </ul>
 
@@ -429,7 +474,9 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
         <thead><tr><th>Status</th><th>When</th></tr></thead>
         <tbody>
           <tr><td><code>400</code></td><td>Missing field, or the payment cannot be refunded.</td></tr>
+          <tr><td><code>400</code></td><td>The amount is more than the remaining amount. Body: <code>{"error": "Refund amount exceeds original payment amount", "originalAmount", "alreadyRefunded", "requestedAmount", "remainingAmount", "currency"}</code>. A subscription charge adds <code>subscriptionId</code> and <code>chargeId</code>. <span class="badge verified">Verified 2026-11-09 (test)</span> On 2026-10-17 the status was <code>422</code>. <span class="badge verified">Verified 2026-10-17 (test)</span></td></tr>
           <tr><td><code>401</code></td><td>Bad key. Before 2026-10-13 also a missing <code>X-Environment</code> (live credentials used).</td></tr>
+          <tr><td><code>409</code></td><td>A payment settled to a sub-merchant whose balance account cannot be resolved. <span class="badge stated">Stated by Plorea</span> (the <code>mayStillFail</code> text)</td></tr>
           <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
         </tbody>
       </table></div>
@@ -438,7 +485,7 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
       <!-- ============================================================ -->
       <h2 id="cancel-a-payment">Cancel a payment</h2>
       <div class="endpoint"><span class="method post">POST</span><code>/payments/cancel</code></div>
-      <p>Voids an authorisation that has not settled yet. No money moves. Capture runs automatically within minutes, so the window is short. After settlement, <a href="#refund-a-payment">refund</a> instead. Guide: <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
+      <p>Withdraws an unpaid payment link, or voids an authorisation that is not captured yet. No money moves. Capture runs automatically within minutes, so the window for a paid payment is short. A captured payment gets <code>409</code>: <a href="#refund-a-payment">refund</a> instead. Guide: <a href="refunds-and-cancellations.html">Refunds and cancellations</a>.</p>
 
       <h4>Body parameters</h4>
       <div class="table-wrap"><table class="params">
@@ -460,7 +507,13 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
     "reference": "INV-2026-1002",
     "modificationReference": "INV-2026-1002-cancel-1"
   }'</code></pre></div>
-        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$cancellation = Plorea::payments()-&gt;cancel('INV-2026-1002', 'INV-2026-1002-cancel-1');</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">try {
+    $cancellation = Plorea::payments()-&gt;cancel('INV-2026-1002', 'INV-2026-1002-cancel-1');
+    $cancellation-&gt;isLinkWithdrawn();   // an unpaid link, now cancelled
+    $cancellation-&gt;alreadyCancelled;    // true on a second cancel
+} catch (PaymentAlreadyCapturedException $e) {
+    // Captured: refund instead.
+}</code></pre></div>
         <div class="tab" data-label="Node"><pre><code class="lang-javascript">await fetch('https://payments.plorea.no/payments/cancel', {
   method: 'POST',
   headers: {
@@ -477,15 +530,32 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
       </div>
 
       <h4>Response</h4>
-      <pre data-title="200 OK"><code class="lang-json">{
+      <div class="tabs">
+        <div class="tab" data-label="Link withdrawn"><pre data-title="200 OK — unpaid link"><code class="lang-json">{
+    "status": "cancelled",
+    "reference": "GOLDEN-2026-020",
+    "paymentLinkId": "pl_test_golden_link",
+    "orderId": null,
+    "amount": 1000,
+    "currency": "NOK",
+    "cancelledAt": "2026-11-08T23:35:28.387Z",
+    "environment": "test"
+}</code></pre></div>
+        <div class="tab" data-label="Cancel requested"><pre data-title="200 OK — authorisation"><code class="lang-json">{
     "status": "cancel_requested",
     "reference": "GOLDEN-2026-002",
     "modificationReference": "GOLDEN-2026-002-CANCEL-1",
     "cancelPspReference": "TESTCANCELPSP001",
     "paymentPspReference": "TESTPSPREF000002",
     "environment": "test"
-}</code></pre>
-      <p>The payment reads <code>cancel_requested</code> until Adyen settles. The final state <code>cancelled</code> is not yet observed. <span class="badge stated">Stated by Plorea</span> No webhook is sent for a cancel. <span class="badge stated">Stated by Plorea</span></p>
+}</code></pre></div>
+      </div>
+      <ul>
+        <li>An unpaid link is withdrawn at once and reads <code>cancelled</code>. A second cancel returns the same body plus <code>alreadyCancelled: true</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></li>
+        <li>After a withdrawal, the pay page <code>GET /pay/{id}</code> returns <code>410</code> with <code>{"error": "Payment link was cancelled", "id", "cancelledAt"}</code>. A new session returns <code>400</code> with <code>{"error": "Payment link was cancelled", "cancelledAt"}</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></li>
+        <li>An authorisation that is not captured reads <code>cancel_requested</code> until Adyen settles. A settled <code>cancelled</code> for it is <span class="badge stated">Stated by Plorea</span>.</li>
+        <li>Spec 0.31 lists <code>payment.cancelled</code> and <code>payment.cancel_failed</code> webhooks. None is captured. <span class="badge stated">Spec 0.31</span></li>
+      </ul>
 
       <h4>Errors</h4>
       <div class="table-wrap"><table>
@@ -494,9 +564,11 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
           <tr><td><code>400</code></td><td>Missing field, or the payment cannot be cancelled.</td></tr>
           <tr><td><code>401</code></td><td>Bad key or wrong environment.</td></tr>
           <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
+          <tr><td><code>409</code></td><td>The payment is captured. Body: <code>{"error": "Payment has been captured; use /payments/refund", "reference", "status": "authorised", "pspReference", "refundedTotal"}</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+          <tr><td><code>409</code></td><td>The subscription charge is captured. Body: <code>{"error": "Charge has been captured; use refund", "reference", "subscriptionId", "chargeId", "status", "pspReference", "refundedTotal"}</code>. The message differs from the payment one. <span class="badge verified">Verified 2026-11-09 (test)</span> On 2026-10-19 the same call answered <code>cancel_requested</code> and then read <code>cancelled</code> while the money stayed charged. <span class="badge verified">Verified 2026-10-19 (test)</span></td></tr>
         </tbody>
       </table></div>
-      <p><strong>Retry safety:</strong> unknown. <span class="badge open">Open question</span> <code>modificationReference</code> is your reference for this cancellation. Plorea has not confirmed that it works as an idempotency key. Before a retry, read <a href="#get-payment-status">payment status</a>. Do not retry automatically.</p>
+      <p><strong>Retry safety:</strong> a second cancel of a withdrawn link is safe; it returns <code>alreadyCancelled: true</code>. <span class="badge verified">Verified</span> For an authorisation: unknown. <span class="badge open">Open question</span> <code>modificationReference</code> is your reference for this cancellation. Plorea has not confirmed that it works as an idempotency key. Before a retry, read <a href="#get-payment-status">payment status</a>. Do not retry automatically.</p>
 
       <!-- ============================================================ -->
       <h2 id="get-a-payment-link">Get a payment link</h2>
@@ -1853,7 +1925,139 @@ const subscription = await res.json();</code></pre></div>
       </table></div>
       <p><strong>Retry safety:</strong> a second call returns <code>400</code> because the subscription is already active. It cannot double-charge. <span class="badge verified">Verified</span></p>
 
-      <p class="site-foot">Community draft. Response shapes captured from the Plorea test environment between August and October 2026 and anonymised. The <code>past_due</code> read is from production.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="get-transactions">List transactions</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/transactions?tenantId=…&amp;status=…&amp;limit=…&amp;cursor=…</code></div>
+      <p>Lists the payment rows of a tenant, one page at a time. Added in spec 0.31. <span class="badge verified">Verified 2026-11-09 (test)</span> Object: <a href="objects.html#transaction">Transaction</a>.</p>
+
+      <h4>Query parameters</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>tenantId</code><span class="req">required</span></td><td class="type">string</td><td>The tenant. Without it, the answer was <code>404</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>status</code><span class="opt">optional</span></td><td class="type">string</td><td>Only rows with this status, for example <code>authorised</code>.</td></tr>
+          <tr><td><code>limit</code><span class="opt">optional</span></td><td class="type">integer</td><td>1 to 1000.</td></tr>
+          <tr><td><code>cursor</code><span class="opt">optional</span></td><td class="type">string</td><td>The <code>nextCursor</code> of the previous page. A cursor from another endpoint gets <code>400</code>. <span class="badge verified">Verified</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>Request</h4>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/transactions?tenantId=acme&amp;status=authorised&amp;limit=100" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$page = Plorea::transactions()-&gt;list(status: 'authorised', limit: 100);
+$page-&gt;nextCursor;   // null on the last page
+
+// Every row, following the cursor:
+foreach (Plorea::transactions()-&gt;all(status: 'authorised') as $transaction) {
+    // ...
+}</code></pre></div>
+      </div>
+
+      <h4>Response</h4>
+      <pre data-title="200 OK (excerpt)"><code class="lang-json">{
+    "tenantId": "test-tenant",
+    "count": 1,
+    "nextCursor": null,
+    "items": [
+        {
+            "reference": "GOLDEN-2026-032",
+            "platform": "golden-platform",
+            "amount": 9950,
+            "currency": "NOK",
+            "environment": "test",
+            "status": "refunded",
+            "pspReference": "TESTPSPREF000032",
+            "paymentLinkId": "pl_test_example",
+            "createdAt": "2026-11-06T13:33:10.729Z",
+            "updatedAt": "2026-11-06T15:14:21.773Z",
+            "lastRefundAmount": 9950
+        }
+    ]
+}</code></pre>
+      <div class="callout warning">
+        <p class="callout-title">Subscription rows can be stale</p>
+        <p>A subscription charge row read <code>created</code>, with no <code>pspReference</code>, while the charge was <code>authorised</code> on the status endpoint. <span class="badge verified">Verified 2026-11-09 (test)</span> Use this list to find references. Read the state from <a href="#get-payment-status">payment status</a> or the <a href="#list-subscription-charges">charge history</a>.</p>
+      </div>
+      <p><strong>Retry safety:</strong> safe. Read-only.</p>
+
+      <!-- ============================================================ -->
+      <h2 id="partner-merchants">Partner merchants</h2>
+      <div class="endpoint"><span class="method get">GET</span><code>/partners/merchants?tenantId=…&amp;limit=…&amp;cursor=…</code></div>
+      <div class="endpoint"><span class="method get">GET</span><code>/partners/merchants/{merchantOrgNr}</code></div>
+      <div class="endpoint"><span class="method post">POST</span><code>/partners/merchants</code></div>
+      <p>Reads and starts merchant onboarding: company, legal entity, KYC, balance account, store and card methods. This is the KYC API. Added in spec 0.31. Object: <a href="objects.html#partner-merchant">Partner merchant</a>. Guide: <a href="going-live.html#kyc">Going live</a>.</p>
+      <div class="callout danger">
+        <p class="callout-title">Live only</p>
+        <p>A test key gets <code>400</code> on every partners endpoint. <span class="badge verified">Verified 2026-11-09</span> The reads were made in production, read only. Never send a <code>POST</code> to production to try it out: it starts a real onboarding.</p>
+      </div>
+
+      <h4>List and read</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>limit</code><span class="opt">optional</span></td><td class="type">integer</td><td>1 to 100. <code>101</code> gets <code>400</code>. <span class="badge verified">Verified</span></td></tr>
+          <tr><td><code>cursor</code><span class="opt">optional</span></td><td class="type">string</td><td>The <code>nextCursor</code> of the previous page.</td></tr>
+          <tr><td><code>merchantOrgNr</code><span class="req">path</span></td><td class="type">string</td><td>Nine digits. A merchant of another tenant gets <code>404</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tabs">
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/partners/merchants/999999999" \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: live"</code></pre></div>
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$merchant = Plorea::merchants()-&gt;find('999999999');
+
+$merchant-&gt;isReadyForPayments();   // store and card methods ready
+$merchant-&gt;needsKycAction();       // send $merchant-&gt;kycUrl to the merchant
+$merchant-&gt;kycProblems();
+
+foreach (Plorea::merchants()-&gt;all() as $merchant) {
+    // ...
+}</code></pre></div>
+      </div>
+      <pre data-title="200 OK (excerpt)"><code class="lang-json">{
+    "merchantOrgNr": "999999999",
+    "name": "Acme Gym AS",
+    "kycUrl": "https://kyc.example.com/acme",
+    "storeId": null,
+    "steps": {
+        "kyc": { "status": "action_required", "verificationStatus": "invalid", "problems": [ { "type": "dataMissing", "message": "'bankAccount' was missing." } ] },
+        "balanceAccount": { "status": "ready" },
+        "store": { "status": "missing", "storeId": null },
+        "cardMethods": { "status": "no_store", "methods": [], "errors": [] }
+    },
+    "checkedAt": "2026-11-08T12:00:00.000Z"
+}</code></pre>
+      <ul>
+        <li>Steps: <code>merchant</code>, <code>legalEntity</code>, <code>kyc</code>, <code>balanceAccount</code>, <code>store</code>, <code>cardMethods</code> and <code>partnerRow</code>. Each has a <code>status</code>. <span class="badge verified">Verified</span></li>
+        <li>The list envelope adds <code>kycDeferred</code> and <code>checkedAt</code>. <span class="badge verified">Verified</span></li>
+        <li>A merchant without a store was not charged. Check <code>storeId</code> before you sell for a new merchant. <span class="badge verified">Verified (production)</span></li>
+      </ul>
+
+      <h4>Start an onboarding</h4>
+      <p><span class="badge stated">Stated by Plorea</span> We have not sent this call. Plorea creates what is missing and emails the KYC link to <code>email</code>. A second call with the same org number is safe: it returns the merchant with <code>created: false</code>. It does not create a store for a merchant that exists without one.</p>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>merchantOrgNr</code><span class="req">required</span></td><td class="type">string</td><td>Nine digits with a valid mod-11 check digit.</td></tr>
+          <tr><td><code>email</code><span class="req">required</span></td><td class="type">string</td><td>Where Plorea sends the KYC link.</td></tr>
+          <tr><td><code>tenantId</code><span class="opt">optional</span></td><td class="type">string</td><td>The tenant.</td></tr>
+          <tr><td><code>name</code><span class="opt">optional</span></td><td class="type">string</td><td>The company name. Looked up from the org number when left out.</td></tr>
+          <tr><td><code>phone</code><span class="opt">optional</span></td><td class="type">string</td><td>The merchant's phone number.</td></tr>
+          <tr><td><code>country</code><span class="opt">optional</span></td><td class="type">string</td><td>ISO country code. The spec gives <code>false</code> as default and example. See <a href="field-notes.html#spec-0-31-bugs">Field notes</a>.</td></tr>
+          <tr><td><code>cardDescriptor</code><span class="opt">optional</span></td><td class="type">string</td><td>The text on the cardholder's statement. At most 22 characters: letters a–z, digits, space and <code>.,'_-?+*</code>. No æ, ø or å.</td></tr>
+        </tbody>
+      </table></div>
+      <pre data-title="PHP SDK"><code class="lang-php">$merchant = Plorea::merchants()
+    -&gt;onboard('999999999', 'billing@example.com')
+    -&gt;name('Acme Gym AS')
+    -&gt;cardDescriptor('ACME GYM')
+    -&gt;save();</code></pre>
+      <p><strong>Retry safety:</strong> reads are safe. The <code>POST</code> is idempotent on the org number. <span class="badge stated">Stated by Plorea</span></p>
+
+      <p class="site-foot">Community draft. Response shapes captured from the Plorea test environment between August and November 2026 and anonymised. The <code>past_due</code> read and the partner merchant reads are from production.</p>
     </article>
   </main>
   <aside id="toc" class="toc" aria-label="On this page"></aside>

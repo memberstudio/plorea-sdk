@@ -15,6 +15,7 @@ Before editing a file, read every rule file whose globs cover it, and
 | [payments.md](payments.md) | `src/Resources/PaymentResource.php`, `src/Resources/PayByLinkResource.php`, `src/Pending/PendingPaymentLink.php`, `src/Enums/Channel.php`, `src/Data/Concerns/ProvidesCheckoutConfiguration.php`, `docs/checkout.md`, `src/Data/Payment*.php`, `src/Data/Refund.php`, `src/Data/PaymentCancellation.php`, `src/Data/Amount.php` |
 | [subscriptions.md](subscriptions.md) | `src/Resources/SubscriptionResource.php`, `src/Resources/PaymentMethodResource.php`, `src/Pending/PendingSubscription*.php`, `src/Pending/PendingPaymentMethodSetup.php`, `src/Data/Subscription*.php`, `src/Data/PaymentMethod*.php`, `src/Data/BillingInterval.php`, `src/Data/RetryPolicy.php`, `src/Enums/RecurringType.php` |
 | [webhooks.md](webhooks.md) | `src/Http/Controllers/**`, `src/Http/Middleware/**`, `src/Events/**`, `routes/**`, `tests/Feature/WebhookTest.php` |
+| [partners-and-transactions.md](partners-and-transactions.md) | `src/Resources/TransactionResource.php`, `src/Resources/PartnerMerchantResource.php`, `src/Pending/PendingMerchantOnboarding.php`, `src/Data/Transaction*.php`, `src/Data/PartnerMerchant*.php` |
 | [testing.md](testing.md) | `tests/**`, `src/Testing/**` |
 | [conventions.md](conventions.md) | `src/**`, `composer.json`, `.gitattributes`, `docs/**`, `resources/boost/**`, `bin/check-docs` |
 

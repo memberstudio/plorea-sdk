@@ -21,22 +21,25 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * listeners should fetch the authoritative state from the API rather than
  * trusting status or amount from the payload.
  *
- * Plorea's official catalogue (confirmed by Plorea 2026-09-09) holds four
- * types: "payment.authorised", "payment.failed", "payment.refunded" and
- * "subscription.charge_succeeded", with more planned. The three payment
- * types all carry a reference and raise PaymentStatusUpdated.
- * "payment.authorised", "payment.failed" and
- * "subscription.charge_succeeded" have been captured from the wire; only
- * "payment.refunded" is still routed on the shared envelope rather than a
- * captured body. "subscription.charge_failed" is outside that catalogue
- * but has been observed since 2026-10-01, and raises
- * SubscriptionChargeFailed. Live subscription.* deliveries arrived at
+ * Plorea's catalogue in API 0.31 (spec of 2026-11) lists these payment
+ * types: "payment.authorised", "payment.failed", "payment.captured",
+ * "payment.refunded", "payment.refund_failed", "payment.cancelled",
+ * "payment.cancel_failed", "payment.cancelled_or_refunded" and
+ * "payment.updated" (chargebacks and split refunds, told apart by
+ * `data.status`). Every "payment.*" type carries a reference and raises
+ * PaymentStatusUpdated. Only "payment.authorised" and "payment.failed"
+ * have been captured from the wire; the rest are routed on the shared
+ * envelope. "subscription.charge_succeeded" and
+ * "subscription.charge_failed" are captured and raise their own events.
+ * The spec also lists "subscription.trial_will_end" (opt-in per tenant)
+ * and prorated-charge fields (`prorated`, `periodStart`, `periodEnd`);
+ * neither is captured. Live subscription.* deliveries arrived at
  * the test URL labelled environment "test" until 2026-10-09 (observed
  * 2026-10-08; Plorea states it is fixed). Do not add an environment
  * filter here: it would drop them if the routing regresses.
  *
- * Nothing is emitted for card setup, cancel or reactivate — those
- * transitions are poll-only, via paymentMethods()->find(),
+ * Nothing is emitted for card setup or a subscription cancel or
+ * reactivate — those transitions are poll-only, via paymentMethods()->find(),
  * subscriptions()->find() and payments()->status(). Every delivery also
  * dispatches the catch-all WebhookReceived, which is how consumers handle
  * types this controller does not know about.
@@ -45,7 +48,8 @@ use MemberFlow\Plorea\Events\WebhookReceived;
  * *body*. Plorea duplicates both in the x-plorea-event-id and x-plorea-event
  * headers, but the signature is computed over the raw body alone, so the
  * headers are the one part of a verified delivery an attacker can still
- * rewrite. Deduplicate on $event->eventId, never on the header.
+ * rewrite. Deduplicate on $event->eventId, never on the header. The same
+ * holds for X-Plorea-Delivery-Attempt (spec 0.31): use it for logging only.
  */
 class WebhookController
 {

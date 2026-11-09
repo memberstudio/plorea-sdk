@@ -78,6 +78,13 @@ own. Name and email are optional and used for KYC communication.
   starts on the first charge; settlement splits apply from that same charge;
   charge webhooks carry the organisation number. A subscription created
   without a merchant behaves as before.
+- **Check the merchant first (API 0.31):** a live subscription for a merchant
+  with approved KYC but no store was never charged (2026-11-06 to
+  2026-11-09). Read `Plorea::merchants()->find($orgNr)->isReadyForPayments()`
+  before you create the subscription. See [Payments](payments.md#kyc-starts-on-the-first-payment).
+- **Not supported:** API 0.31 lists `trialDays`, `billingAnchor` and
+  `proration` on create. Test ignored all three (2026-11-09). The SDK does not
+  send them.
 - **Stated by Plorea:** a stored payment method belongs to the shopper, not to
   a company, so one `pm_...` can back subscriptions for different companies
   under the same tenant.
