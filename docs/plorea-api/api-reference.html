@@ -2037,7 +2037,8 @@ foreach (Plorea::merchants()-&gt;all() as $merchant) {
       </ul>
 
       <h4>Start an onboarding</h4>
-      <p><span class="badge stated">Stated by Plorea</span> We have not sent this call. Plorea creates what is missing and emails the KYC link to <code>email</code>. A second call with the same org number is safe: it returns the merchant with <code>created: false</code>. It does not create a store for a merchant that exists without one.</p>
+      <p><span class="badge stated">Stated by Plorea</span> A successful call has not been seen. Plorea creates what is missing and emails the KYC link to <code>email</code>. A second call with the same org number is safe: it returns the merchant with <code>created: false</code>. It does not create a store for a merchant that exists without one.</p>
+      <p><span class="badge verified">Verified 2026-11-09 (production)</span> A company that another Plorea partner already onboarded answers <code>409</code> <code>{"error": "Merchant is onboarded by another partner", "merchantOrgNr": "…"}</code>. Nothing is created. <code>GET /partners/merchants/{merchantOrgNr}</code> answers <code>404</code> for the same company. See <a href="field-notes.html#kyc-has-an-api">Field notes</a>.</p>
       <div class="table-wrap"><table class="params">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>

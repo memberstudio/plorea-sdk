@@ -41,8 +41,9 @@ Plorea partner already onboarded answers `409`
 `{"error":"Merchant is onboarded by another partner","merchantOrgNr":"…"}`.
 Nothing is created and no KYC e-mail is sent. The SDK throws
 `MerchantOnboardedByAnotherPartnerException` (409). It is routed only when the body has a
-string `merchantOrgNr` and the message contains "another partner"; any other
-409 stays generic. The spec does not list this 409. A `GET` of
+string `merchantOrgNr` and the message contains "another partner". A 409 that
+fits none of the typed 409 bodies (`paidUntil`, captured, another partner)
+stays a plain `RequestException`. The spec does not list this 409. A `GET` of
 the same org number answered `404` first, so `find()` cannot tell you that
 another partner owns the company.
 

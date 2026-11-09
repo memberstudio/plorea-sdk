@@ -12,7 +12,7 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | `AuthenticationException` | 401 / 403 — invalid or missing API key, a tenant mismatch, or a request that reached the wrong environment |
 | `ChargeFailedException` | 402 — a subscription charge was declined by the acquirer |
 | `NotFoundException` | 404 — unknown reference or id |
-| `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is a plain `RequestException` |
+| `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is not this exception; one that fits none of the typed 409s is a plain `RequestException` |
 | `PaymentAlreadyCapturedException` | 409 on `cancel()` — the payment or charge is captured; refund it. `paymentStatus()` returns the status in the body |
 | `MerchantOnboardedByAnotherPartnerException` | 409 on `merchants()->onboard()->save()` — another Plorea partner already onboarded the company; nothing is created. `merchantOrgNr()`. Captured live 2026-11-09 |
 | `ServerException` | 5xx — Plorea-side error |
@@ -131,8 +131,9 @@ Captured in test on 2026-11-09 (API 0.31).
   `PaymentLinkCancelledException`.
 - **Onboarding a company that another partner onboarded** answers `409`
   "Merchant is onboarded by another partner". The spec does not list it. The
-  SDK throws `MerchantOnboardedByAnotherPartnerException` (409); `merchantOrgNr()` returns the org number. Payment links for that company still
-  work (2026-11-09, live). Where the money goes is not observed.
+  SDK throws `MerchantOnboardedByAnotherPartnerException` (409); `merchantOrgNr()` returns the org number. A payment link for that company could
+  be created and its pay page opened (2026-11-09, live). A paid link and
+  where the money goes are not observed.
 - The spec also lists a `422` for a split refund and a `409` when a
   sub-merchant's balance account cannot be resolved. Nobody has seen either.
   They reach you as `RequestException` (422) and `RequestException` (409).

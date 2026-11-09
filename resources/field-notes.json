@@ -36,7 +36,7 @@
         "title": "409 with paidUntil on a subscription update",
         "triggers": ["409", "NextChargeInPaidPeriodException", "paidUntil", "nextChargeAt", "allowEarlyCharge", "conflict"],
         "evidence": "Stated by Plorea 2026-10-14",
-        "note": "A subscription update whose new nextChargeAt is inside a paid period answers 409 with paidUntil. The SDK throws NextChargeInPaidPeriodException; paidUntil() returns the period end. Send allowEarlyCharge() to charge anyway. A 409 without paidUntil is a plain RequestException.",
+        "note": "A subscription update whose new nextChargeAt is inside a paid period answers 409 with paidUntil. The SDK throws NextChargeInPaidPeriodException; paidUntil() returns the period end. Send allowEarlyCharge() to charge anyway. A 409 without paidUntil is not this exception: see the captured-payment and another-partner notes; any other 409 is a plain RequestException.",
         "source": {"file": "docs/errors.md", "heading": "Error handling"}
     },
     {
