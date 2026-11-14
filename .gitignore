@@ -14,7 +14,12 @@
 /.mcp.json
 /.claude/
 /.junie/
-/.agents/
+/.agents/*
+
+# Amp orbs (https://ampcode.com/docs/orbs): the setup script is committed, the
+# rest of .agents/ is generated.
+!/.agents/setup
+/.amp/portals/
 
 # Editor swap files (can hold .env contents)
 *.swp

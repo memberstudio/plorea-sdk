@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+#
+# Prepares an Amp orb (a Debian 12 sandbox) to work on this package: PHP,
+# Composer, the dev dependencies and gitleaks. Amp runs it once for a fresh orb
+# and snapshots the result, and again on top of a stale snapshot, so every step
+# skips work that is already done.
+#
+# See https://ampcode.com/docs/orbs.
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# The lowest PHP composer.json allows, and the one CI's static checks run on.
+php_version=8.4
+
+# Extensions Composer and the dev tools need beyond what php-cli bundles.
+php_packages=(
+    "php${php_version}-cli"
+    "php${php_version}-curl"
+    "php${php_version}-mbstring"
+    "php${php_version}-xml"
+    "php${php_version}-zip"
+)
+
+step() {
+    local name=$1 started=$SECONDS
+    shift
+    echo "==> ${name}"
+    "$@"
+    echo "==> ${name}: done in $((SECONDS - started))s"
+}
+
+install_php() {
+    local package missing=()
+    for package in "${php_packages[@]}"; do
+        dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'ok installed' || missing+=("$package")
+    done
+    if [ ${#missing[@]} -eq 0 ]; then
+        echo "already installed: $(php --version | head -n 1)"
+        return
+    fi
+
+    # Debian 12 ships PHP 8.2; packages.sury.org carries the current versions.
+    local keyring
+    keyring=$(mktemp --suffix=.deb)
+    curl -fsSL --retry 3 -o "$keyring" https://packages.sury.org/debsuryorg-archive-keyring.deb
+    sudo dpkg -i "$keyring"
+    rm -f -- "$keyring"
+    echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+        | sudo tee /etc/apt/sources.list.d/php.list > /dev/null
+
+    # A setup run killed mid-install leaves dpkg half-configured, which fails
+    # every later install until it is finished.
+    sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a
+    sudo apt-get update -qq
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        -o DPkg::Lock::Timeout=300 "${missing[@]}"
+}
+
+install_composer() {
+    # A stale snapshot keeps its Composer, so bring it to the latest stable.
+    if command -v composer > /dev/null; then
+        sudo composer self-update --stable --no-interaction --no-ansi
+        return
+    fi
+
+    local download
+    download=$(mktemp -d)
+    curl -fsSL --retry 3 -o "$download/composer.phar" https://getcomposer.org/download/latest-stable/composer.phar
+    curl -fsSL --retry 3 -o "$download/composer.phar.sha256sum" https://getcomposer.org/download/latest-stable/composer.phar.sha256sum
+    (cd "$download" && sha256sum --check --quiet composer.phar.sha256sum)
+    sudo install -m 0755 "$download/composer.phar" /usr/local/bin/composer
+    rm -rf -- "$download"
+}
+
+# composer.lock is git-ignored, so this resolves the newest versions
+# composer.json allows, as the CI workflows do.
+install_dependencies() {
+    composer update --prefer-dist --no-interaction --no-progress
+}
+
+# The version and checksum CI's secret scan pins, so a local scan before a push
+# reports what CI will.
+install_gitleaks() {
+    local workflow=.github/workflows/security.yml version checksum
+    version=$(sed -n 's/^ *GITLEAKS_VERSION: *//p' "$workflow")
+    checksum=$(sed -n 's/^ *GITLEAKS_SHA256: *//p' "$workflow")
+    if [ -z "$version" ] || [ -z "$checksum" ]; then
+        echo "no gitleaks version pinned in ${workflow}" >&2
+        return 1
+    fi
+    if [ "$(gitleaks version 2> /dev/null)" = "$version" ]; then
+        echo "already installed: gitleaks ${version}"
+        return
+    fi
+
+    local download
+    download=$(mktemp -d)
+    curl -fsSL --retry 3 -o "$download/gitleaks.tar.gz" \
+        "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
+    echo "${checksum}  ${download}/gitleaks.tar.gz" | sha256sum --check --quiet
+    tar -xzf "$download/gitleaks.tar.gz" -C "$download" gitleaks
+    sudo install -m 0755 "$download/gitleaks" /usr/local/bin/gitleaks
+    rm -rf -- "$download"
+}
+
+# Writes the git-ignored AGENTS.md, which is what sends an agent to .ai/rules
+# before it edits anything.
+generate_agent_guidance() {
+    composer boost --no-ansi
+}
+
+step "PHP ${php_version}" install_php
+step "Composer" install_composer
+step "Composer dependencies" install_dependencies
+step "gitleaks" install_gitleaks
+step "Agent guidance" generate_agent_guidance

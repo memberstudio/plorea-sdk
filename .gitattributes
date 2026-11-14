@@ -12,6 +12,7 @@
 /CHANGELOG.md export-ignore
 /docs export-ignore
 /.ai export-ignore
+/.agents export-ignore
 /CONTRIBUTING.md export-ignore
 /SECURITY.md export-ignore
 /testbench.yaml export-ignore
