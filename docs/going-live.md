@@ -75,8 +75,11 @@ Only if you mount Drop-in yourself. See [Embedded and native checkout](checkout.
       verified on the production domain, and the redirect page finishes
       `redirectResult`.
 - [ ] **CSP allows Adyen's live hosts.** They differ from the test hosts.
-- [ ] **Wallets are configured**, if you show them: Apple Pay domain
-      verification on each domain and merchant setup with Plorea.
+- [ ] **No wallets yet.** Merchant stores get Visa and Mastercard only
+      (stated by Plorea, 2026-11-17). Apple Pay and Google Pay are possible
+      with Drop-in on your own domain: you serve Apple's domain verification
+      file there, and Plorea registers the domain after it checks with the
+      provider. Vipps: no answer yet.
 - [ ] **App store review.** Payments for real-world services only, as described
       in [Checkout](checkout.md#app-store-rules).
 

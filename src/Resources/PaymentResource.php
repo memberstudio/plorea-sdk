@@ -9,6 +9,7 @@ use MemberFlow\Plorea\Data\PaymentCancellation;
 use MemberFlow\Plorea\Data\PaymentStatus;
 use MemberFlow\Plorea\Data\Refund;
 use MemberFlow\Plorea\Enums\Environment;
+use MemberFlow\Plorea\Http\IdempotencyKey;
 use MemberFlow\Plorea\Pending\PendingPaymentLink;
 
 class PaymentResource extends Resource
@@ -66,21 +67,28 @@ class PaymentResource extends Resource
      * reference (verified 2026-10-19, test). Its status reports the refund in
      * `refunds` and `refundedTotal`, not in the `lastRefund*` fields.
      *
+     * Send an idempotency key. Without one, every call is a new refund, so a
+     * double click refunds twice. Per the OpenAPI spec, the key is scoped to
+     * the payment refunded: the same key on another payment is another key.
+     *
      * @param  string  $modificationReference  Your unique reference for this refund attempt.
      * @param  Amount|int|null  $amount  Refund amount in minor units. Refunds the full payment amount when omitted.
+     * @param  string|null  $idempotencyKey  Sent as the Idempotency-Key header. At most 128 characters;
+     *                                       stable across retries of the same refund.
      */
     public function refund(
         string $reference,
         string $modificationReference,
         Amount|int|null $amount = null,
         ?string $reason = null,
+        ?string $idempotencyKey = null,
     ): Refund {
         return Refund::fromArray($this->client->post('payments/refund', $this->withoutNulls([
             'reference' => $reference,
             'modificationReference' => $modificationReference,
             'amount' => $amount instanceof Amount ? $amount->value : $amount,
             'reason' => $reason,
-        ])));
+        ]), IdempotencyKey::headers($idempotencyKey)));
     }
 
     /**

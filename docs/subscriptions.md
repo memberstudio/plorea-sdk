@@ -344,6 +344,33 @@ $charge->reference;   // "sub_…-chg_…"
 Note the two-level answer: `status` describes Plorea's acceptance of the
 request, `resultCode` is the acquirer's. Read `resultCode` for the money.
 
+Pass `idempotencyKey:` whenever a retry is possible. See
+[Retries and idempotency](errors.md#retries-and-idempotency).
+
+### Varying amounts each period
+
+Card network rules allow a fixed-schedule charge whose amount varies, such as
+a base price plus usage (stated by Plorea, 2026-11-17). Not observed by this SDK.
+
+1. Store the card with `RecurringType::Subscription`.
+2. Create a subscription on that payment method.
+3. Each period, charge that period's amount:
+   `charge($id, amount: Amount::nok(...), idempotencyKey: ...)`.
+
+Two conditions:
+
+- **Consent.** The customer accepted, when the card was stored, that the
+  amount varies.
+- **Advance notice.** Tell the customer the amount before the charge. An
+  invoice or statement sent before the charge is enough.
+
+The amount is part of the idempotency key. A retry must send the same amount,
+or it bills again.
+
+**Open question (asked 2026-11-17):** how to stop Plorea's scheduler from also
+charging the subscription's fixed `amount` on `nextChargeAt` when you charge by
+hand each period. Until Plorea answers, this page documents no pattern for it.
+
 ### History
 
 ```php
@@ -440,6 +467,12 @@ Read this before building retry logic.
   that cancel are **unobserved**. To bill the customer again, cancel and create a
   new subscription on the same payment method (see
   [Move the billing day](#move-the-billing-day)).
+- The OpenAPI spec (0.32.0 and later) documents two routes out of
+  `payment_failed`: `PATCH` with `status: active` and a `nextChargeAt`, and
+  `POST subscriptions/{id}/charges/{chargeId}/settle` for a charge paid
+  elsewhere. Both are **unobserved** by this SDK, and the SDK has no method for
+  `settle`. The 400 above is the last observed result for the `PATCH`; do not
+  rely on either route until it is verified.
 - Other routes out of `payment_failed` are **untested**. `PATCH` with
   `amount` and `nextChargeAt` was not tried. `resume()` is verified only from
   `paused` (an `active` one gives 400, `allowedTransitions: ["paused"]`).

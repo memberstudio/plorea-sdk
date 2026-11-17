@@ -27,6 +27,23 @@
         <span><span class="badge open">Open question</span> Unresolved, or not confirmed by Plorea.</span>
       </div>
 
+      <h2 id="2026-11">November 2026</h2>
+
+      <h3 id="2026-11-18">2026-11-18</h3>
+      <ul>
+        <li><strong>Idempotency keys on charge and refund.</strong> <code>POST /subscriptions/{id}/charge</code> and <code>POST /payments/refund</code> accept an <code>Idempotency-Key</code> header. The PHP SDK sends it from <code>charge(..., idempotencyKey: '...')</code> and <code>refund(..., idempotencyKey: '...')</code>, and refuses an empty key or one longer than 128 characters. The replay and the two <code>409</code> answers are in the spec from 0.36.0. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>.</li>
+        <li><strong><code>refusalReason</code> is in the spec</strong> on <code>PaymentStatusResponse</code>. The PHP SDK still reads it from <code>raw</code> only. <span class="badge stated">In the spec</span></li>
+      </ul>
+
+      <h3 id="2026-11-17">2026-11-17</h3>
+      <ul>
+        <li><strong>A varying amount on a fixed schedule is <code>Subscription</code></strong>, not <code>UnscheduledCardOnFile</code>. Two conditions: consent when the card is stored, and notice before each charge. The amount is part of the charge idempotency key. <span class="badge stated">Stated by Plorea 2026-11-17</span> How to stop the scheduler from also charging is open. <span class="badge open">Open question</span> See <a href="subscription-workflows.html#varying-amount">Charge a varying amount</a>.</li>
+        <li><strong><code>merchantOrgNr</code> is always the invoice issuer's.</strong> That is your platform's own number only when your platform issues the invoice. Without the field, the payment settles to the tenant's default store. <span class="badge stated">Stated by Plorea 2026-11-17</span></li>
+        <li><strong>Self-service origins.</strong> Plorea named a route, <code>POST /v1/self-service/allowed-origins</code>, that Plorea approves. It is not in spec 0.39.0. This supersedes "no API planned" from 2026-09-18. <span class="badge stated">Stated by Plorea 2026-11-17</span> See <a href="checkout.html">Embedded and native checkout</a>.</li>
+        <li><strong>Wallets, link tracking and settlement reports answered.</strong> Visa and Mastercard only today. No per-link open counter is planned. Fee, net and payout per transaction are not available to a tenant key. <span class="badge stated">Stated by Plorea 2026-11-17</span> See <a href="field-notes.html#2026-11-17">Field notes</a>.</li>
+        <li><strong>Leaving <code>payment_failed</code>, in the spec.</strong> Spec 0.32.0 documents a revive (<code>PATCH status: "active"</code> with <code>nextChargeAt</code>) and a settle route. Our production try on 2026-10-17 answered <code>400</code>. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> See <a href="dunning.html#after-the-last-retry">Dunning</a>.</li>
+      </ul>
+
       <h2 id="2026-10">October 2026</h2>
 
       <h3 id="2026-10-20">2026-10-20</h3>

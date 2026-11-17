@@ -68,8 +68,9 @@ Six behaviours account for most of the surprises. Each links to the detail.
 **Amounts are minor units.** `Amount::nok(450000)` is 4 500,00 kr. There is no
 major-unit constructor, on purpose.
 
-**`merchantOrgNr` is required**, and it is always the invoice issuer's — your
-client's — organisation number, never your platform's. Plorea accepts a link
+**`merchantOrgNr` is required**, and it is always the invoice issuer's
+organisation number: your client's when you invoice on their behalf, your
+platform's own only when your platform issues the invoice. Plorea accepts a link
 without it and fails only at payout time, so the SDK refuses to create one.
 → [Payments](docs/payments.md#the-merchant-is-required)
 

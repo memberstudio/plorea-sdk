@@ -65,7 +65,8 @@ Status-body keys verified identical across three independent captures
 not exist** — a report that it did turned out to be a `jq` null-read of a
 missing key. Bodies seen since 2026-10-06 (test) also carry `refusalReason`
 and `refundedTotal` (minor units). `PaymentStatus` does not type them yet;
-they are in `$raw`. Do not add them without a fixture.
+they are in `$raw`. Do not add them without a fixture. Both are in the OpenAPI
+spec since 0.36.0 (`PaymentStatusResponse`); the spec alone is not a fixture.
 
 ### Partial and full refunds on `authorised` — VERIFIED 2026-10-09 (test)
 
@@ -178,6 +179,18 @@ try with a good card, both on the same page:
   page, and the page has no cardholder-name field, so Adyen's holder-name
   refusal trick is unavailable. The always-blocked test card works.
 
+## Idempotency-Key on charge and refund — spec 0.36.0, UNOBSERVED
+
+`subscriptions()->charge()` and `payments()->refund()` take `idempotencyKey:`,
+sent as the `Idempotency-Key` header (max 128 chars; the SDK throws
+`InvalidArgumentException` before sending an empty or longer key). Replay
+(`replayed: true`) and the two 409s ("reused with different parameters", "still
+in flight", both with `chargeId`) are **spec-documented, not observed**. Do not
+write docs that call them verified. Charge without a key: the period is the
+key. Refund without a key: every call is a new refund. The amount is part of
+the charge key (Stated by Plorea 2026-11-17). Only these two routes take the
+header; `payments/link` still has none.
+
 ## No idempotency on duplicate references
 
 Creating twice gives two live, payable links. `firstOrCreate()` implements the
@@ -197,8 +210,12 @@ reference rather than only the base one.
 
 ## `merchantOrgNr` is contractually required
 
-Stated by Plorea 2026-08-30. Always the invoice issuer's (client's) org nr,
-never the platform's own. `store` / `balanceAccountId` are resolved
+Stated by Plorea 2026-08-30. Always the invoice issuer's org nr: the client's
+when the platform invoices on its behalf. **Refined 2026-11-17 (Stated by
+Plorea):** it is the platform's own when the platform itself issues the invoice;
+then the org nr must be registered under the sending tenant (else 404, in the
+spec), and omitting it settles to the tenant's default store. Do not reword
+docs back to "never the platform's". `store` / `balanceAccountId` are resolved
 automatically and must not be sent.
 
 The API does **not** enforce it (verified: a link without one still creates and
@@ -394,6 +411,9 @@ domain is whitelisted on the returned key; `localhost` is still not.
 `payments/status` (an upcoming deploy); Adyen does not enforce app ids on
 native calls; customers' own domains go through a whitelisted wildcard
 subdomain, with no origin-registration API planned.
+2026-11-17 (Stated by Plorea): a self-service route `POST
+/v1/self-service/allowed-origins` exists, Plorea-approved, https only, no path,
+no wildcard. It is NOT in spec 0.39.0: add no SDK method until it is.
 
 **Only use a client key issued for your origins — or the one the session
 returns.** Client keys are origin-scoped. The hosted pay page mounts its

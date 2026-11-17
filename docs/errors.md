@@ -119,9 +119,39 @@ pick one.
 | --- | --- |
 | `status()`, `find()`, `charges()`, `forExternalId()` | Yes — reads |
 | `POST payments/link` | **No** — no idempotency; a retry can create a second live link |
-| `refund()`, `cancel()` | Yes, with the *same* `modificationReference` |
-| `subscriptions()->charge()` | **No** — no idempotency key exists |
+| `refund()` | Only with the *same* `idempotencyKey`. Without one, every call is a new refund |
+| `cancel()` | Yes, with the *same* `modificationReference` |
+| `subscriptions()->charge()` | Only with the *same* `idempotencyKey` **and** the same amount |
 | `create()` a subscription | **No** |
+
+`charge()` and `refund()` take an `idempotencyKey:` argument. The SDK sends it
+as the `Idempotency-Key` header. It refuses an empty key, or a key longer than
+128 characters, before it sends anything.
+
+```php
+Plorea::subscriptions()->charge($id, amount: Amount::nok(4900), idempotencyKey: "{$id}-2026-11");
+Plorea::payments()->refund($reference, "{$reference}-refund-1", idempotencyKey: "{$reference}-refund-1");
+```
+
+What the key does, per the OpenAPI spec (0.36.0 and later; **not observed** by
+this SDK):
+
+- **Charge.** A repeat with the same key and amount returns the first answer
+  with `replayed: true` and charges nothing. The same key with another amount
+  or currency gives 409 "Idempotency-Key reused with different parameters". A
+  repeat while the first call still runs gives 409 "A charge with this
+  Idempotency-Key is still in flight". Both 409s carry `chargeId`, and neither
+  charges. A replayed decline keeps its `refusalReason`. Without a key, the
+  subscription's period is the key, so a manual charge and the scheduler's run
+  for the same period are one charge.
+- **The amount is part of the key** (stated by Plorea, 2026-11-17). Two charges
+  with different amounts in one period are two charges. A retry must send the
+  same amount.
+- **Refund.** The key is scoped to the payment refunded. Without a key, every
+  call gets a fresh one, so a double click refunds twice.
+
+Keep a key stable across retries of the same operation, and store it with the
+operation. A key is namespaced per tenant.
 
 For payment links, use `firstOrCreate()` rather than retrying. For anything
 else non-idempotent, fail and reconcile by reading state back.

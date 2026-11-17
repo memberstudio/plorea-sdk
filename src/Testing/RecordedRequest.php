@@ -14,11 +14,13 @@ final readonly class RecordedRequest
 {
     /**
      * @param  array<string, mixed>  $data  The request payload (POST/PATCH) or query string (GET).
+     * @param  array<string, string>  $headers  Extra headers the resource sent, such as Idempotency-Key.
      */
     public function __construct(
         public string $method,
         public string $path,
         public array $data = [],
+        public array $headers = [],
     ) {}
 
     /**
@@ -38,6 +40,20 @@ final readonly class RecordedRequest
         [$method, $path] = explode(' ', $pattern, 2);
 
         return strcasecmp($method, $this->method) === 0 && Str::is($path, $this->path);
+    }
+
+    /**
+     * An extra header the resource sent. Header names are case-insensitive.
+     */
+    public function header(string $name): ?string
+    {
+        foreach ($this->headers as $key => $value) {
+            if (strcasecmp($key, $name) === 0) {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -13,6 +13,7 @@ use MemberFlow\Plorea\Data\SubscriptionCancellation;
 use MemberFlow\Plorea\Data\SubscriptionCharge;
 use MemberFlow\Plorea\Enums\RecurringType;
 use MemberFlow\Plorea\Exceptions\ChargeFailedException;
+use MemberFlow\Plorea\Http\IdempotencyKey;
 use MemberFlow\Plorea\Pending\PendingSubscription;
 use MemberFlow\Plorea\Pending\PendingSubscriptionUpdate;
 
@@ -201,6 +202,16 @@ class SubscriptionResource extends Resource
      *
      * VAT falls back to the subscription's values when omitted.
      *
+     * Send an idempotency key whenever a retry is possible. Per the OpenAPI
+     * spec (0.36.0 and later): a repeat with the same key and amount answers
+     * the first call's result with `replayed: true` and charges nothing; the
+     * same key with another amount or currency answers 409 and charges
+     * nothing. Without a key, the subscription's period is the key. The
+     * replay and the 409 are documented by Plorea, not observed by this SDK.
+     *
+     * @param  string|null  $idempotencyKey  Sent as the Idempotency-Key header. At most 128 characters;
+     *                                       stable across retries of the same charge.
+     *
      * @throws ChargeFailedException When the charge is declined.
      */
     public function charge(
@@ -209,6 +220,7 @@ class SubscriptionResource extends Resource
         ?string $reason = null,
         ?float $vatRate = null,
         ?int $vatAmount = null,
+        ?string $idempotencyKey = null,
     ): SubscriptionCharge {
         return SubscriptionCharge::fromArray($this->client->post(
             'subscriptions/'.rawurlencode($subscriptionId).'/charge',
@@ -218,6 +230,7 @@ class SubscriptionResource extends Resource
                 'vatRate' => $vatRate,
                 'vatAmount' => $vatAmount,
             ]),
+            IdempotencyKey::headers($idempotencyKey),
         ));
     }
 

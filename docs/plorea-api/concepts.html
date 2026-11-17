@@ -82,7 +82,7 @@ flowchart TB
       </dl>
 
       <h2>The merchant: who gets the money</h2>
-      <p>The tenant groups your data. The <strong>merchant</strong> is the company that receives the payout. You name it with <code>merchantOrgNr</code>, the Norwegian organisation number of the invoice issuer. Never send your own platform's number unless you are the seller.</p>
+      <p>The tenant groups your data. The <strong>merchant</strong> is the company that receives the payout. You name it with <code>merchantOrgNr</code>, the Norwegian organisation number of the invoice issuer. That is your platform's own number only when your platform issues the invoice. Without the field, the payment settles to the tenant's default store. <span class="badge stated">Stated by Plorea 2026-11-17</span></p>
       <ul>
         <li>Plorea requires it by contract on payment links. <span class="badge stated">Stated by Plorea</span> The payment-link endpoint does not enforce it. <span class="badge verified">Verified</span></li>
         <li>On a subscription the field is optional. Every charge inherits the company. A subscription without it behaves as before. <span class="badge stated">Stated by Plorea</span></li>
@@ -156,16 +156,17 @@ const format = (ore) =&gt;
       <p>A payment that a manual subscription charge created reports <code>"platform": "subscription"</code> on the status endpoint. <span class="badge verified">Verified</span></p>
 
       <h2 id="idempotency">Idempotency and retries</h2>
-      <p>Plorea has no idempotency keys. The API does not detect a duplicate request. This is the most important fact for your retry logic. <span class="badge verified">Verified</span></p>
+      <p>Most calls have no idempotency key. The API does not detect a duplicate link or subscription create. This is the most important fact for your retry logic. <span class="badge verified">Verified</span> Only charge and refund accept an <code>Idempotency-Key</code> header (spec 0.36.0). <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Call</th><th>Safe to retry?</th><th>Why</th></tr></thead>
           <tbody>
             <tr><td>Any <code>GET</code></td><td>Yes</td><td>Reads change nothing.</td></tr>
-            <tr><td><code>POST /payments/refund</code>, <code>/payments/cancel</code></td><td>With the same <code>modificationReference</code></td><td>The modification reference identifies the attempt. <span class="badge open">Open question</span>: Plorea has not confirmed that it rejects a repeat.</td></tr>
+            <tr><td><code>POST /payments/refund</code></td><td>With the same <code>Idempotency-Key</code></td><td>The key is scoped to the payment. Without a key, every call is a new refund. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td></tr>
+            <tr><td><code>POST /payments/cancel</code></td><td>With the same <code>modificationReference</code></td><td>The modification reference identifies the attempt. <span class="badge open">Open question</span>: Plorea has not confirmed that it rejects a repeat.</td></tr>
             <tr><td><code>POST /payments/link</code></td><td>No</td><td>A repeat creates a second payable link with the same reference. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST /subscriptions</code></td><td>No</td><td>A repeat creates a second subscription that bills the card again.</td></tr>
-            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>No</td><td>A repeat charges the card again.</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>With the same <code>Idempotency-Key</code> and amount</td><td>Without a key, the period is the key. The amount is part of the key, so a retry must send the same amount. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -180,7 +181,7 @@ const format = (ore) =&gt;
       <p>The PHP SDK implements this pattern as <code>firstOrCreate()</code>. See <a href="payment-links.html">Payment links</a>.</p>
       <div class="callout gap">
         <p class="callout-title">What would fix this</p>
-        <p>An <code>Idempotency-Key</code> header on every <code>POST</code>, or a <code>409</code> on a duplicate reference. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+        <p>An <code>Idempotency-Key</code> header on link create and subscription create too, or a <code>409</code> on a duplicate reference. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
       </div>
 
       <h2>Timestamps</h2>

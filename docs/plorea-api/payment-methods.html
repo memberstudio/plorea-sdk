@@ -66,6 +66,7 @@ sequenceDiagram
         </table>
       </div>
       <p>Use <code>Subscription</code> for every card that the Plorea scheduler will charge. The value is case-sensitive.</p>
+      <p>A charge on a fixed schedule whose amount varies, for example a base price plus usage, is also <code>Subscription</code>. <code>UnscheduledCardOnFile</code> is for irregular timing, not for a varying amount. The customer must accept a varying amount when the card is stored, and get the amount before each charge. <span class="badge stated">Stated by Plorea 2026-11-17</span> See <a href="subscription-workflows.html#varying-amount">Charge a varying amount</a>.</p>
       <div class="callout warning">
         <p class="callout-title">Pick the type that matches the agreement</p>
         <p>The recurring type is part of the customer's consent. Do not store a card as <code>CardOnFile</code> and then bill it on a schedule. Card networks can treat such charges as unauthorised.</p>

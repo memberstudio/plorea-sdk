@@ -37,9 +37,14 @@ Plorea::assertSentCount(2);
 Plorea::recorded();  // Collection<RecordedRequest>
 ```
 
-A `RecordedRequest` exposes `->method`, `->path`, `->data` and
-`->input($key, $default)`. `data` is the payload for POST/PATCH and the query
-string for GET.
+A `RecordedRequest` exposes `->method`, `->path`, `->data`, `->headers`,
+`->input($key, $default)` and `->header($name)`. `data` is the payload for
+POST/PATCH and the query string for GET. `headers` holds only the extra headers
+a resource sent, such as `Idempotency-Key`.
+
+```php
+Plorea::assertSent(fn ($request) => $request->header('Idempotency-Key') === 'sub_1-2026-11');
+```
 
 ```php
 Plorea::recorded()->first()->input('merchantOrgNr');  // '999999999'

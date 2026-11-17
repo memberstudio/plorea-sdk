@@ -33,12 +33,12 @@ $link->id;        // pl_...
 $link->expiresAt; // store this — expiry is judged from it, not from status
 ```
 
-`merchantOrgNr` is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
+`merchantOrgNr` is the invoice issuer's org number — your platform's own only when your platform issues the invoice (stated by Plorea 2026-11-17). It must be registered under the tenant that sends it (another tenant's number answers 404). It is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
 
 The create response does not echo the merchant back; the org number only
 reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
 
-Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible. The lookup walks the whole suffix chain before reusing anything — a superseded base reference stays `created` forever, so an open link is only returned once no later suffix is found paid. Budget one extra status request per call, and read `$e->status->reference` on the exception: it may name a suffixed reference rather than the one you passed in.
+Prefer `->firstOrCreate()` over `->create()`: link creation takes no idempotency key, and Plorea does not deduplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible. The lookup walks the whole suffix chain before reusing anything — a superseded base reference stays `created` forever, so an open link is only returned once no later suffix is found paid. Budget one extra status request per call, and read `$e->status->reference` on the exception: it may name a suffixed reference rather than the one you passed in.
 
 Capture is automatic (AmendoPOS, minutes after authorization) and there is **no capture API** — `authorised` is the terminal success state, so never build a pending-capture wait or expose a `capture()` method. `platform` is added to every request when `plorea.platform` (`PLOREA_PLATFORM`) is set — in the body on writes, in the query string on reads, so reads carry `?platform=...`. It is Plorea's internal reporting only and nothing is sent when unset.
 
@@ -61,6 +61,8 @@ Use the helpers, not string comparison. A **refused payment reports `failed`, no
 Plorea::payments()->refund('FIN-2026-00123', modificationReference: 'FIN-2026-00123-refund-1', amount: Amount::nok(450000), reason: '...');
 Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
+
+Pass `idempotencyKey: 'FIN-2026-00123-refund-1'` to `refund()` and reuse it on a retry. Without a key every call is a new refund, so a double click refunds twice. The key is scoped to the payment refunded. `cancel()` takes no key. `refusalReason` is in the spec on the status, but `PaymentStatus` does not type it yet; read `$status->raw['refusalReason'] ?? null`.
 
 Both return immediately with `refund_requested` / `cancel_requested`; the provider settles asynchronously — poll `status()` or wait for a webhook. **Settlement takes hours** (>11h observed 2026-09-09), so size polling loops in hours: an hour-long timeout reports a healthy refund as failed, and reversing your books or telling the customer on that basis does real damage. `refund_requested` means accepted. On a payment link there is no per-refund status field (a subscription charge has one in `$status->refunds`, see below) — pre-settlement the only signal is top-level `status` plus the `lastRefund*` group, and `webhookEventCode` stays `AUTHORISATION` because it describes the original authorisation.
 
@@ -195,7 +197,7 @@ foreach (Plorea::subscriptions()->needingAttention($workspace->externalId) as $s
 
 `needingAttention()` returns a subscription reporting `past_due` or
 `payment_failed` (seen in production after three failed attempts; the way out is
-untested) **or** one whose `nextChargeAt` is
+untested — the spec's revive and settle routes are unobserved) **or** one whose `nextChargeAt` is
 more than `$graceMinutes` (default 60) in the past. A failed scheduled charge
 turns the subscription `past_due` with `retryCount` and `failureReason` set and
 `nextChargeAt` moved to the retry, so it is not overdue — the status check

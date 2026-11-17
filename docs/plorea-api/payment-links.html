@@ -186,12 +186,13 @@ const link = await res.json();</code></pre></div>
       <p>Plorea sets <code>expiresAt</code>. The request has no field to choose the lifetime, and the default lifetime is not documented. <span class="badge open">Open question</span> Observed links expired about ten weeks after creation, but do not rely on that. Read the value from each response.</p>
 
       <h2 id="the-merchant-who-gets-paid">The merchant: who gets paid</h2>
-      <p>Plorea is a platform. One API key can take payments for many companies. <code>merchantOrgNr</code> tells Plorea which company receives the payout. Always send the organisation number of the <strong>invoice issuer</strong>, for example the gym or club that sent the invoice. Never send your own platform's number unless you issued the invoice.</p>
+      <p>Plorea is a platform. One API key can take payments for many companies. <code>merchantOrgNr</code> tells Plorea which company receives the payout. Always send the organisation number of the <strong>invoice issuer</strong>, for example the gym or club that sent the invoice. That is your platform's own number only when your platform issues the invoice. <span class="badge stated">Stated by Plorea 2026-11-17</span></p>
       <ul>
         <li><strong>Not enforced.</strong> The API accepts a link without <code>merchantOrgNr</code>. It even opens a checkout session on it. The payout then has no owner. <span class="badge verified">Verified</span> The PHP SDK refuses to create such a link and throws <code>PloreaException</code>.</li>
         <li><strong>KYC starts by itself.</strong> The first payment for a new organisation number starts merchant onboarding. The merchant gets an email, at <code>merchantEmail</code> when you send one. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>The link stays payable during KYC.</strong> Plorea holds the payout until KYC is approved. This typically takes 1–5 business days. <span class="badge stated">Stated by Plorea</span></li>
         <li><strong>No store.</strong> Do not send <code>store</code> or a balance account. Plorea resolves both from the organisation number.</li>
+        <li><strong>Leaving it out is not "pay the platform".</strong> Without <code>merchantOrgNr</code>, the payment settles to the tenant's default store. A platform that is its own merchant sends its own number, registered under the sending tenant, and pays only Plorea's part of the fee. <span class="badge stated">Stated by Plorea 2026-11-17</span> A number registered under another tenant answers <code>404</code>. <span class="badge stated">In the spec</span></li>
       </ul>
       <div class="callout gap">
         <p class="callout-title">What we would like from Plorea</p>
@@ -270,7 +271,7 @@ if (page.expired) createReplacementLink();</code></pre></div>
       <p>The pay page does not show the payment status. For that, read <code>GET /payments/status/{reference}</code>. See <a href="payment-lifecycle.html">Payment lifecycle and states</a>.</p>
 
       <h2 id="duplicate-references">Duplicate references and firstOrCreate</h2>
-      <p>The API has <strong>no idempotency</strong>. Two <code>POST /payments/link</code> calls with the same reference create two links. Both are payable. A customer who double-clicks, or a job that retries after a timeout, can therefore be charged twice for one invoice. <span class="badge verified">Verified</span></p>
+      <p>Link create has <strong>no idempotency key</strong>. Two <code>POST /payments/link</code> calls with the same reference create two links. Both are payable. A customer who double-clicks, or a job that retries after a timeout, can therefore be charged twice for one invoice. <span class="badge verified">Verified</span></p>
       <p>Do not retry a link create blindly. Check for an existing link first. The PHP SDK does this in <code>firstOrCreate()</code>. You can build the same logic in any language:</p>
       <div class="table-wrap">
         <table>

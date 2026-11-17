@@ -84,6 +84,19 @@ $existing = Plorea::subscriptions()->forExternalId((string) $membership->id)->fi
   Keep `PLOREA_RETRY_TIMES=0` for this call. Whether Plorea de-duplicates on
   `externalId` is unobserved, so do not rely on it.
 
+Manual charges take an idempotency key. Reuse it, with the same amount, on a
+retry; the amount is part of the key:
+
+```php
+Plorea::subscriptions()->charge($id, amount: Amount::nok(4900), idempotencyKey: "{$id}-2026-11");
+```
+
+A varying amount on a fixed schedule (base price plus usage) is a
+`Subscription` card, not `UnscheduledCardOnFile`, given consent at card storage
+and notice before each charge (stated by Plorea 2026-11-17). How to keep
+Plorea's scheduler from also charging the fixed amount is open; do not invent
+a pattern.
+
 ## 3. Grant access on a charge, not on create
 
 `create()` answers `active` before any money has moved. Treat it as "scheduled".
@@ -172,7 +185,10 @@ the subscription `past_due` (`isPastDue()`): `retryCount` counts the failures,
 `failureReason` holds the provider's message, and `nextChargeAt` moves to the
 retry, so it is not overdue. Do not branch on a failure reason. No verified API
 route takes `payment_failed` back to billing: PATCH `status: active` answers 400
-"Cannot change status from payment_failed to active". `cancel()` works (status
+"Cannot change status from payment_failed to active" (production, 2026-10-17).
+Spec 0.32.0 documents that PATCH with `nextChargeAt` as a revive, and
+`POST /subscriptions/{id}/charges/{chargeId}/settle`; both are unobserved, so
+do not build on them. `cancel()` works (status
 `canceled`, `accessEndsAt` null if never charged); then create a new
 subscription on the same payment method (see "Moving the billing day"). Other
 ways out are untested: PATCH `amount` + `nextChargeAt`,

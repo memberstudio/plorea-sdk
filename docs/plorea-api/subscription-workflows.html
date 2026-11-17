@@ -45,7 +45,7 @@
       <ul>
         <li><strong>Keep your own copy of the plan.</strong> Store the subscription ID, the amount, the interval and the company it bills for in your database. Reads return <code>merchantOrgNr</code>, but not <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span></li>
         <li><strong>Gate access on dates, not on status.</strong> Give access while <code>status</code> is <code>active</code> or <code>trialing</code>, or while <code>accessEndsAt</code> is in the future. A <code>past_due</code> subscription is in its retry window. Your grace policy decides its access. See <a href="dunning.html">Failed charges and dunning</a>.</li>
-        <li><strong>Do not retry a charge or a create blindly.</strong> The API has no idempotency keys. A retried call can charge twice or create two subscriptions. See <a href="errors.html">Errors and retries</a>. <span class="badge verified">Verified</span></li>
+        <li><strong>Do not retry a charge or a create blindly.</strong> Subscription create has no idempotency key: a retry can create two subscriptions. A charge is safe to retry only with the same <code>Idempotency-Key</code> and amount. <span class="badge stated">In the spec</span> See <a href="errors.html">Errors and retries</a>. <span class="badge verified">Verified</span></li>
       </ul>
 
       <div class="table-wrap">
@@ -1094,7 +1094,22 @@ $charge-&gt;reference;  // "sub_test_acme_001-chg_…"</code></pre></div>
 }</code></pre>
       <div class="callout warning">
         <p class="callout-title">Never retry a charge blindly</p>
-        <p>The charge endpoint has no idempotency key. After a timeout or a 5xx, read <code>GET /subscriptions/{id}/charges</code> and look for your charge before you send it again. <span class="badge verified">Verified</span></p>
+        <p>Send an <code>Idempotency-Key</code>, and the same key and amount on a retry. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> After a timeout or a 5xx, read <code>GET /subscriptions/{id}/charges</code> and look for your charge before you send it again.</p>
+      </div>
+
+      <!-- ================================================================ -->
+      <h2 id="varying-amount">Charge a varying amount each period</h2>
+      <p><strong>Use this when</strong> the customer pays every period, but the amount changes, for example a base price plus usage. <span class="badge stated">Stated 2026-11-17</span></p>
+      <ol class="steps">
+        <li><strong>Get consent for a varying amount</strong>When the customer stores the card, they accept that the amount varies.</li>
+        <li><strong>Store the card as <code>Subscription</code></strong>Not <code>UnscheduledCardOnFile</code>. That type is for irregular timing, not a varying amount on a fixed schedule.</li>
+        <li><strong>Create a subscription</strong>on that payment method.</li>
+        <li><strong>Tell the customer the amount before each charge</strong>An invoice or a statement sent before the charge is enough.</li>
+        <li><strong>Charge the period's amount</strong>with <code>POST /subscriptions/{id}/charge</code> and <code>amount</code>. Send an <code>Idempotency-Key</code>. The amount is part of the key, so a retry must send the same amount.</li>
+      </ol>
+      <div class="callout warning">
+        <p class="callout-title">The scheduler question is open</p>
+        <p>Plorea's scheduler can also charge the subscription's fixed <code>amount</code> on <code>nextChargeAt</code>. How to prevent that was asked on 2026-11-17 and is not answered. <span class="badge open">Open question</span> Do not build on a pattern for it yet. See <a href="wishlist.html#scheduler-versus-manual-varying-charge">Gaps and proposals</a>.</p>
       </div>
 
       <!-- ================================================================ -->
@@ -1275,7 +1290,7 @@ $member-&gt;update(['plorea_subscription_id' =&gt; $subscription-&gt;id]);</code
             <tr><td>Pause / freeze</td><td>Proof that a resumed subscription, or any active one with a moved <code>nextChargeAt</code>, is charged. None was seen in test. <span class="badge open">Open question</span></td><td>Native pause; cancel + new subscription with trial as a fallback</td></tr>
             <tr><td>Upgrade</td><td>Proration <span class="badge proposal">Proposal</span></td><td>Self-computed manual charge + PATCH</td></tr>
             <tr><td>Downgrade with refund</td><td>Refund of a scheduled charge failed through the API. Portal only. <span class="badge verified">Verified</span></td><td>Downgrade at period end</td></tr>
-            <tr><td>Billing day, or restart after <code>payment_failed</code></td><td>A verified call that moves the billing day, or takes <code>payment_failed</code> back to <code>active</code>. <code>PATCH status: "active"</code> on <code>payment_failed</code> is refused. <span class="badge verified">Verified</span></td><td><a href="#move-the-billing-day">Cancel + new subscription with trial</a></td></tr>
+            <tr><td>Billing day, or restart after <code>payment_failed</code></td><td>A verified call that moves the billing day, or takes <code>payment_failed</code> back to <code>active</code>. <code>PATCH status: "active"</code> on <code>payment_failed</code> is refused. <span class="badge verified">Verified</span> Spec 0.32.0 documents a revive with <code>nextChargeAt</code>. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td><td><a href="#move-the-billing-day">Cancel + new subscription with trial</a></td></tr>
             <tr><td>Interval change</td><td><code>interval</code> on PATCH <span class="badge proposal">Proposal</span></td><td>Cancel + new subscription with trial</td></tr>
             <tr><td>Price change</td><td>Effective date on PATCH <span class="badge proposal">Proposal</span></td><td>Time the PATCH yourself</td></tr>
             <tr><td>Any change</td><td>Webhooks for cancel, reactivate, pause and resume <span class="badge proposal">Proposal</span></td><td>Poll and keep your own state</td></tr>

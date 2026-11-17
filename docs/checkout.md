@@ -57,7 +57,13 @@ If your customers serve checkout from **their own domains**, each of those
 domains is an origin that Plorea has to whitelist by hand. Plorea recommends
 serving the payment step from a wildcard subdomain you control instead, such as
 `{customer}.example.com`, so one wildcard entry covers every customer.
-Confirmed 2026-09-18: no API for registering single origins is planned.
+
+On 2026-11-17 Plorea named a self-service route, `POST
+/v1/self-service/allowed-origins`, that Plorea approves. Origins sent there must
+be `https`, with no path and no wildcard. The route is **not** in the OpenAPI
+spec (0.39.0), so its request shape is unknown and the SDK has no method for
+it. Whether Plorea still adds wildcard entries by hand is not confirmed since
+then; ask before you depend on one.
 
 ```dotenv
 PLOREA_ENVIRONMENT=test

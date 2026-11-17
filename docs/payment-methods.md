@@ -17,6 +17,12 @@ RecurringType::UnscheduledCardOnFile;   // merchant-initiated, irregular (e.g. u
 The type is Adyen's contract for the mandate and is echoed back verbatim on
 setup. Use `Subscription` for anything Plorea's scheduler will bill.
 
+A charge on a fixed schedule whose **amount varies** (a base price plus usage)
+is still `Subscription`, not `UnscheduledCardOnFile` (stated by Plorea,
+2026-11-17). `UnscheduledCardOnFile` is for irregular *timing*, such as top-ups
+or no-show fees. See
+[Varying amounts each period](subscriptions.md#varying-amounts-each-period).
+
 ## Setting up a card
 
 Two flows, same builder.

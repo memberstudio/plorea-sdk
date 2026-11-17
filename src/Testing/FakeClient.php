@@ -60,9 +60,9 @@ class FakeClient implements Client
         return $this->record(new RecordedRequest('get', $uri, $this->withPlatform($query)));
     }
 
-    public function post(string $uri, array $payload = []): array
+    public function post(string $uri, array $payload = [], array $headers = []): array
     {
-        return $this->record(new RecordedRequest('post', $uri, $this->withPlatform($payload)));
+        return $this->record(new RecordedRequest('post', $uri, $this->withPlatform($payload), $headers));
     }
 
     public function patch(string $uri, array $payload = []): array

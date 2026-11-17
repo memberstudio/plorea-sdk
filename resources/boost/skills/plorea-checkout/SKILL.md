@@ -14,7 +14,7 @@ metadata:
 - An Adyen client key (test and live) → `PLOREA_ADYEN_CLIENT_KEY`, holding only the one matching the deployment's `PLOREA_ENVIRONMENT`. Publishable, but keep it in env, never in code.
 - Web: every origin that mounts Drop-in whitelisted (not `localhost` — develop on a whitelisted staging domain). A missing origin fails late as a CORS error in `/sessions/{id}/setup`.
 - Native: iOS bundle id + Apple Team ID and Android package name whitelisted — including staging builds.
-- Customer-owned domains are origins too; agree how they get added, or serve payment from a domain you control.
+- Customer-owned domains are origins too; agree how they get added, or serve payment from a domain you control. Plorea adds origins on request and named a self-service route it approves (`https`, no path, no wildcard; stated 2026-11-17). The route is not in spec 0.39.0 and the SDK has no method for it.
 
 ## Backend endpoint
 
@@ -85,7 +85,7 @@ Client callbacks are UI hints. On "done", the backend re-reads `Plorea::payments
 
 Observed 2026-09-19: both session endpoints validate `channel` (`400` for anything but `Web`, `iOS`, `Android`, case-sensitive), echo it as `$session->channel` and return a `clientKey`; the configured key is only a fallback. A 3-D Secure challenge on a native session arrives as a browser redirect, so handle the return URL. Both a browser Drop-in on a whitelisted origin and a native iOS Drop-in authorise end to end.
 
-Still unobserved: an Android Drop-in on a device, native 3DS2, and a live `environment` value. Wallets (Apple Pay / Google Pay) depend on your provider's Adyen account setup and Apple domain verification — ask them.
+Still unobserved: an Android Drop-in on a device, native 3DS2, and a live `environment` value. Wallets: stores get Visa and Mastercard only today. Apple Pay and Google Pay are possible with Drop-in on your own domain: you serve Apple's domain verification file and Plorea registers the domain (stated 2026-11-17). Vipps: unanswered.
 
 ## App stores
 

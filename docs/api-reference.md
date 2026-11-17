@@ -34,7 +34,7 @@ All classes live under `MemberFlow\Plorea\`.
 | --- | --- |
 | `link(string $reference, string $product, Amount $amount, string $returnUrl)` | `PendingPaymentLink` |
 | `status(string $reference)` | `Data\PaymentStatus` |
-| `refund(string $reference, string $modificationReference, Amount\|int\|null $amount = null, ?string $reason = null)` | `Data\Refund` |
+| `refund(string $reference, string $modificationReference, Amount\|int\|null $amount = null, ?string $reason = null, ?string $idempotencyKey = null)` | `Data\Refund` |
 | `cancel(string $reference, string $modificationReference)` | `Data\PaymentCancellation` |
 
 `refund()` refunds the full amount when `$amount` is omitted. A partial refund
@@ -60,7 +60,7 @@ works, and a refund on an `authorised` payment stays a refund (verified
 | `resume(string $subscriptionId, DateTimeInterface $nextChargeAt)` | `Data\Subscription` |
 | `forExternalId(string $externalId, ?string $tenantId = null, ?string $status = null)` | `Collection<Data\Subscription>` |
 | `needingAttention(string $externalId, ?string $tenantId = null, int $graceMinutes = 60)` | `Collection<Data\Subscription>` |
-| `charge(string $subscriptionId, ?Amount $amount = null, ?string $reason = null, ?float $vatRate = null, ?int $vatAmount = null)` | `Data\SubscriptionCharge` |
+| `charge(string $subscriptionId, ?Amount $amount = null, ?string $reason = null, ?float $vatRate = null, ?int $vatAmount = null, ?string $idempotencyKey = null)` | `Data\SubscriptionCharge` |
 | `charges(string $subscriptionId)` | `Collection<Data\SubscriptionCharge>` |
 | `cancel(string $subscriptionId, ?string $reason = null)` | `Data\SubscriptionCancellation` |
 | `reactivate(string $subscriptionId)` | `Data\Subscription` |
@@ -384,7 +384,7 @@ The HTTP ones extend `RequestException`, exposing `$status` and `$response`.
 | Class | Purpose |
 | --- | --- |
 | `Testing\FakeClient` | The in-memory client. `stub(array $stubs)` adds stubs |
-| `Testing\RecordedRequest` | `$method`, `$path`, `$data`, `input($key, $default)`, `matches($pattern)` |
+| `Testing\RecordedRequest` | `$method`, `$path`, `$data`, `$headers`, `input($key, $default)`, `header($name)`, `matches($pattern)` |
 | `Testing\DefaultFixtures` | Default responses per route |
 
 See [Testing](testing.md).

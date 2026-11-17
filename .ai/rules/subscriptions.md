@@ -219,7 +219,12 @@ reset (9 October, on request) gave `active` / `retryCount` 0, charged **at
 once**, and set `nextChargeAt` one interval after the **new** charge time, so
 the billing anchor moved (a monthly cycle on the 8th moved to the 9th). No API
 does that; persist your own period boundary if the anchor matters. Never document any route out of
-`payment_failed` as working. The overdue test
+`payment_failed` as working. Spec 0.32.0 documents `PATCH` active +
+`nextChargeAt` and `POST .../charges/{chargeId}/settle`; both stay UNOBSERVED
+until captured, and the last observation of the `PATCH` is the 400 above.
+A varying amount on a fixed schedule is `Subscription`, not
+`UnscheduledCardOnFile` (Stated by Plorea 2026-11-17). How to stop the scheduler
+charging the fixed amount when charging by hand is OPEN: document no pattern. The overdue test
 stays **on purpose**, for a cycle that stalls without any failure status;
 `nextChargeAt` is captured. The scheduler charges within
 minutes of a natural due time (seconds in test, up to ~25 min in production) and moves the date forward as it does, so a date still

@@ -34,9 +34,9 @@ final readonly class PloreaClient implements Client
         return $this->send('get', $uri, $this->withPlatform($query));
     }
 
-    public function post(string $uri, array $payload = []): array
+    public function post(string $uri, array $payload = [], array $headers = []): array
     {
-        return $this->send('post', $uri, $this->withPlatform($payload));
+        return $this->send('post', $uri, $this->withPlatform($payload), $headers);
     }
 
     public function patch(string $uri, array $payload = []): array
@@ -51,9 +51,10 @@ final readonly class PloreaClient implements Client
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<string, string>  $headers
      * @return array<string, mixed>
      */
-    private function send(string $method, string $uri, array $data): array
+    private function send(string $method, string $uri, array $data, array $headers = []): array
     {
         $this->events?->dispatch(new RequestSent(strtoupper($method), $uri, $data));
 
@@ -61,7 +62,7 @@ final readonly class PloreaClient implements Client
 
         try {
             /** @var Response $response */
-            $response = $this->request()->{$method}($uri, $data);
+            $response = $this->request()->withHeaders($headers)->{$method}($uri, $data);
         } catch (IlluminateConnectionException $exception) {
             // Redacts the API key from the wrapped Guzzle request before the
             // exception leaves the SDK — see ConnectionException::from().

@@ -7,6 +7,7 @@ namespace MemberFlow\Plorea\Tests\Feature;
 use DateTimeImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use MemberFlow\Plorea\Data\Amount;
 use MemberFlow\Plorea\Data\BillingInterval;
 use MemberFlow\Plorea\Data\Subscription;
@@ -401,6 +402,46 @@ class SubscriptionResourceTest extends TestCase
         $this->assertSame('2026-10-01', $charge->nextChargeAt?->toDateString());
 
         Http::assertSent(fn (Request $request): bool => $request->data() === ['reason' => 'extra_seat', 'platform' => 'memberflow']);
+    }
+
+    /**
+     * The OpenAPI spec (0.36.0+) documents Idempotency-Key on this route: a
+     * repeat with the same key and amount replays the first answer. The
+     * replay itself is not observed; this pins only that the header is sent,
+     * and that no header is sent without a key.
+     */
+    public function test_it_sends_an_idempotency_key_on_a_charge(): void
+    {
+        Http::fake([
+            'payments.plorea.no/subscriptions/sub_1/charge' => Http::response([
+                'status' => 'charge_created',
+                'subscriptionId' => 'sub_1',
+                'chargeId' => 'chg_1',
+            ], 201),
+        ]);
+
+        Plorea::subscriptions()->charge('sub_1', amount: Amount::nok(19900), idempotencyKey: 'sub_1-2026-11');
+        Plorea::subscriptions()->charge('sub_1', amount: Amount::nok(19900));
+
+        $sent = Http::recorded();
+
+        $this->assertSame(['sub_1-2026-11'], $sent[0][0]->header('Idempotency-Key'));
+        $this->assertSame(['value' => 19900, 'currency' => 'NOK'], $sent[0][0]->data()['amount']);
+        $this->assertFalse($sent[1][0]->hasHeader('Idempotency-Key'));
+    }
+
+    public function test_it_refuses_an_idempotency_key_longer_than_the_api_accepts(): void
+    {
+        Http::fake();
+
+        try {
+            Plorea::subscriptions()->charge('sub_1', idempotencyKey: str_repeat('k', 129));
+            $this->fail('A 129-character key must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertStringContainsString('128', $exception->getMessage());
+        }
+
+        Http::assertNothingSent();
     }
 
     public function test_a_declined_charge_throws_a_charge_failed_exception(): void

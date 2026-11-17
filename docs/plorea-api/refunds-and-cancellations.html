@@ -70,6 +70,7 @@ flowchart TD
             <tr><td><code>amount</code><span class="opt">optional</span></td><td><span class="type">integer</span></td><td>Minor units (øre). Leave it out for a full refund. A flat integer, like on payment links.</td></tr>
             <tr><td><code>reason</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Free text for your records. Echoed later as <code>lastRefundReason</code> on the status.</td></tr>
             <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for reporting.</td></tr>
+            <tr><td><code>Idempotency-Key</code> header<span class="opt">optional</span></td><td><span class="type">string</span></td><td>Up to 128 characters, scoped to the payment refunded. Without it, every call is a new refund. PHP SDK: <code>refund(..., idempotencyKey: '...')</code>. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -262,9 +263,10 @@ stateDiagram-v2
       </ul>
 
       <h2 id="retry-safely">Retry safely</h2>
-      <p>Retry safety for refund and cancel is not known. <span class="badge open">Open question</span> The <code>modificationReference</code> is your reference for one attempt. Plorea has not confirmed that it deduplicates a repeated reference. Treat it as a reference, not as an idempotency key. Do not retry a refund or a cancel automatically.</p>
+      <p>For a refund, send an <code>Idempotency-Key</code> header and keep the key for every retry. Without a key, every call is a new refund: a double click refunds twice. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> A cancel takes no key.</p>
+      <p>Retry safety of <code>modificationReference</code> alone is not known. <span class="badge open">Open question</span> The <code>modificationReference</code> is your reference for one attempt. Plorea has not confirmed that it deduplicates a repeated reference. Treat it as a reference, not as an idempotency key. Do not retry a refund or a cancel automatically.</p>
       <ol class="steps">
-        <li><strong>Create the modification reference before the call.</strong>Derive it from your own refund record, for example <code>{reference}-refund-{n}</code>. Save it first.</li>
+        <li><strong>Create the modification reference and the idempotency key before the call.</strong>Derive both from your own refund record, for example <code>{reference}-refund-{n}</code>. Save them first.</li>
         <li><strong>Send the request.</strong>On a timeout or a <code>5xx</code>, the outcome is unknown, not failed.</li>
         <li><strong>Read the payment status.</strong>If <code>lastRefundReference</code> (or <code>lastCancelReference</code>) equals your modification reference, Plorea accepted the request. Stop.</li>
         <li><strong>Otherwise, escalate to a person.</strong>A missing match does not prove that Plorea rejected the request. The request can still be in flight, and a later refund overwrites the <code>lastRefund*</code> fields. A person decides whether to send it again, with the same modification reference.</li>

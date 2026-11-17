@@ -97,8 +97,9 @@ modifications asynchronously, and that the final statuses are `refunded` and
 `cancelled`. Book on the request; do not wait for the final status.
 
 Status bodies seen since 2026-10-06 also carry `refusalReason` and
-`refundedTotal` (minor units). `PaymentStatus` does not type them yet; read
-them from `$status->raw`.
+`refundedTotal` (minor units). Both are in the OpenAPI spec now
+(`PaymentStatusResponse`). `PaymentStatus` does not type them yet, because no
+captured fixture holds them; read them from `$status->raw`.
 
 ### ✅ Partial and full refunds on an `authorised` payment — 2026-10-09 (test)
 
@@ -225,6 +226,34 @@ holder-name refusal trick is unavailable. The always-blocked test card works.
 **Wishlist, asked of Plorea 2026-10-17, not delivered:** same three items as
 above; the second (status psp = the payment that took money) is the one this
 case needs.
+
+### 📋 What Plorea said on 2026-11-17, not yet observed
+
+- **A varying amount on a fixed schedule is `Subscription`**, not
+  `UnscheduledCardOnFile`, given consent at card storage and notice before each
+  charge. The amount is part of the charge idempotency key. Open: how to keep
+  the scheduler from also charging the fixed amount.
+- **A platform that is its own merchant sends its own org number** as
+  `merchantOrgNr`, registered under the sending tenant (else 404). Leaving the
+  field out settles to the tenant's default store. It pays only Plorea's part
+  of the fee.
+- **Allowed origins** have a self-service route that Plorea approves (`https`,
+  no path, no wildcard). It is not in the spec (0.39.0).
+- **No wallets yet**: Visa and Mastercard only. Apple Pay and Google Pay are
+  possible on your own domain with domain verification. Vipps: unanswered.
+- **No per-link tracking** (opened, views, started) in the API, and none
+  planned: link previews count as opens. Plorea keeps logs for 90 days. Host
+  your own landing page to count opens.
+- **Fee, net and payout per transaction** are on Plorea's partner dashboard,
+  not in the API for a tenant key. `GET /reports/*` takes the shared platform
+  key only (tenant key: 403).
+
+Not covered by the SDK yet, though in the spec (0.38.0): withdrawing an unpaid
+link with `POST payments/cancel`, `shopperReference` and
+`requireAuthentication` on `POST payments/link`, payment requests,
+`GET /v1/me`, partner onboarding and webhook secret rotation
+(`X-Plorea-Signature-Next`). `billingAnchor`, `proration` and `trialDays` are
+"Not available" and answer 400.
 
 ### ✅ `merchantOrgNr` is not echoed back on create — 2026-09-07
 
@@ -421,11 +450,11 @@ of the 2026-09-17 entries above:
   channel `iOS` / `Android`, in an upcoming deploy. Until it is observed, a native app
   must keep handling the redirect.
 - **`refusalReason` is coming** on `GET payments/status/{reference}`, same
-  deploy. Until it is observed, `failed` still has no reason — do not model the
-  field.
+  deploy. *Since observed (2026-10-17, test) and in the spec; see above.*
 - **Customers' own domains: route the payment step through your own
   whitelisted subdomain.** The wildcard covers every subdomain; no API for
-  registering single origins is planned.
+  registering single origins is planned. *Superseded 2026-11-17: Plorea named
+  a self-service origins route; see the 2026-11-17 entry.*
 
 ### ✅ The refund/cancel `401` is gone — 2026-09-19
 

@@ -75,7 +75,7 @@
         <table>
           <thead><tr><th>Safe to retry</th><th>Not safe to retry blindly</th></tr></thead>
           <tbody>
-            <tr><td>Every <code>GET</code>. Refund and cancel with the <strong>same</strong> <code>modificationReference</code>. <code>PATCH</code> with the same body (a repeated pause or resume returns <code>400</code>, not a second change). Delete a payment method.</td><td>Create payment link, create session, card setup, create subscription, charge, cancel and reactivate subscription. Read first, then decide.</td></tr>
+            <tr><td>Every <code>GET</code>. Charge and refund with the <strong>same</strong> <code>Idempotency-Key</code> <span class="badge stated">In the spec</span>. Cancel with the <strong>same</strong> <code>modificationReference</code>. <code>PATCH</code> with the same body (a repeated pause or resume returns <code>400</code>, not a second change). Delete a payment method.</td><td>Create payment link, create session, card setup, create subscription, cancel and reactivate subscription. Charge and refund without a key. Read first, then decide.</td></tr>
           </tbody>
         </table>
       </div>
@@ -433,7 +433,7 @@ const refund = await res.json(); // save refund.refundPspReference</code></pre><
           <tr><td><code>404</code></td><td>Unknown reference.</td></tr>
         </tbody>
       </table></div>
-      <p><strong>Retry safety:</strong> unknown. <span class="badge open">Open question</span> <code>modificationReference</code> is your reference for this refund. Plorea has not confirmed that it works as an idempotency key. Before a retry, read <a href="#get-payment-status">payment status</a>. Do not retry automatically.</p>
+      <p><strong>Retry safety:</strong> send an <code>Idempotency-Key</code> header, up to 128 characters, and the same key on a retry. The key is scoped to the payment refunded. Without a key, every call is a new refund. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> <code>modificationReference</code> alone is not confirmed as an idempotency key. <span class="badge open">Open question</span> Before a retry, read <a href="#get-payment-status">payment status</a>.</p>
 
       <!-- ============================================================ -->
       <h2 id="cancel-a-payment">Cancel a payment</h2>
@@ -1585,11 +1585,20 @@ await patch('sub_test_golden', {
         </tbody>
       </table></div>
 
+      <h4>Headers</h4>
+      <div class="table-wrap"><table class="params">
+        <thead><tr><th>Header</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Idempotency-Key</code><span class="opt">optional</span></td><td class="type">string</td><td>Up to 128 characters. A repeat with the same key and amount returns the first answer with <code>replayed: true</code>. The same key with another amount, or a repeat while the first call runs, answers <code>409</code> with <code>chargeId</code>. Without a key, the period is the key. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td></tr>
+        </tbody>
+      </table></div>
+
       <h4>Request</h4>
       <div class="tabs">
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_golden/charge \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
   -H "X-Environment: test" \
+  -H "Idempotency-Key: sub_test_golden-upgrade-2026-10" \
   -H "Content-Type: application/json" \
   -d '{
     "platform": "acme",
@@ -1661,8 +1670,8 @@ const charge = await res.json();</code></pre></div>
         </tbody>
       </table></div>
       <div class="callout warning">
-        <p class="callout-title">Not safe to retry</p>
-        <p>Every call is a new charge. After a timeout, read <a href="#list-subscription-charges">the charge list</a> and look for your charge before you try again.</p>
+        <p class="callout-title">Retry only with the same key</p>
+        <p>Send the same <code>Idempotency-Key</code> and the same amount on a retry. The replay is in the spec, not observed. <span class="badge unobserved">Unobserved</span> After a timeout, read <a href="#list-subscription-charges">the charge list</a> and look for your charge before you try again.</p>
       </div>
 
       <!-- ============================================================ -->

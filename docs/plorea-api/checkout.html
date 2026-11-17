@@ -73,7 +73,8 @@ sequenceDiagram
         <li><strong>Wildcards cover subdomains, not the bare domain.</strong> <code>https://*.example.com</code> covers <code>pay.example.com</code> and <code>a.b.example.com</code>. It does not cover <code>https://example.com</code>. Ask for the bare domain separately. <span class="badge verified">Verified</span></li>
         <li><strong>No localhost.</strong> <code>localhost</code> is not whitelisted. Develop against a whitelisted staging subdomain, or use a tunnel on such a subdomain. <span class="badge verified">Verified</span></li>
         <li><strong>Use the key from the session.</strong> The hosted pay page uses its own key, registered only for <code>pay.plorea.no</code>. That key answers <code>403</code> from your origin. The key in the session response is the one registered for your origins. <span class="badge verified">Verified</span></li>
-        <li><strong>Customers' own domains.</strong> Every domain needs a manual whitelist entry, and no API for this is planned. Serve the payment step from a wildcard subdomain you control, for example <code>{customer}.example.com</code>. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Customers' own domains.</strong> Every domain needs a whitelist entry. Serve the payment step from a wildcard subdomain you control, for example <code>{customer}.example.com</code>. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Self-service origins.</strong> Plorea adds origins on request. Plorea also named a self-service route, <code>POST /v1/self-service/allowed-origins</code>, that Plorea approves. Such an origin must be <code>https</code>, with no path and no wildcard. <span class="badge stated">Stated by Plorea 2026-11-17</span> The route is not in spec 0.39.0, and the PHP SDK has no method for it. Whether a wildcard added by hand is still accepted is not confirmed. <span class="badge open">Open question</span></li>
       </ul>
 
       <h2>Create a checkout session</h2>
@@ -349,7 +350,8 @@ if (result is CheckoutSessionResult.Success) {
 
       <h2>Wallets and app store rules</h2>
       <ul>
-        <li><strong>Apple Pay and Google Pay</strong> show only when Plorea's Adyen account is set up for them. Apple Pay on the web needs Apple's domain-association file on every domain. Apple Pay in an app needs an Apple merchant id and certificate. Ask Plorea which wallets it offers before you promise them. <span class="badge open">Open question</span></li>
+        <li><strong>Wallets are not available today.</strong> Merchant stores get Visa and Mastercard only. <span class="badge stated">Stated by Plorea 2026-11-17</span></li>
+        <li><strong>Apple Pay and Google Pay</strong> are possible with Drop-in on your own domain. You serve Apple's domain verification file on that domain. Plorea registers the domain after it confirms with the provider. <span class="badge stated">Stated by Plorea 2026-11-17</span> Apple Pay in an app needs an Apple merchant id and certificate. Vipps: no answer yet. <span class="badge open">Open question</span></li>
         <li><strong>App stores.</strong> Apple and Google require in-app purchase for digital goods used inside the app. Physical goods and real-world services, such as a gym membership or an invoice, are generally exempt. Check the current store rules for your case.</li>
       </ul>
 
@@ -372,7 +374,7 @@ if (result is CheckoutSessionResult.Success) {
       <div class="callout gap">
         <p class="callout-title">What we would like from Plorea</p>
         <ul>
-          <li>A self-service API, or a portal, to register web origins and app ids. <span class="badge proposal">Proposal</span></li>
+          <li>The self-service origins route in the OpenAPI spec, and a way to register app ids. <span class="badge proposal">Proposal</span></li>
           <li>A terminal state, or an <code>expiresAt</code>, on sessions. <span class="badge proposal">Proposal</span></li>
           <li>Native 3DS2 on app sessions, as announced. <span class="badge proposal">Proposal</span></li>
         </ul>

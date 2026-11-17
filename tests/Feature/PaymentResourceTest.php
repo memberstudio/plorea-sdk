@@ -149,6 +149,26 @@ class PaymentResourceTest extends TestCase
         ] && $request->header('X-Environment') === ['test']);
     }
 
+    /**
+     * Without the header every refund call gets a fresh key at the provider,
+     * so a double click refunds twice (OpenAPI spec). The key is scoped to
+     * the payment refunded.
+     */
+    public function test_it_sends_an_idempotency_key_on_a_refund(): void
+    {
+        Http::fake([
+            'payments.plorea.no/payments/refund' => Http::response([
+                'status' => 'refund_requested',
+                'reference' => 'FIN-2026-00123',
+            ]),
+        ]);
+
+        Plorea::payments()->refund('FIN-2026-00123', 'FIN-2026-00123-refund-1', idempotencyKey: 'FIN-2026-00123-refund-1');
+
+        Http::assertSent(fn (Request $request): bool => $request->header('Idempotency-Key') === ['FIN-2026-00123-refund-1']
+            && ! array_key_exists('idempotencyKey', $request->data()));
+    }
+
     public function test_it_requests_a_cancellation(): void
     {
         Http::fake([

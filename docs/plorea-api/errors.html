@@ -188,16 +188,16 @@ try {
 }</code></pre>
 
       <h2 id="retries-and-idempotency">Retries and idempotency</h2>
-      <p>The Plorea API has <strong>no idempotency keys</strong>. Two identical <code>POST /payments/link</code> calls create two payable links. Two identical charge calls bill the card twice. <span class="badge verified">Verified</span> for payment links.</p>
+      <p>Only two calls take an idempotency key: <code>POST /subscriptions/{id}/charge</code> and <code>POST /payments/refund</code>, through the <code>Idempotency-Key</code> header (spec 0.36.0). <span class="badge stated">In the spec</span> Every other <code>POST</code> has none. Two identical <code>POST /payments/link</code> calls create two payable links. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Operation</th><th>Safe to retry?</th><th>Why</th></tr></thead>
           <tbody>
             <tr><td>All <code>GET</code> requests</td><td><strong>Yes</strong></td><td>Reads change nothing.</td></tr>
-            <tr><td><code>POST /payments/refund</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Plorea has not confirmed that a repeated <code>modificationReference</code> is deduplicated. Read the payment status before any retry. Do not retry automatically.</td></tr>
-            <tr><td><code>POST /payments/cancel</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>Same as refund. Check <code>lastCancelReference</code>.</td></tr>
+            <tr><td><code>POST /payments/refund</code></td><td><strong>Only with the same <code>Idempotency-Key</code></strong> <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td><td>The key is scoped to the payment refunded. Without a key, every call is a new refund: a double click refunds twice. A repeated <code>modificationReference</code> alone is not confirmed to deduplicate. <span class="badge open">Open question</span></td></tr>
+            <tr><td><code>POST /payments/cancel</code></td><td><strong>Unknown</strong> <span class="badge open">Open question</span></td><td>No idempotency key. Check <code>lastCancelReference</code> before a retry.</td></tr>
             <tr><td><code>POST /payments/link</code></td><td><strong>No</strong></td><td>A retry can create a second live link for the same reference.</td></tr>
-            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td><strong>No</strong></td><td>No idempotency key. A retry can charge twice.</td></tr>
+            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td><strong>Only with the same <code>Idempotency-Key</code> and the same amount</strong> <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td><td>A repeat answers the first result with <code>replayed: true</code>. The same key with another amount answers <code>409</code>, and so does a repeat while the first call runs. Both <code>409</code> bodies carry <code>chargeId</code>. The amount is part of the key. <span class="badge stated">Stated 2026-11-17</span></td></tr>
             <tr><td><code>POST /subscriptions</code></td><td><strong>No</strong></td><td>A retry can create two subscriptions. Both can bill the card.</td></tr>
             <tr><td><code>POST /payment-methods/setup</code>, <code>…/setup/session</code></td><td>Mostly harmless</td><td>Creates an extra <code>pending_setup</code> method that nobody completes.</td></tr>
             <tr><td><code>PATCH /subscriptions/{id}</code></td><td>Yes</td><td>Sets absolute values.</td></tr>
@@ -250,6 +250,21 @@ $link = Cache::lock("plorea:link:{$invoice-&gt;reference}", 900)-&gt;block(10, f
       <h3>Automatic retries in the SDK</h3>
       <p><code>PLOREA_RETRY_TIMES</code> retries connection errors and 5xx responses. The default is <code>0</code> on purpose. A retry of a non-idempotent write can bill twice. Turn it on only if every write you send is safe to retry.</p>
 
+      <h3 id="idempotency-key">Send an idempotency key</h3>
+      <p>Make the key before the first call and store it with the operation. Send the same key, and the same amount, on every retry of that operation. The PHP SDK sends the key as the <code>Idempotency-Key</code> header. It throws <code>InvalidArgumentException</code> for an empty key or a key longer than 128 characters, before it sends anything.</p>
+      <div class="tabs">
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">Plorea::subscriptions()-&gt;charge($subscriptionId, amount: Amount::nok(4900), idempotencyKey: "{$subscriptionId}-2026-11");
+
+Plorea::payments()-&gt;refund($reference, "{$reference}-refund-1", idempotencyKey: "{$reference}-refund-1");</code></pre></div>
+        <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl -X POST https://payments.plorea.no/subscriptions/sub_test_golden/charge \
+  -H "Authorization: Bearer $PLOREA_API_KEY" \
+  -H "X-Environment: test" \
+  -H "Idempotency-Key: sub_test_golden-2026-11" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": {"value": 4900, "currency": "NOK"}}'</code></pre></div>
+      </div>
+      <p>The replay and the <code>409</code> answers come from the spec. We have not observed them. <span class="badge unobserved">Unobserved</span> After a timeout, still read the charge list or the payment status before you decide.</p>
+
       <h2>Timeouts</h2>
       <div class="table-wrap">
         <table>
@@ -275,7 +290,7 @@ $link = Cache::lock("plorea:link:{$invoice-&gt;reference}", 900)-&gt;block(10, f
       <div class="callout gap">
         <p class="callout-title">What would help</p>
         <ul>
-          <li>An <code>Idempotency-Key</code> header on link create, subscription create and charge. <span class="badge proposal">Proposal</span></li>
+          <li>An <code>Idempotency-Key</code> header on link create and subscription create. Charge and refund have one since spec 0.36.0. <span class="badge proposal">Proposal</span></li>
           <li>Stable machine-readable error codes next to the human message, for example <code>"code": "payment_method_not_active"</code>. <span class="badge proposal">Proposal</span></li>
           <li>A 401 body that names the environment that was used. <span class="badge proposal">Proposal</span></li>
         </ul>

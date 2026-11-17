@@ -54,7 +54,7 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
       </div>
 
       <h2>2. Merchants, KYC and payouts</h2>
-      <p>The <code>merchantOrgNr</code> decides who receives the money. Set it to the organisation number of the company that issues the invoice, not your own.</p>
+      <p>The <code>merchantOrgNr</code> decides who receives the money. Set it to the organisation number of the company that issues the invoice. That is your own only when your platform issues the invoice. Do not leave it out: the payment then settles to the tenant's default store. <span class="badge stated">Stated by Plorea 2026-11-17</span></p>
       <ul>
         <li><strong>Send <code>merchantOrgNr</code> on every payment link and subscription.</strong> Plorea requires it by contract. <span class="badge stated">Stated by Plorea</span> The API does not enforce it on payment links: a link without it is accepted. <span class="badge verified">Verified</span> Enforce it in your own code.</li>
         <li><strong>Use nine digits.</strong> On <code>POST /subscriptions</code>, any other value returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
@@ -84,17 +84,17 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
       <ul>
         <li><strong>Use a live Adyen client key.</strong> A test key does not work with live sessions. The PHP SDK throws if the key prefix (<code>live_</code>) does not match the environment.</li>
         <li><strong>Get your production origins whitelisted</strong> for the live key. The origin allow-list is per key and applies only to browsers. A wildcard covers subdomains at any depth but not always the bare domain. <code>localhost</code> was not whitelisted on the key we tested; ask Plorea if you need it. <span class="badge verified">Verified</span></li>
-        <li><strong>Route customer-owned domains through your own subdomain.</strong> No API exists to register single origins. <span class="badge stated">Stated by Plorea</span></li>
+        <li><strong>Route customer-owned domains through your own subdomain.</strong> Plorea adds origins on request, or approves them through a self-service route that is not in the spec yet. <span class="badge stated">Stated by Plorea 2026-11-17</span></li>
         <li><strong>Register your production app identifiers</strong> with Plorea for native apps.</li>
         <li><strong>Test return URLs in production builds.</strong> Universal links and App Links must verify on the production domain. A custom-scheme return URL is accepted. <span class="badge verified">Verified</span></li>
         <li><strong>Allow Adyen's live hosts in your Content Security Policy.</strong> They differ from the test hosts.</li>
-        <li><strong>Configure wallets</strong> if you show them, for example Apple Pay domain verification on each domain.</li>
+        <li><strong>Do not promise wallets yet.</strong> Stores get Visa and Mastercard only. For Apple Pay or Google Pay with Drop-in on your domain, you serve Apple's domain verification file, and Plorea registers the domain after it confirms with the provider. <span class="badge stated">Stated by Plorea 2026-11-17</span></li>
       </ul>
       <p>See <a href="checkout.html">Embedded and native checkout</a>.</p>
 
       <h2>5. Money-handling code</h2>
       <ul>
-        <li><strong>Keep automatic retries off for writes.</strong> A retried link create or charge can bill twice. See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>.</li>
+        <li><strong>Keep automatic retries off for writes.</strong> A retried link create can bill twice. Send an <code>Idempotency-Key</code> on every charge and refund, and reuse it on a retry. See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>.</li>
         <li><strong>Create links with a check-first pattern</strong> inside a lock per reference (<code>firstOrCreate()</code> in the PHP SDK).</li>
         <li><strong>Book payments idempotently on the reference.</strong> The webhook, a status poll and the customer's return page race.</li>
         <li><strong>Compare the amount</strong> on the payment with the amount you expect before you book it.</li>

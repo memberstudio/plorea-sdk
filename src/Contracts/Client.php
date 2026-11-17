@@ -22,11 +22,12 @@ interface Client
      * Send a POST request to the Plorea API.
      *
      * @param  array<string, mixed>  $payload
+     * @param  array<string, string>  $headers  Extra request headers, such as Idempotency-Key.
      * @return array<string, mixed>
      *
      * @throws PloreaException
      */
-    public function post(string $uri, array $payload = []): array;
+    public function post(string $uri, array $payload = [], array $headers = []): array;
 
     /**
      * Send a PATCH request to the Plorea API.

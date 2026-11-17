@@ -44,7 +44,19 @@ number.
 ```
 
 `merchantOrgNr` tells Plorea **who receives the payout**, so it is always the
-invoice issuer's organisation number — your client's, never your own platform's.
+invoice issuer's organisation number. When you invoice on behalf of a client,
+that is your client's. It is your platform's own only when your platform issues
+the invoice, for example for its own plan (stated by Plorea, 2026-11-17).
+
+When your platform is the merchant:
+
+- Send its org number. Do not leave the field out: then the payment settles to
+  the tenant's default store, not to your company's account.
+- The org number must be registered as a merchant **under the tenant that
+  sends it**. Another tenant's merchant answers 404 (OpenAPI spec). Plorea
+  moves a registration between tenants on request.
+- Your company is onboarded like any merchant: KYC, its own store, card
+  methods switched on. Until card methods are live, link creation answers 422.
 
 The Plorea API accepts a link without it and only fails later, so the SDK
 refuses to create one: `create()` throws `PloreaException` when the org number
@@ -200,12 +212,17 @@ Plorea::payments()->refund(
     modificationReference: 'FIN-2026-00123-refund-1',  // your unique reference for this attempt
     amount: Amount::nok(450000),                        // omit for a full refund
     reason: 'Customer requested refund',
+    idempotencyKey: 'FIN-2026-00123-refund-1',          // same key on every retry
 );
 
 Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
 
 Cancel a payment that has not settled; refund one that has.
+
+Always pass `idempotencyKey:` on a refund. Without it, every call is a new
+refund at the provider, so a double click refunds twice (OpenAPI spec). See
+[Retries and idempotency](errors.md#retries-and-idempotency).
 
 A refund on a payment that still reads `authorised` stays a refund — it is not
 turned into a cancel. Verified 2026-10-09 (test) for both a partial refund

@@ -30,11 +30,11 @@
         <table>
           <thead><tr><th>#</th><th>Item</th><th>Area</th><th>Priority</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td><a href="#idempotency-keys">Idempotency keys</a></td><td>Payments, subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>1</td><td><a href="#idempotency-keys">Idempotency keys</a></td><td>Payments, subscriptions</td><td>High</td><td><span class="badge verified">Partly delivered, spec 0.36.0</span></td></tr>
             <tr><td>2</td><td><a href="#failed-charge-webhook-and-payment-failed">Failed charge webhook</a></td><td>Subscriptions</td><td>High</td><td><span class="badge verified">Partly delivered 2026-10-01</span></td></tr>
             <tr><td>3</td><td><a href="#webhook-redelivery-and-replay">Webhook redelivery and replay</a></td><td>Webhooks</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>4</td><td><a href="#sandbox-failure-triggers">Sandbox failure triggers</a></td><td>Testing</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
-            <tr><td>5</td><td><a href="#refusal-reason">Refusal reason</a></td><td>Payments</td><td>High</td><td><span class="badge stated">Promised</span></td></tr>
+            <tr><td>5</td><td><a href="#refusal-reason">Refusal reason</a></td><td>Payments</td><td>High</td><td><span class="badge stated">In spec 0.39.0</span></td></tr>
             <tr><td>6</td><td><a href="#openapi-specification">OpenAPI specification</a></td><td>Platform</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>7</td><td><a href="#capture-api-and-captured-state">Capture API and captured state</a></td><td>Payments</td><td>Medium</td><td><span class="badge stated">On roadmap</span></td></tr>
             <tr><td>8</td><td><a href="#per-refund-status">Per-refund status</a></td><td>Payments</td><td>Medium</td><td><span class="badge proposal">Proposal</span></td></tr>
@@ -53,7 +53,11 @@
             <tr><td>21</td><td><a href="#next-charge-date-on-reactivate">Next charge date on reactivate</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>22</td><td><a href="#paid-link-second-payment-and-refund-target">Second payment on a paid link and the refund target</a></td><td>Payments</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
             <tr><td>23</td><td><a href="#external-id-filter-with-tenant-id">externalId filter with tenantId</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Reported 2026-10-20</span></td></tr>
-            <tr><td>24</td><td><a href="#move-the-billing-day-and-restart-billing">Move the billing day and restart billing</a></td><td>Subscriptions</td><td>High</td><td><span class="badge proposal">Proposal</span></td></tr>
+            <tr><td>24</td><td><a href="#move-the-billing-day-and-restart-billing">Move the billing day and restart billing</a></td><td>Subscriptions</td><td>High</td><td><span class="badge stated">In spec 0.32.0, unobserved</span></td></tr>
+            <tr><td>25</td><td><a href="#self-service-origins-in-the-spec">Self-service origins in the spec</a></td><td>Checkout</td><td>Medium</td><td><span class="badge stated">Route stated 2026-11-17</span></td></tr>
+            <tr><td>26</td><td><a href="#wallets">Wallets</a></td><td>Checkout</td><td>Medium</td><td><span class="badge stated">Answered 2026-11-17</span></td></tr>
+            <tr><td>27</td><td><a href="#link-tracking">Opens and views per link</a></td><td>Payments</td><td>Low</td><td><span class="badge stated">Not planned, 2026-11-17</span></td></tr>
+            <tr><td>28</td><td><a href="#scheduler-versus-manual-varying-charge">Scheduler versus a manual varying charge</a></td><td>Subscriptions</td><td>High</td><td><span class="badge open">Asked 2026-11-17</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -61,6 +65,7 @@
       <h2>Payments</h2>
 
       <h3 id="idempotency-keys">1. Idempotency keys</h3>
+      <p><span class="badge verified">Partly delivered</span> From spec 0.36.0, <code>POST /subscriptions/{id}/charge</code> and <code>POST /payments/refund</code> accept an <code>Idempotency-Key</code> header. The PHP SDK sends it since 2026-11-18. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> <code>POST /payments/link</code> and <code>POST /subscriptions</code> still take no key. <span class="badge verified">Verified 2026-11-17 (spec 0.39.0)</span> The rest of this item stands for those two calls.</p>
       <p><strong>Problem.</strong> Two identical <code>POST /payments/link</code> calls create two payable links. The same is true for <code>POST /subscriptions</code> and <code>POST /subscriptions/{id}/charge</code>. A network timeout leaves the integrator unsure whether the call succeeded. <span class="badge verified">Verified</span></p>
       <p><strong>Impact.</strong> Integrators cannot retry safely. A retry after a timeout can bill a customer twice. Today each integrator must look up the payment first and invent a suffix scheme for new references.</p>
       <p><strong>Proposal.</strong> Accept an <code>Idempotency-Key</code> header on every <code>POST</code>. Store the first response for 24 hours. Return it again for the same key and the same body. Return <code>409</code> for the same key with a different body.</p>
@@ -72,6 +77,7 @@ Idempotent-Replayed: true</code></pre>
 
       <h3 id="refusal-reason">5. Refusal reason</h3>
       <p><span class="badge stated">Promised by Plorea</span> Plorea has stated that <code>refusalReason</code> is coming on <code>GET /payments/status/{reference}</code>.</p>
+      <p><span class="badge stated">In the spec</span> Spec 0.39.0 documents <code>refusalReason</code> on <code>PaymentStatusResponse</code>. No captured fixture holds a filled value yet, so the PHP SDK reads it from <code>raw</code> only. The webhook, payment method and charge parts of the proposal stand.</p>
       <p><strong>Problem.</strong> A declined payment shows only <code>status: "failed"</code> and <code>webhookSuccess: false</code>. No reason exists on the payment, the webhook, the payment method or the charge.</p>
       <p><strong>Impact.</strong> Integrators cannot tell the customer what to do. "Insufficient funds" needs a different message than "card expired" or "3-D Secure failed". Support cannot answer "why was I declined?".</p>
       <p><strong>Proposal.</strong> Add Adyen's refusal data to the payment, the <code>payment.failed</code> webhook, the payment method and each charge. Keep the raw code and add a stable category.</p>
@@ -307,6 +313,24 @@ Idempotent-Replayed: true</code></pre>
       <h3 id="move-the-billing-day-and-restart-billing">24. Move the billing day and restart billing</h3>
       <p><span class="badge verified">Verified 2026-10-20</span> No verified call moves the billing day of a live subscription. <code>PATCH status: "active"</code> on <code>payment_failed</code> returns <code>400</code>. The workaround is to cancel and create a new subscription on the same card, with a trial to the wanted day. It works, but the subscription ID changes and the charge history is split in two.</p>
       <p><strong>Proposal.</strong> Accept <code>nextChargeAt</code> on <code>PATCH</code> as the new billing anchor on <code>active</code> subscriptions. Allow <code>payment_failed</code> → <code>active</code> with a <code>nextChargeAt</code>, without an immediate charge.</p>
+      <p><span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> Spec 0.32.0 documents <code>PATCH status: "active"</code> with <code>nextChargeAt</code> on <code>payment_failed</code>, and <code>POST /subscriptions/{id}/charges/{chargeId}/settle</code>. Our production try on 2026-10-17 answered <code>400</code>. Until a revive is observed, the cancel-and-create workaround stays.</p>
+
+      <h3 id="self-service-origins-in-the-spec">25. Self-service origins in the spec</h3>
+      <p><span class="badge stated">Stated 2026-11-17</span> Plorea named a self-service route, <code>POST /v1/self-service/allowed-origins</code>, and approves each origin: <code>https</code>, no path, no wildcard. This replaces "no API planned" from 2026-09-18.</p>
+      <p><strong>Problem.</strong> The route is not in spec 0.39.0. Its request and response shapes are unknown. We do not know if a wildcard added by hand is still accepted. <span class="badge open">Open question</span></p>
+      <p><strong>Proposal.</strong> Document the route in the OpenAPI spec, with a read route for the current list and the approval status of each origin.</p>
+
+      <h3 id="wallets">26. Wallets</h3>
+      <p><span class="badge stated">Stated 2026-11-17</span> Visa and Mastercard only today. Apple Pay and Google Pay are possible with Drop-in on your own domain: you serve Apple's domain verification file, and Plorea registers the domain after it confirms with the provider. Vipps: no answer yet. <span class="badge open">Open question</span></p>
+      <p><strong>Proposal.</strong> List the wallets per merchant in the API, and answer the Vipps question.</p>
+
+      <h3 id="link-tracking">27. Opens and views per link</h3>
+      <p><span class="badge stated">Stated 2026-11-17</span> Not in the API, and not planned. Link previews in e-mail and chat clients count as opens. Plorea keeps logs for 90 days and extracts figures on request.</p>
+      <p><strong>Answer accepted.</strong> Send payers to a page you host, which then opens the Plorea link. Count opens there.</p>
+
+      <h3 id="scheduler-versus-manual-varying-charge">28. Scheduler versus a manual varying charge</h3>
+      <p><span class="badge open">Asked 2026-11-17</span> A varying amount on a fixed schedule is a <code>Subscription</code> charge. <span class="badge stated">Stated 2026-11-17</span> When you charge each period by hand with <code>POST /subscriptions/{id}/charge</code>, Plorea's scheduler can also charge the fixed <code>amount</code> on <code>nextChargeAt</code>. How to stop that is not answered.</p>
+      <p><strong>Proposal.</strong> Document one supported pattern. Candidates: a paused subscription that takes manual charges, or a <code>PATCH</code> of <code>amount</code> before each scheduled run.</p>
 
     </article>
   </main>

@@ -23,12 +23,12 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 - A scheduled backstop polls open payments, pending card setups and `subscriptions()->needingAttention()` — card setup, cancel and reactivate emit nothing, and a lost `subscription.charge_failed` is never redelivered.
 
 ## Merchants
-- `merchantOrgNr` is always the invoice issuer's, never your own.
+- `merchantOrgNr` is always the invoice issuer's — your own only when your platform issues the invoice. Never leave it out: the payment then settles to the tenant's default store.
 - The first live payment for a new org number starts KYC; payout is held until approval (1–5 business days). Tell merchants.
 - Subscriptions for a client company carry `->merchant()` too; KYC then starts on the first charge. There is no KYC API — to onboard a company before launch, Plorea suggests a payment link carrying its org number, sent to yourself.
 
 ## Money-handling code
-- `PLOREA_RETRY_TIMES=0` unless every retried write is idempotent — retried link creation or charges double-bill.
+- `PLOREA_RETRY_TIMES=0` unless every retried write is idempotent — retried link creation double-bills. Pass `idempotencyKey:` on every `charge()` and `refund()`, stored with the operation.
 - `firstOrCreate()` inside `Cache::lock()` per reference; handle `PaymentAlreadyPaidException`.
 - Refund polling sized in **hours**; a timeout never reverses books or tells the customer it failed. Persist the `Refund` DTO.
 - Booking is idempotent on the reference.
@@ -36,7 +36,7 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 ## Embedded / native checkout (if used)
 - Live `PLOREA_ADYEN_CLIENT_KEY`; production origins (including customer-owned domains) and production app identifiers whitelisted for the live key.
 - Universal links / App Links verified on the production domain; the return page completes `redirectResult`.
-- CSP allows Adyen's **live** hosts. Apple Pay domain verification per domain, if wallets are shown.
+- CSP allows Adyen's **live** hosts. No wallets today (Visa and Mastercard only); Apple Pay or Google Pay needs your own domain, Apple's verification file and Plorea registering the domain.
 - App Store / Play review: real-world services only, otherwise in-app purchase applies.
 - Session endpoints return `response()->json($session)`, never `raw`.
 
