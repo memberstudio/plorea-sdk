@@ -231,7 +231,9 @@ case needs.
 
 - **A varying amount on a fixed schedule is `Subscription`**, not
   `UnscheduledCardOnFile`, given consent at card storage and notice before each
-  charge. The amount is part of the charge idempotency key. Open: how to keep
+  charge. Without your own key, the amount is part of the default charge key
+  (another amount is a second charge); with your own key, another amount gives
+  409 and charges nothing (spec). Open: how to keep
   the scheduler from also charging the fixed amount.
 - **A platform that is its own merchant sends its own org number** as
   `merchantOrgNr`, registered under the sending tenant (else 404). Leaving the

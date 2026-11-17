@@ -613,8 +613,8 @@ try {
   "status": "canceled"
 }</code></pre>
       <div class="callout danger">
-        <p class="callout-title">Charge is not safe to retry</p>
-        <p>A second call creates a second charge. If a charge call times out, read the charge history before you try again.</p>
+        <p class="callout-title">Charge is not safe to retry without a key</p>
+        <p>Without a key, a second call created a second charge. <span class="badge verified">Verified</span> The spec now says that the subscription's period is the default key, and that the same <code>Idempotency-Key</code> and amount replay the first answer. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> Send an <code>Idempotency-Key</code>. If a charge call times out, read the charge history before you try again.</p>
       </div>
 
       <h2 id="charge-history">Charge history</h2>

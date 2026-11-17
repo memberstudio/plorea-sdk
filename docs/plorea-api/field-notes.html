@@ -41,12 +41,12 @@
 
       <h3>No idempotency on duplicate references</h3>
       <p><span class="badge verified">Verified</span> Two <code>POST /payments/link</code> calls with the same reference create two live, payable links. Check for an existing payment before you create one. See <a href="errors.html">Errors and retries</a>.</p>
-      <p><span class="badge verified">Verified 2026-11-17 (spec 0.39.0)</span> Link create and subscription create still take no idempotency key.</p>
+      <p><span class="badge stated">In spec 0.39.0</span> Link create and subscription create still take no idempotency key.</p>
 
       <h3 id="idempotency-keys-on-charge-and-refund">Idempotency keys on charge and refund</h3>
       <p><span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> <code>POST /subscriptions/{id}/charge</code> and <code>POST /payments/refund</code> accept an <code>Idempotency-Key</code> header, from spec 0.36.0. On charge, a repeat with the same key and amount answers with the first result and <code>replayed: true</code>, and charges nothing. The same key with another amount answers <code>409</code> "Idempotency-Key reused with different parameters". A repeat while the first call runs answers <code>409</code> "still in flight". Both <code>409</code> bodies carry <code>chargeId</code>. Without a key, the subscription's period is the key.</p>
       <p><span class="badge stated">In the spec</span> On refund, the key is scoped to the payment refunded. Without a key, every call is a new refund: a double click refunds twice.</p>
-      <p><span class="badge stated">Stated 2026-11-17</span> The amount is part of the charge key. Two charges with different amounts in one period are two charges. A retry must send the same amount.</p>
+      <p><span class="badge stated">Stated 2026-11-17</span> Without your own key, the amount is part of the default charge key: two charges with different amounts in one period are two charges. With your own key, another amount answers <code>409</code> and charges nothing. A retry sends the same key and amount.</p>
 
       <h3 id="refusal-reason-in-the-spec"><code>refusalReason</code> is in the spec</h3>
       <p><span class="badge stated">In the spec</span> <code>refusalReason</code> is a field of <code>PaymentStatusResponse</code> on <code>GET /payments/status/{reference}</code>. The PHP SDK does not type it yet, because no captured fixture holds a filled value. Read it from <code>raw</code>.</p>

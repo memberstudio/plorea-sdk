@@ -70,12 +70,12 @@
       <p>See <a href="errors.html">Errors and retries</a> for handling patterns.</p>
 
       <h3 id="retry-safety">Retry safety at a glance</h3>
-      <p>The API has no idempotency keys. Two identical <code>POST</code>s create two objects. <span class="badge verified">Verified</span></p>
+      <p>Only charge and refund take an <code>Idempotency-Key</code> header (spec 0.36.0). <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> Every other <code>POST</code> has none: two identical calls create two objects. <span class="badge verified">Verified</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Safe to retry</th><th>Not safe to retry blindly</th></tr></thead>
           <tbody>
-            <tr><td>Every <code>GET</code>. Charge and refund with the <strong>same</strong> <code>Idempotency-Key</code> <span class="badge stated">In the spec</span>. Cancel with the <strong>same</strong> <code>modificationReference</code>. <code>PATCH</code> with the same body (a repeated pause or resume returns <code>400</code>, not a second change). Delete a payment method.</td><td>Create payment link, create session, card setup, create subscription, cancel and reactivate subscription. Charge and refund without a key. Read first, then decide.</td></tr>
+            <tr><td>Every <code>GET</code>. Charge and refund with the <strong>same</strong> <code>Idempotency-Key</code> <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span>. <code>PATCH</code> with the same body (a repeated pause or resume returns <code>400</code>, not a second change). Delete a payment method.</td><td>Create payment link, create session, card setup, create subscription, cancel and reactivate subscription. Charge and refund without a key. Cancel a payment: deduplication is not confirmed, so check <code>lastCancelReference</code> first. Read first, then decide.</td></tr>
           </tbody>
         </table>
       </div>

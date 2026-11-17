@@ -71,7 +71,8 @@ major-unit constructor, on purpose.
 **`merchantOrgNr` is required**, and it is always the invoice issuer's
 organisation number: your client's when you invoice on their behalf, your
 platform's own only when your platform issues the invoice. Plorea accepts a link
-without it and fails only at payout time, so the SDK refuses to create one.
+without it, and the money then settles to the tenant's default store, not to
+the merchant (stated by Plorea), so the SDK refuses to create one.
 → [Payments](docs/payments.md#the-merchant-is-required)
 
 **There is no idempotency on references.** Creating twice gives you two live,

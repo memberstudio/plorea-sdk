@@ -45,7 +45,7 @@
       <ul>
         <li><strong>Keep your own copy of the plan.</strong> Store the subscription ID, the amount, the interval and the company it bills for in your database. Reads return <code>merchantOrgNr</code>, but not <code>merchantName</code> or <code>merchantEmail</code>. <span class="badge verified">Verified</span></li>
         <li><strong>Gate access on dates, not on status.</strong> Give access while <code>status</code> is <code>active</code> or <code>trialing</code>, or while <code>accessEndsAt</code> is in the future. A <code>past_due</code> subscription is in its retry window. Your grace policy decides its access. See <a href="dunning.html">Failed charges and dunning</a>.</li>
-        <li><strong>Do not retry a charge or a create blindly.</strong> Subscription create has no idempotency key: a retry can create two subscriptions. A charge is safe to retry only with the same <code>Idempotency-Key</code> and amount. <span class="badge stated">In the spec</span> See <a href="errors.html">Errors and retries</a>. <span class="badge verified">Verified</span></li>
+        <li><strong>Do not retry a charge or a create blindly.</strong> Subscription create has no idempotency key: a retry can create two subscriptions. <span class="badge verified">Verified</span> A charge is safe to retry only with the same <code>Idempotency-Key</code> and amount. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> See <a href="errors.html">Errors and retries</a>.</li>
       </ul>
 
       <div class="table-wrap">
@@ -1100,16 +1100,16 @@ $charge-&gt;reference;  // "sub_test_acme_001-chg_…"</code></pre></div>
       <!-- ================================================================ -->
       <h2 id="varying-amount">Charge a varying amount each period</h2>
       <p><strong>Use this when</strong> the customer pays every period, but the amount changes, for example a base price plus usage. <span class="badge stated">Stated 2026-11-17</span></p>
-      <ol class="steps">
-        <li><strong>Get consent for a varying amount</strong>When the customer stores the card, they accept that the amount varies.</li>
-        <li><strong>Store the card as <code>Subscription</code></strong>Not <code>UnscheduledCardOnFile</code>. That type is for irregular timing, not a varying amount on a fixed schedule.</li>
-        <li><strong>Create a subscription</strong>on that payment method.</li>
-        <li><strong>Tell the customer the amount before each charge</strong>An invoice or a statement sent before the charge is enough.</li>
-        <li><strong>Charge the period's amount</strong>with <code>POST /subscriptions/{id}/charge</code> and <code>amount</code>. Send an <code>Idempotency-Key</code>. The amount is part of the key, so a retry must send the same amount.</li>
-      </ol>
-      <div class="callout warning">
-        <p class="callout-title">The scheduler question is open</p>
-        <p>Plorea's scheduler can also charge the subscription's fixed <code>amount</code> on <code>nextChargeAt</code>. How to prevent that was asked on 2026-11-17 and is not answered. <span class="badge open">Open question</span> Do not build on a pattern for it yet. See <a href="wishlist.html#scheduler-versus-manual-varying-charge">Gaps and proposals</a>.</p>
+      <p>What is settled:</p>
+      <ul>
+        <li><strong>Store the card as <code>Subscription</code>.</strong> Not <code>UnscheduledCardOnFile</code>. That type is for irregular timing, not a varying amount on a fixed schedule.</li>
+        <li><strong>Consent.</strong> When the customer stores the card, they accept that the amount varies.</li>
+        <li><strong>Advance notice.</strong> Tell the customer the amount before each charge. An invoice or a statement sent before the charge is enough.</li>
+        <li><strong>The key and the amount.</strong> With your own <code>Idempotency-Key</code>, a retry sends the same key and amount. The same key with another amount answers <code>409</code> and charges nothing. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> Without a key, the period and the amount form the key, so another amount in the same period is a second charge. <span class="badge stated">Stated 2026-11-17</span></li>
+      </ul>
+      <div class="callout danger">
+        <p class="callout-title">No safe pattern yet: the customer can pay twice</p>
+        <p>Do not create an active subscription and also charge it by hand each period. Plorea's scheduler still charges the subscription's fixed <code>amount</code> on <code>nextChargeAt</code>. How to stop that was asked on 2026-11-17 and is not answered. <span class="badge open">Open question</span> This recipe gives no steps until Plorea answers. See <a href="wishlist.html#scheduler-versus-manual-varying-charge">Gaps and proposals</a>.</p>
       </div>
 
       <!-- ================================================================ -->

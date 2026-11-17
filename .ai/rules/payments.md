@@ -187,8 +187,9 @@ sent as the `Idempotency-Key` header (max 128 chars; the SDK throws
 (`replayed: true`) and the two 409s ("reused with different parameters", "still
 in flight", both with `chargeId`) are **spec-documented, not observed**. Do not
 write docs that call them verified. Charge without a key: the period is the
-key. Refund without a key: every call is a new refund. The amount is part of
-the charge key (Stated by Plorea 2026-11-17). Only these two routes take the
+key. Refund without a key: every call is a new refund. Without a key the amount is
+part of the default charge key (Stated by Plorea 2026-11-17): another amount is
+a second charge. With an explicit key another amount is a 409, never a payment. Only these two routes take the
 header; `payments/link` still has none.
 
 ## No idempotency on duplicate references

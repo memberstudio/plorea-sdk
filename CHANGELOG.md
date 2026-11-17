@@ -22,6 +22,32 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   webhook route inside PHP, so the real signature check and the app's
   listeners run. Nothing goes over the network. It refuses in production and
   in live.
+- `subscriptions()->charge(..., idempotencyKey:)` and
+  `payments()->refund(..., idempotencyKey:)` send the `Idempotency-Key` header
+  (OpenAPI 0.36.0+). The SDK throws `InvalidArgumentException` for an empty
+  key or a key over 128 characters. The replay and the 409 answers are in the
+  spec but not observed. See `docs/errors.md#retries-and-idempotency`.
+- `RecordedRequest::$headers` and `RecordedRequest::header($name)` to assert
+  headers in tests.
+
+### Changed (breaking for custom clients)
+
+- `Contracts\Client::post()` takes a third parameter,
+  `array $headers = []`. A class that implements `Client`, or extends
+  `FakeClient` and overrides `post()`, must add it, or PHP gives a fatal
+  error when the class loads. Migration:
+  `public function post(string $uri, array $payload = [], array $headers = []): array`.
+  Callers are not affected.
+
+### Docs (Plorea field notes, 2026-11-17)
+
+- `merchantOrgNr` is the platform's own when the platform issues the invoice.
+  Without it, the payment settles to the tenant's default store (stated by
+  Plorea).
+- A varying amount on a fixed schedule is `Subscription`. There is no safe
+  pattern yet for charging it by hand: the scheduler question is open.
+- `refusalReason`, self-service allowed origins, wallets, and the spec's
+  revive and settle routes, each marked with its evidence level.
 
 ## v0.6.1 - 2026-10-20
 

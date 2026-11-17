@@ -120,7 +120,7 @@ pick one.
 | `status()`, `find()`, `charges()`, `forExternalId()` | Yes — reads |
 | `POST payments/link` | **No** — no idempotency; a retry can create a second live link |
 | `refund()` | Only with the *same* `idempotencyKey`. Without one, every call is a new refund |
-| `cancel()` | Yes, with the *same* `modificationReference` |
+| `cancel()` | **Unknown** — not confirmed to deduplicate. Read `status()` and check the cancel fields before a retry |
 | `subscriptions()->charge()` | Only with the *same* `idempotencyKey` **and** the same amount |
 | `create()` a subscription | **No** |
 
@@ -144,9 +144,10 @@ this SDK):
   charges. A replayed decline keeps its `refusalReason`. Without a key, the
   subscription's period is the key, so a manual charge and the scheduler's run
   for the same period are one charge.
-- **The amount is part of the key** (stated by Plorea, 2026-11-17). Two charges
-  with different amounts in one period are two charges. A retry must send the
-  same amount.
+- **Without a key, the amount is part of the default key** (stated by Plorea,
+  2026-11-17). Two charges with different amounts in one period are two
+  charges. With your own key, another amount gives the 409 above and charges
+  nothing. Do not record a 409 as money collected.
 - **Refund.** The key is scoped to the payment refunded. Without a key, every
   call gets a fresh one, so a double click refunds twice.
 

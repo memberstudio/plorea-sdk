@@ -166,7 +166,7 @@ const format = (ore) =&gt;
             <tr><td><code>POST /payments/cancel</code></td><td>With the same <code>modificationReference</code></td><td>The modification reference identifies the attempt. <span class="badge open">Open question</span>: Plorea has not confirmed that it rejects a repeat.</td></tr>
             <tr><td><code>POST /payments/link</code></td><td>No</td><td>A repeat creates a second payable link with the same reference. <span class="badge verified">Verified</span></td></tr>
             <tr><td><code>POST /subscriptions</code></td><td>No</td><td>A repeat creates a second subscription that bills the card again.</td></tr>
-            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>With the same <code>Idempotency-Key</code> and amount</td><td>Without a key, the period is the key. The amount is part of the key, so a retry must send the same amount. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td></tr>
+            <tr><td><code>POST /subscriptions/{id}/charge</code></td><td>With the same <code>Idempotency-Key</code> and amount</td><td>Without a key, the period and the amount are the key, so another amount is a new charge. With your own key, another amount answers <code>409</code> and charges nothing. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>

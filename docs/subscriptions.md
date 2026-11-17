@@ -352,24 +352,30 @@ Pass `idempotencyKey:` whenever a retry is possible. See
 Card network rules allow a fixed-schedule charge whose amount varies, such as
 a base price plus usage (stated by Plorea, 2026-11-17). Not observed by this SDK.
 
-1. Store the card with `RecurringType::Subscription`.
-2. Create a subscription on that payment method.
-3. Each period, charge that period's amount:
-   `charge($id, amount: Amount::nok(...), idempotencyKey: ...)`.
+What is settled:
 
-Two conditions:
-
+- Store the card with `RecurringType::Subscription`, not
+  `UnscheduledCardOnFile`.
 - **Consent.** The customer accepted, when the card was stored, that the
   amount varies.
 - **Advance notice.** Tell the customer the amount before the charge. An
   invoice or statement sent before the charge is enough.
 
-The amount is part of the idempotency key. A retry must send the same amount,
-or it bills again.
+> [!WARNING]
+> **There is no safe pattern yet.** Do not create an active subscription and
+> also charge it by hand each period. Plorea's scheduler still charges the
+> subscription's fixed `amount` on `nextChargeAt`, so the customer can pay
+> twice. How to stop the scheduler was asked on 2026-11-17 and is not
+> answered. Until Plorea answers, this page documents no pattern.
 
-**Open question (asked 2026-11-17):** how to stop Plorea's scheduler from also
-charging the subscription's fixed `amount` on `nextChargeAt` when you charge by
-hand each period. Until Plorea answers, this page documents no pattern for it.
+The amount and the key work together:
+
+- **Your own `idempotencyKey`.** A retry must send the same key and the same
+  amount. The same key with another amount gives `409` and charges nothing
+  (OpenAPI spec, not observed). A `409` is not a payment.
+- **No key.** The period and the amount form the key (stated by Plorea,
+  2026-11-17). A second call in the same period with another amount is a
+  second charge.
 
 ### History
 

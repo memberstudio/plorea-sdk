@@ -85,7 +85,8 @@ $existing = Plorea::subscriptions()->forExternalId((string) $membership->id)->fi
   `externalId` is unobserved, so do not rely on it.
 
 Manual charges take an idempotency key. Reuse it, with the same amount, on a
-retry; the amount is part of the key:
+retry. The same key with another amount gives 409 and charges nothing; without a
+key, another amount in the same period is a second charge:
 
 ```php
 Plorea::subscriptions()->charge($id, amount: Amount::nok(4900), idempotencyKey: "{$id}-2026-11");

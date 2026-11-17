@@ -58,7 +58,9 @@ When your platform is the merchant:
 - Your company is onboarded like any merchant: KYC, its own store, card
   methods switched on. Until card methods are live, link creation answers 422.
 
-The Plorea API accepts a link without it and only fails later, so the SDK
+The Plorea API accepts a link without it and even opens a checkout session
+(verified). Where that money goes was not observed; Plorea states it settles to
+the tenant's default store (2026-11-17), not to the merchant. So the SDK
 refuses to create one: `create()` throws `PloreaException` when the org number
 is missing. That is a deliberate divergence from the API — a link that cannot
 be paid out is worse than a loud failure at creation time.

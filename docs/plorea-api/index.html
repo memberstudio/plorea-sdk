@@ -113,7 +113,7 @@ const payment = await res.json();</code></pre></div>
       <p>Plorea asks each integrator to identify itself with a <code>platform</code> value. Send it in the JSON body on <code>POST</code> and <code>PATCH</code>, and in the query string on <code>GET</code>. Plorea uses it for reporting only. It changes no behaviour. <span class="badge stated">Stated by Plorea</span></p>
 
       <h3>References are yours</h3>
-      <p>You choose the <code>reference</code> of a payment. Make it unique per payment attempt. Link create does not deduplicate: two calls with the same reference create two payable links. Only charge and refund take an idempotency key. See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>. <span class="badge verified">Verified</span></p>
+      <p>You choose the <code>reference</code> of a payment. Make it unique per payment attempt. Link create does not deduplicate: two calls with the same reference create two payable links. <span class="badge verified">Verified</span> Only charge and refund take an idempotency key. <span class="badge stated">In the spec</span> <span class="badge unobserved">Unobserved</span> See <a href="errors.html#retries-and-idempotency">Retries and idempotency</a>.</p>
 
       <h3>Tenants and customers</h3>
       <p>A <code>tenantId</code> groups data for one of your own customers, for example one club or one shop. A <code>customerId</code> identifies the paying person inside that tenant. Plorea scopes stored cards and subscriptions by both. A call that mixes the IDs of two tenants fails with <code>403 Tenant mismatch</code>.</p>
