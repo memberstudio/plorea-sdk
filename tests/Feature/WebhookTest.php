@@ -371,6 +371,55 @@ class WebhookTest extends TestCase
         Event::assertNotDispatched(WebhookReceived::class);
     }
 
+    /**
+     * During a secret rotation Plorea signs the body twice: the current
+     * secret in X-Plorea-Signature, the next in X-Plorea-Signature-Next.
+     * The app holds one of them, so either header may be the one that
+     * verifies.
+     */
+    public function test_it_accepts_a_rotation_delivery_that_verifies_under_either_header(): void
+    {
+        Event::fake([WebhookReceived::class]);
+
+        $payload = $this->fixture('webhook-payment-authorised');
+
+        // The app still holds the current secret.
+        $this->postJson('/plorea/webhook', $payload, [
+            'X-Plorea-Signature' => $this->signatureFor($payload),
+            'X-Plorea-Signature-Next' => $this->signatureFor($payload, 'whsec_next'),
+        ])->assertOk();
+
+        // The app has switched to the next secret before Plorea finished the rotation.
+        config()->set('plorea.webhooks.secret', 'whsec_next');
+
+        $this->postJson('/plorea/webhook', $payload, [
+            'X-Plorea-Signature' => $this->signatureFor($payload, 'whsec_test'),
+            'X-Plorea-Signature-Next' => $this->signatureFor($payload, 'whsec_next'),
+        ])->assertOk();
+
+        Event::assertDispatchedTimes(WebhookReceived::class, 2);
+    }
+
+    public function test_it_rejects_a_rotation_delivery_when_neither_header_verifies(): void
+    {
+        Event::fake([WebhookReceived::class]);
+
+        $payload = $this->fixture('webhook-payment-authorised');
+
+        $this->postJson('/plorea/webhook', $payload, [
+            'X-Plorea-Signature' => $this->signatureFor($payload, 'whsec_old'),
+            'X-Plorea-Signature-Next' => $this->signatureFor($payload, 'whsec_next'),
+        ])->assertForbidden();
+
+        // A next-signature alone is still a signed request: the echoed secret cannot rescue it.
+        $this->postJson('/plorea/webhook', $payload, [
+            'X-Plorea-Signature-Next' => $this->signatureFor($payload, 'whsec_next'),
+            'Authorization' => 'whsec_test',
+        ])->assertForbidden();
+
+        Event::assertNotDispatched(WebhookReceived::class);
+    }
+
     public function test_the_signature_wins_over_the_authorization_header_when_both_are_present(): void
     {
         Event::fake([WebhookReceived::class]);

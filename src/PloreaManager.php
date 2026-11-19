@@ -15,6 +15,7 @@ use MemberFlow\Plorea\Resources\PayByLinkResource;
 use MemberFlow\Plorea\Resources\PaymentMethodResource;
 use MemberFlow\Plorea\Resources\PaymentResource;
 use MemberFlow\Plorea\Resources\SubscriptionResource;
+use MemberFlow\Plorea\Resources\TransactionResource;
 use MemberFlow\Plorea\Testing\FakeClient;
 use MemberFlow\Plorea\Testing\RecordedRequest;
 
@@ -46,6 +47,14 @@ class PloreaManager
     public function subscriptions(): SubscriptionResource
     {
         return new SubscriptionResource($this->client(), $this->config());
+    }
+
+    /**
+     * The tenant's payment rows, page by page.
+     */
+    public function transactions(): TransactionResource
+    {
+        return new TransactionResource($this->client(), $this->config());
     }
 
     /**

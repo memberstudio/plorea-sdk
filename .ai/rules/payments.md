@@ -22,8 +22,10 @@ major-unit constructor, on purpose.
   used it, so any `is('refused')` written from them was dead code.
 - `refund_requested` / `cancel_requested` appear immediately after
   `payments/refund` / `payments/cancel` and persist until the provider settles.
-- **UNOBSERVED:** `captured`, `paid`, the post-settlement `refunded` /
-  `cancelled`, and any chargeback status. Plorea has published no complete
+- **VERIFIED 2026-11-09 (test):** `refunded`, `refund_failed` and
+  `cancelled` (a withdrawn link). Fixtures `payment-status-fully-refunded`,
+  `payment-status-refund-failed`, `cancel-payment-link-withdrawn`.
+- **UNOBSERVED:** `captured`, `paid`, and any chargeback status. Plorea has published no complete
   status enum. Do not model a state machine on strings nobody has seen.
 - `expired` has **never** been observed live. Judge expiry from the pay-page
   endpoint's computed `expired` flag or the stored `expiresAt`, never the
@@ -64,8 +66,24 @@ Status-body keys verified identical across three independent captures
 (2026-09-09): 29 keys, all read by `PaymentStatus`. **`lastRefundStatus` does
 not exist** — a report that it did turned out to be a `jq` null-read of a
 missing key. Bodies seen since 2026-10-06 (test) also carry `refusalReason`
-and `refundedTotal` (minor units). `PaymentStatus` does not type them yet;
-they are in `$raw`. Do not add them without a fixture.
+and `refundedTotal` (minor units). Since API 0.31 (fixtures of 2026-11-09)
+`PaymentStatus` types them, plus `refundable` (`Refundability`),
+`settledChargeTotal`, `merchantOrgNr` and, on charges, `reason`,
+`retryNumber` and `failureReason`. `settledBy`, `settledAt` and the
+`settledCharges` items stay untyped in `$raw`: the spec does not list them.
+
+`status()` takes an optional `tenantId` query. Another tenant's reference
+answers `404` (VERIFIED 2026-11-09, test).
+
+### `refundable` answers "can I refund now?" — VERIFIED 2026-11-09 (test)
+
+`canRequestRefund()` reads `refundable.canRequest`. A fully refunded payment
+answers `false` with `reason` "The whole payment has already been
+refunded.". `remainingAmount` is what a refund may still take.
+`mayStillFail` is Plorea's own warning: a payment settled to a sub-merchant
+is refused with `409` when its balance account cannot be resolved. A
+partially refunded payment kept `status: refund_requested` while
+`refundStatus` read `partially_refunded`: read `refundStatus`, not `status`.
 
 ### Partial and full refunds on `authorised` — VERIFIED 2026-10-09 (test)
 
@@ -104,6 +122,9 @@ money stays captured. Keep the booking reversible, or mark it "requested".
   So read `PaymentStatus::$refunds` / `$refundedTotal` when present, and fall
   back to `lastRefund*`.
 - **No `payment.refunded` webhook arrived** for that refund. Poll `status()`.
+- **Changed in API 0.31:** cancel on a captured charge now answers `409`
+  "Charge has been captured; use refund" (`PaymentAlreadyCapturedException`,
+  VERIFIED 2026-11-09, test). The history below is kept.
 - `POST payments/cancel` on the already charged charge was **not** refused
   with `409`, contrary to what Plorea stated. It answered `cancel_requested`.
   Adyen refused it (`webhookEventCode: CANCELLATION`, `webhookSuccess: false`),
@@ -134,8 +155,9 @@ was authorised. Reproduced twice, on two separate links.
   `updatedAt` and `lastWebhookAt` move. No count, amount or psp of the second
   payment appears.
 - A full refund targets the first psp (`paymentPspReference` = first). A second
-  full refund fails with `422` `ValidationException` "Refund amount exceeds
-  original payment amount": `refundedTotal` caps refunds per reference at the
+  full refund failed with `422` "Refund amount exceeds original payment
+  amount" (2026-10-17; since API 0.31 it is `400` with the amounts, thrown as
+  `RefundAmountExceededException`, VERIFIED 2026-11-09): `refundedTotal` caps refunds per reference at the
   link amount. **The second payment cannot be refunded through the API.**
 
 **Declined, then paid: status and refund point at the declined try.** First
@@ -210,7 +232,9 @@ They appear only on `pay/{id}`, which also gains a populated `partnerSplits`
 once a merchant is attached.
 
 First payment for a new org nr auto-starts KYC; payout is released on approval
-(1–5 business days). The earlier "Invalid Store" / 422 at session time was
+(1–5 business days). Since API 0.31, `GET partners/merchants/{orgNr}` reads
+KYC, store and card-method state, and `POST partners/merchants` starts
+onboarding. See `partners-and-transactions.md`. The earlier "Invalid Store" / 422 at session time was
 resolved by Plorea on 2026-08-30 (verified the same day: a retest link
 on a fresh org nr created, and a session issued for it).
 
@@ -433,3 +457,29 @@ the problem, so it reads as a bad API key and sends you hunting the wrong bug.
 no call through the SDK can hit it — **do not move that header to individual
 resources.** The trap is for raw `curl` reproductions of an SDK request.
 `test_it_requests_a_refund` pins it.
+
+## Cancel in API 0.31: withdraw a link, refuse a capture — VERIFIED 2026-11-09 (test)
+
+- **Unpaid link:** `payments/cancel` withdraws it. The body is `{status:
+  "cancelled", reference, paymentLinkId, orderId, amount, currency,
+  cancelledAt, environment}`; `isLinkWithdrawn()` is true. A second cancel
+  answers the same with `alreadyCancelled: true`.
+- After that, `GET pay/{id}` answers `410` and `payments/session` answers
+  `400`, both with `cancelledAt`. Both throw
+  `PaymentLinkCancelledException`. Fixtures `pay-page-cancelled`,
+  `payment-session-link-cancelled`.
+- **Captured payment or charge:** `409`, `PaymentAlreadyCapturedException`.
+  The messages differ: "Payment has been captured; use /payments/refund" and
+  "Charge has been captured; use refund". Match on the class, never on the
+  message. The body carries `status` (`authorised`), read through
+  `paymentStatus()`. The SDK routes a 409 to this class only when the
+  message also contains "captured": the unobserved balance-account 409 may
+  carry the same fields. Likewise a withdrawn link needs a string
+  `cancelledAt`, not just the key.
+- **Refund over the remaining amount:** `400` (was `422`) with
+  `originalAmount`, `alreadyRefunded`, `requestedAmount`, `remainingAmount`
+  and `currency`: `RefundAmountExceededException`. Fixture
+  `refund-amount-exceeded`. The `422` split body and the `409`
+  balance-account body in the spec are **UNOBSERVED**; they fall through to
+  the generic exceptions.
+- `refund()` takes an optional `tenantId` in the body.

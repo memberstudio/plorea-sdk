@@ -64,7 +64,7 @@ sequenceDiagram
       <p>Test and live may share one signing secret. Confirm this with Plorea for your account. <span class="badge stated">Stated by Plorea</span></p>
 
       <h2>Request headers</h2>
-      <p>Each delivery carries three Plorea headers. A real delivery has <strong>no</strong> <code>Authorization</code> header. <span class="badge verified">Verified</span></p>
+      <p>Each delivery carries three Plorea headers. A real delivery has <strong>no</strong> <code>Authorization</code> header. <span class="badge verified">Verified</span> Spec 0.31 adds two more headers. We have not captured them. <span class="badge stated">Spec 0.31</span></p>
       <div class="table-wrap">
         <table class="params">
           <thead><tr><th>Header</th><th>Content</th></tr></thead>
@@ -72,6 +72,8 @@ sequenceDiagram
             <tr><td><code>x-plorea-signature</code></td><td>Base64-encoded HMAC-SHA256 of the raw request body, keyed with your signing secret. 44 characters.</td></tr>
             <tr><td><code>x-plorea-event-id</code></td><td><code>evt_</code> followed by 32 hex characters. The same value as <code>eventId</code> in the body.</td></tr>
             <tr><td><code>x-plorea-event</code></td><td>The event type, for example <code>payment.authorised</code>. The same value as <code>type</code> in the body.</td></tr>
+            <tr><td><code>X-Plorea-Delivery-Attempt</code></td><td>The try number. It counts from 1. It is not signed: log it, but never deduplicate on it. <span class="badge stated">Spec 0.31</span></td></tr>
+            <tr><td><code>X-Plorea-Signature-Next</code></td><td>Only during a secret rotation. The same HMAC under the next secret. See <a href="#rotate-the-secret">Rotate the secret</a>. <span class="badge stated">Spec 0.31</span></td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr>
           </tbody>
         </table>
@@ -98,7 +100,7 @@ sequenceDiagram
       </dl>
 
       <h2>Event catalogue</h2>
-      <p>Plorea confirmed four event types. More are planned, so accept and log types you do not know. <span class="badge stated">Stated by Plorea</span> A fifth type, <code>subscription.charge_failed</code>, is not in Plorea's catalogue but is delivered. <span class="badge verified">Verified</span></p>
+      <p>Plorea confirmed four event types in September 2026. A fifth type, <code>subscription.charge_failed</code>, was not in that catalogue but is delivered. <span class="badge verified">Verified</span> Spec 0.31 (November 2026) lists twelve types. The extra types below are <strong>not captured</strong>. Accept and log types you do not know. <span class="badge stated">Spec 0.31</span></p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Sent when</th><th>Evidence</th></tr></thead>
@@ -107,11 +109,19 @@ sequenceDiagram
             <tr><td><code>payment.failed</code></td><td>Adyen declines an authorisation.</td><td><span class="badge verified">Verified</span></td></tr>
             <tr><td><code>payment.refunded</code></td><td>A refund settles.</td><td><span class="badge stated">Stated by Plorea</span> Seen once after a refund settled; payload not captured.</td></tr>
             <tr><td><code>subscription.charge_succeeded</code></td><td>The <strong>scheduler</strong> charges a subscription.</td><td><span class="badge verified">Verified</span></td></tr>
-            <tr><td><code>subscription.charge_failed</code></td><td>A <strong>scheduler</strong> charge fails. Not in Plorea's catalogue.</td><td><span class="badge verified">Verified</span> Captured 2026-10-01 and 2026-10-06.</td></tr>
+            <tr><td><code>subscription.charge_failed</code></td><td>A <strong>scheduler</strong> charge fails. In the catalogue since spec 0.31.</td><td><span class="badge verified">Verified</span> Captured 2026-10-01 and 2026-10-06.</td></tr>
+            <tr><td><code>payment.captured</code></td><td>Listed in the spec. Capture is automatic.</td><td><span class="badge stated">Spec 0.31</span> Not captured.</td></tr>
+            <tr><td><code>payment.refund_failed</code></td><td>A refund fails.</td><td><span class="badge stated">Spec 0.31</span> Not captured. The status endpoint showed <code>refund_failed</code> in test.</td></tr>
+            <tr><td><code>payment.cancelled</code></td><td>A cancellation settles.</td><td><span class="badge stated">Spec 0.31</span> Not captured.</td></tr>
+            <tr><td><code>payment.cancel_failed</code></td><td>A cancellation fails.</td><td><span class="badge stated">Spec 0.31</span> Not captured.</td></tr>
+            <tr><td><code>payment.cancelled_or_refunded</code></td><td>Adyen cancelled or refunded the payment, whichever applied.</td><td><span class="badge stated">Spec 0.31</span> Not captured.</td></tr>
+            <tr><td><code>payment.updated</code></td><td>Chargebacks and split refunds. <code>data.status</code> tells them apart.</td><td><span class="badge stated">Spec 0.31</span> Not captured.</td></tr>
+            <tr><td><code>subscription.trial_will_end</code></td><td>Before the first charge after a trial. Opt-in per tenant.</td><td><span class="badge stated">Spec 0.31</span> Not captured. See <a href="#subscription-trial-will-end">below</a>.</td></tr>
           </tbody>
         </table>
       </div>
-      <p>A decline is <code>payment.failed</code>. The string <code>payment.refused</code> never appears. No <code>payment.captured</code> event exists, because capture is automatic and invisible to the API. See <a href="payment-lifecycle.html">Payment lifecycle and states</a>. <span class="badge verified">Verified</span></p>
+      <p>A decline is <code>payment.failed</code>. The string <code>payment.refused</code> never appears. Capture is automatic and invisible to the API. <span class="badge verified">Verified</span> Spec 0.31 lists <code>payment.captured</code>, but we have never received it. <span class="badge unobserved">Unobserved</span> See <a href="payment-lifecycle.html">Payment lifecycle and states</a>.</p>
+      <p>The PHP SDK raises <code>PaymentStatusUpdated</code> for every <code>payment.*</code> type. The spec-only types use the shared envelope. Re-read the status before you act.</p>
 
       <h3>payment.authorised</h3>
       <p>The <code>data</code> object is a strict subset of the <a href="api-reference.html#get-payment-status">payment status</a> body. It has no <code>merchantAccount</code>, <code>balanceAccountId</code>, <code>store</code> or <code>splitsEnabled</code>, no <code>lastRefund*</code> or <code>lastCancel*</code> fields, and no payment timestamps. <code>amount</code> is a flat integer in øre. <span class="badge verified">Verified</span></p>
@@ -254,10 +264,34 @@ sequenceDiagram
         <li><code>failureReason</code> is the provider's free text. Show it. Never branch on it.</li>
         <li>Read the retry date from <code>GET /subscriptions/{id}</code>. The payload does not carry it.</li>
       </ul>
+      <h3 id="prorated-charge-fields">Prorated charge fields</h3>
+      <p>Spec 0.31 adds three fields to <code>subscription.charge_succeeded</code> and <code>subscription.charge_failed</code> when a charge is not a whole period. That is the first charge of a subscription with a <code>billingAnchor</code>. <span class="badge stated">Spec 0.31</span></p>
+      <dl class="fields">
+        <dt>prorated <span class="type">boolean</span></dt>
+        <dd><code>true</code>. Absent on an ordinary charge.</dd>
+        <dt>periodStart <span class="type">string</span></dt>
+        <dd>The start of the part-period that the charge covers.</dd>
+        <dt>periodEnd <span class="type">string</span></dt>
+        <dd>The end of the part-period. This is the first anchored charge date.</dd>
+      </dl>
+      <p>On these events <code>amount</code> is the stub amount that was charged. Do not assume that it equals the subscription amount. In test, <code>billingAnchor</code> was ignored on 2026-11-09, so no prorated charge was made. <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="field-notes.html#trial-anchor-proration-ignored">Field notes</a>.</p>
+
       <div class="callout warning">
         <p class="callout-title">Keep polling anyway</p>
         <p>A lost delivery is not sent again, and a billing cycle that stalls without a failure sends nothing. Use this event to start dunning sooner. Keep the <a href="#reconcile-by-polling">reconciliation job</a> as the safety net.</p>
       </div>
+
+      <h3 id="subscription-trial-will-end">subscription.trial_will_end</h3>
+      <p>Spec 0.31 describes this event. We have not received it. <span class="badge stated">Spec 0.31</span></p>
+      <ul>
+        <li>Plorea sends it once per subscription, before the first charge after a trial.</li>
+        <li>It is opt-in per tenant and per environment. Ask Plorea to set <code>notifications.trialWillEnd</code> to <code>true</code>. A tenant without the flag receives nothing.</li>
+        <li><code>notifications.trialWillEndDays</code> sets the days before the charge. The default is 3. The range is 1–30.</li>
+        <li>It is sent at most once. Plorea flags the subscription before it queues the event. A queue failure after the flag loses the notice. Do not rely on it for billing.</li>
+        <li><code>data</code> has <code>subscriptionId</code>, <code>customerId</code>, <code>shopperReference</code>, <code>externalId</code>, <code>trialEndsAt</code>, <code>chargeAt</code>, <code>amount</code>, <code>vatAmount</code>, <code>prorated</code>, <code>daysBefore</code>, <code>merchantOrgNr</code> and <code>environment</code>. It adds <code>periodStart</code> and <code>periodEnd</code> when the charge is prorated.</li>
+        <li><code>amount</code> is the amount that will be charged. It is not always the subscription amount.</li>
+      </ul>
+      <p>In test, <code>trialDays</code> was ignored on 2026-11-09: the subscription was <code>active</code> with an immediate charge date. So this event cannot be tested yet. <span class="badge verified">Verified 2026-11-09 (test)</span> The PHP SDK raises only <code>WebhookReceived</code> for it.</p>
 
       <h2 id="what-is-not-sent">What is not sent</h2>
       <p>Plorea sends <strong>no</strong> webhook for the transitions below. You must poll for them. <span class="badge stated">Stated by Plorea</span> Plorea also listed a failed scheduler charge here, but <a href="#subscription-charge-failed"><code>subscription.charge_failed</code></a> was captured since.</p>
@@ -272,13 +306,13 @@ sequenceDiagram
             <tr><td>Payment method deleted</td><td>The <code>DELETE</code> call returns the new state synchronously.</td></tr>
             <tr><td>A billing cycle stalls without a failure</td><td>Poll <code>GET /subscriptions/{id}</code>. Compare <code>nextChargeAt</code> with now. See <a href="dunning.html">Failed charges and dunning</a>.</td></tr>
             <tr><td>A payment link expires</td><td>The status never reports <code>expired</code>. Use <code>expiresAt</code> from the create response, or <code>expired</code> on <code>GET /pay/{id}</code>.</td></tr>
-            <tr><td>A cancellation settles</td><td>No <code>payment.cancelled</code> event is known. Poll the status. <span class="badge open">Open question</span></td></tr>
+            <tr><td>A cancellation settles</td><td>Spec 0.31 lists <code>payment.cancelled</code>, but we have not received it. Poll the status. <span class="badge unobserved">Unobserved</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout gap">
-        <p class="callout-title">Gap: the failure event is not documented</p>
-        <p><code>subscription.charge_failed</code> is sent but is not in Plorea's catalogue. Its behaviour on retries and on the last retry is unknown. A documented event, with a final event when retries run out, would let integrators trust it. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
+        <p class="callout-title">Gap: the failure event's retry behaviour is not documented</p>
+        <p><code>subscription.charge_failed</code> is in the catalogue since spec 0.31. <span class="badge stated">Spec 0.31</span> Its behaviour on retries and on the last retry is unknown. A documented event, with a final event when retries run out, would let integrators trust it. <span class="badge proposal">Proposal</span> See <a href="wishlist.html">Gaps and proposals</a>.</p>
       </div>
 
       <h2>Verify the signature</h2>
@@ -367,6 +401,15 @@ app.post('/plorea/webhook', express.raw({ type: 'application/json' }), async (re
 });</code></pre></div>
       </div>
 
+      <h3 id="rotate-the-secret">Rotate the secret</h3>
+      <p>Spec 0.31 describes a secret rotation. We have not seen a rotation. <span class="badge stated">Spec 0.31</span> During a rotation, each delivery has a second header, <code>X-Plorea-Signature-Next</code>. It holds the same HMAC under the next secret.</p>
+      <ol class="steps">
+        <li><strong>Plorea starts the rotation</strong>Plorea sends you the new secret. Both headers arrive from then on.</li>
+        <li><strong>You switch to the new secret</strong>Verify <code>X-Plorea-Signature-Next</code> at your own pace. Tell Plorea when you are done.</li>
+        <li><strong>Plorea finishes the rotation</strong>The new secret becomes the only secret. The second header stops.</li>
+      </ol>
+      <p>Accept a delivery when the body verifies against <strong>either</strong> header. Then you are ready for a rotation that nobody told you about. The Laravel SDK's middleware does this, so you can change <code>PLOREA_WEBHOOK_SECRET</code> at any point in step 2.</p>
+
       <h2>Respond fast with 2xx</h2>
       <p>Return <code>200</code> as soon as you have verified and stored the delivery. Do slow work in a background job.</p>
       <div class="callout danger">
@@ -377,13 +420,14 @@ app.post('/plorea/webhook', express.raw({ type: 'application/json' }), async (re
           <li>Store the raw event first. Retry your own processing from what you stored.</li>
           <li>Run the reconciliation job below.</li>
         </ul>
+        <p>Spec 0.31 describes retries: a failed delivery retries its whole batch, and <code>X-Plorea-Delivery-Attempt</code> counts the tries. An event that already reached your endpoint is no longer sent again when another event in its batch fails. <span class="badge stated">Spec 0.31</span> We have not seen a retry. Keep the advice above until a retry is observed. <span class="badge unobserved">Unobserved</span></p>
       </div>
       <p>The Laravel SDK's controller answers <code>200 [accepted]</code> to a verified delivery, also to a body it cannot parse. It dispatches your listeners <strong>before</strong> it answers. A synchronous listener that throws turns the answer into a <code>500</code>, and Plorea does not redeliver. Keep listeners small: store the event and queue the work. Implement <code>ShouldQueue</code> on a listener class, or dispatch a job from the closure.</p>
 
       <h2>Deduplicate on eventId</h2>
       <p>The same event can arrive more than once. A webhook, a status poll and the customer's return page can also race on the same payment. Make every handler idempotent.</p>
       <ul>
-        <li>Store <code>eventId</code> from the <strong>body</strong> with a unique constraint.</li>
+        <li>Store <code>eventId</code> from the <strong>body</strong> with a unique constraint. The spec says to deduplicate on <code>X-Plorea-Event-Id</code>. Use the body copy: only the body is signed.</li>
         <li>Keep "received" and "processed" apart. Set <code>processed_at</code> only after the work succeeds. Skip an event only when it is processed. Retry unprocessed events from a scheduled job.</li>
         <li>Book money idempotently on the payment <code>reference</code>, not on the event.</li>
       </ul>

@@ -153,10 +153,25 @@ Use the helpers, not string comparison. Observed statuses:
 | Open | `created`, `pending`, `active` |
 | Paid | `authorised` — the only success state ever observed, in test and live. `paid` is handled defensively and has never been seen |
 | Modification pending | `refund_requested`, `cancel_requested` |
-| Terminal | `failed` (refused by the acquirer). `cancelled` and `refunded` are what Plorea says settlement produces; neither has been observed |
+| Terminal | `failed` (refused by the acquirer), `refunded`, `refund_failed`, `cancelled` (all three observed in test 2026-11-09) |
 
-`captured`, `paid`, the post-settlement statuses and any chargeback status are
-all unobserved, and Plorea has published no complete status enum.
+`captured`, `paid` and any chargeback status are unobserved.
+
+### Can I refund now?
+
+Since API 0.31 the status carries `refundable`:
+
+```php
+$status = Plorea::payments()->status('FIN-2026-00123');
+
+$status->canRequestRefund();          // false when nothing is left, or the payment is not refundable
+$status->refundable?->remainingAmount; // an Amount, or null
+$status->refundable?->reason;          // why not, in Plorea's words
+```
+
+A partial refund reads `refund_requested` with `refundStatus:
+"partially_refunded"`. `status()` takes an optional `tenantId`; another
+tenant's reference is a `NotFoundException`.
 
 A refusal is the one that surprises people: **a declined payment reports
 `failed`, not `refused`** — captured 2026-09-09 from a real payment link taken
@@ -210,6 +225,16 @@ Plorea::payments()->cancel('FIN-2026-00123', 'FIN-2026-00123-cancel-1');
 ```
 
 Cancel a payment that has not settled; refund one that has.
+
+Since API 0.31 (verified 2026-11-09, test):
+
+- `cancel()` on an **unpaid link withdraws it**. The `PaymentCancellation`
+  reads `cancelled` and `isLinkWithdrawn()` is true. The pay page then answers
+  `410` and the session `400`: `PaymentLinkCancelledException`.
+- `cancel()` on a **captured** payment or subscription charge throws
+  `PaymentAlreadyCapturedException` (`409`). Refund instead.
+- `refund()` for more than is left throws `RefundAmountExceededException`
+  (`400`) with the amounts. See [Errors](errors.md#refund-and-cancel-refusals).
 
 A refund on a payment that still reads `authorised` stays a refund — it is not
 turned into a cancel. Verified 2026-10-09 (test) for both a partial refund

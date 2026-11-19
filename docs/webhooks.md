@@ -60,6 +60,8 @@ authenticated with an echoed header. Each request carries:
 | `X-Plorea-Signature` | base64-encoded HMAC-SHA256 of the **raw request body** |
 | `x-plorea-event-id` | `evt_` + 32 hex characters |
 | `x-plorea-event` | the event type, e.g. `payment.authorised` |
+| `X-Plorea-Signature-Next` | during a secret rotation only: the same HMAC under the next secret (API 0.31 spec; no rotation observed yet) |
+| `X-Plorea-Delivery-Attempt` | the try number (API 0.31 spec). Not signed: log it, never deduplicate on it |
 
 There is **no** `Authorization` header on a real delivery.
 
@@ -68,6 +70,11 @@ The middleware verifies the signature against `PLOREA_WEBHOOK_SECRET` with
 `Authorization` header against the secret verbatim (optionally `Bearer`-prefixed),
 for registrations that use an echoed shared secret instead. **It fails closed**:
 with no secret configured, every request is rejected.
+
+**Secret rotation.** A delivery passes when either `X-Plorea-Signature` or
+`X-Plorea-Signature-Next` verifies against `PLOREA_WEBHOOK_SECRET`. Switch the
+variable to the new secret at any point during Plorea's rotation; no delivery
+is dropped.
 
 `PLOREA_WEBHOOK_SECRET` is used as the HMAC key **verbatim** — the characters
 of the secret as Plorea gives them to you, not the bytes they spell.
@@ -97,16 +104,22 @@ catastrophic, which is another reason to follow it.
 
 ## The event catalogue
 
-Confirmed by Plorea on 2026-09-09. More types are planned, so treat the list as
-open.
+Confirmed by Plorea on 2026-09-09 and extended in the API 0.31 spec. Treat
+the list as open.
 
 | Plorea type | SDK event | Observed on the wire |
 | --- | --- | --- |
 | `payment.authorised` | `PaymentStatusUpdated` | Yes |
 | `payment.failed` | `PaymentStatusUpdated` | Yes |
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
+| `payment.captured`, `payment.refund_failed`, `payment.cancelled`, `payment.cancel_failed`, `payment.cancelled_or_refunded` | `PaymentStatusUpdated` | No — API 0.31 spec, routed on the shared envelope |
+| `payment.updated` | `PaymentStatusUpdated` | No — chargebacks and split refunds; `data.status` tells them apart |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
-| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes — sent (live events, at the test URL), though not in Plorea's catalogue |
+| `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes — sent (live events, at the test URL) |
+| `subscription.trial_will_end` | `WebhookReceived` only | No — API 0.31 spec, opt-in per tenant |
+
+Every `payment.*` type raises `PaymentStatusUpdated`. Do not branch on the type
+alone: read the status from the API.
 
 The type string is what you would expect from the status endpoint, not from
 the English: a refusal is `payment.failed`, never `payment.refused`.
@@ -211,8 +224,8 @@ hand. The decline payload has no `refusalReason`; that exists only on the
 status endpoint. See [api-behaviour.md](api-behaviour.md).
 
 `$event->eventId` and `$event->type` carry the delivery's own identity — the
-catalogue type (`payment.authorised`, `payment.failed`, `payment.refunded`) and
-the id to deduplicate on. Both are read from the signed body.
+catalogue type (for example `payment.authorised`, `payment.failed`,
+`payment.refunded`) and the id to deduplicate on. Both are read from the signed body.
 
 ## Subscriptions
 

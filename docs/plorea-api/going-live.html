@@ -53,7 +53,7 @@ PLOREA_ADYEN_CLIENT_KEY=live_...    # only for embedded checkout</code></pre>
         <p>After deploy, create one link and confirm that the response reads <code>"environment": "live"</code>. We have not observed a live value ourselves. <span class="badge open">Open question</span></p>
       </div>
 
-      <h2>2. Merchants, KYC and payouts</h2>
+      <h2 id="kyc">2. Merchants, KYC and payouts</h2>
       <p>The <code>merchantOrgNr</code> decides who receives the money. Set it to the organisation number of the company that issues the invoice, not your own.</p>
       <ul>
         <li><strong>Send <code>merchantOrgNr</code> on every payment link and subscription.</strong> Plorea requires it by contract. <span class="badge stated">Stated by Plorea</span> The API does not enforce it on payment links: a link without it is accepted. <span class="badge verified">Verified</span> Enforce it in your own code.</li>

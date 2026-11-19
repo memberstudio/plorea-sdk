@@ -48,6 +48,14 @@ body))` matched the header; the `hex2bin($secret)`-as-key variant did **not**.
 
 **The middleware is correct as written — do not "fix" the key handling.**
 
+**Rotation (API 0.31 spec, UNOBSERVED):** Plorea also sends
+`X-Plorea-Signature-Next`, the same HMAC under the next secret. The middleware
+accepts a delivery when either header verifies against the one configured
+secret. Do not require both headers, and do not make the app hold two secrets:
+one secret switched at any moment is the design. `WebhookTest` pins both
+directions. `X-Plorea-Delivery-Attempt` is not signed: log it, never
+deduplicate on it.
+
 The check ran inside a consuming app, which is where the secret lives. Only a match/no-match
 verdict crossed over; see [security.md](security.md) for why there is no golden
 fixture for this and why that is deliberate.
@@ -65,6 +73,15 @@ payload still looks perfectly valid.
 | `payment.refunded` | `PaymentStatusUpdated` | No — routed on the shared envelope |
 | `subscription.charge_succeeded` | `SubscriptionChargeSucceeded` | Yes |
 | `subscription.charge_failed` | `SubscriptionChargeFailed` | Yes (live events, delivered to the test URL, 2026-10-01 to 2026-10-08) — **not** in Plorea's catalogue |
+
+**API 0.31 (spec of 2026-11) adds** `payment.captured`, `payment.refund_failed`,
+`payment.cancelled`, `payment.cancel_failed`, `payment.cancelled_or_refunded`,
+`payment.updated` (chargebacks and split refunds, told apart by `data.status`)
+and `subscription.trial_will_end` (opt-in per tenant). **None is captured.**
+Every `payment.*` type raises `PaymentStatusUpdated` on the shared envelope, so
+the new payment types need no new dispatch. `subscription.trial_will_end`
+reaches `WebhookReceived` only. Do not add a typed event for it without a
+fixture.
 
 Everything else reaches consumers through `WebhookReceived` **only**. The SDK
 does not invent typed events for shapes nobody has seen.

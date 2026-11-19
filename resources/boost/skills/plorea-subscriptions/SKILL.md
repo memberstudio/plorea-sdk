@@ -69,6 +69,12 @@ $membership->update(['plorea_subscription_id' => $subscription->id]);
   return `merchantOrgNr` (charge items do not); still store it on your own
   record when you create. Not nine digits is a `ValidationException`. One stored card can back
   subscriptions for different companies under the same tenant.
+- **Check the merchant first.** Read `Plorea::merchants()->status($orgNr)` and
+  check current KYC, `storeId` and the `cardMethods` step (live only).
+  A live subscription for a merchant with approved KYC
+  but no store was never charged (2026-11-06 to 2026-11-09).
+- **Do not use `trialDays`, `billingAnchor` or `proration`** (API 0.31). Test
+  ignored all three on 2026-11-09; the SDK does not send them.
 - **Guard against creating it twice.** Write the local record before calling
   Plorea. If the call times out or the request is repeated, look before you
   create again:

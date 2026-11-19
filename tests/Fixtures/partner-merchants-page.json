@@ -1,0 +1,185 @@
+{
+    "tenantId": "test-tenant",
+    "count": 3,
+    "nextCursor": "dGVzdC1nb2xkZW4tbWVyY2hhbnQtY3Vyc29y",
+    "kycDeferred": 0,
+    "checkedAt": "2026-11-08T23:31:40.112Z",
+    "items": [
+        {
+            "merchantOrgNr": "999999991",
+            "name": "Golden Merchant 1 AS",
+            "email": "merchant1@example.com",
+            "kycUrl": "https://example.test/kyc/golden-1",
+            "storeId": "ST_TEST_GOLDEN_1",
+            "steps": {
+                "merchant": {
+                    "status": "existed",
+                    "clientType": null
+                },
+                "legalEntity": {
+                    "status": "existed",
+                    "id": "LE_TEST_GOLDEN_1"
+                },
+                "kyc": {
+                    "status": "approved",
+                    "legalEntityId": "LE_TEST_GOLDEN_1",
+                    "verificationStatus": "valid",
+                    "problems": [
+                        {
+                            "entityType": "LegalEntity",
+                            "entityId": "ENTITY_TEST_GOLDEN_1_0",
+                            "code": "2_8036",
+                            "type": "dataMissing",
+                            "message": "'bankAccount' was missing."
+                        }
+                    ]
+                },
+                "balanceAccount": {
+                    "status": "ready",
+                    "id": "BA_TEST_GOLDEN_1"
+                },
+                "store": {
+                    "status": "existed",
+                    "storeId": "ST_TEST_GOLDEN_1",
+                    "merchantAccount": "TestMerchantAccount"
+                },
+                "cardMethods": {
+                    "status": "ready",
+                    "businessLineId": null,
+                    "descriptor": "GOLDEN MERCHANT 1",
+                    "methods": {
+                        "visa": {
+                            "state": "ready",
+                            "id": "PM_TEST_GOLDEN_1_VISA",
+                            "verificationStatus": "valid",
+                            "mid": "0000000001"
+                        },
+                        "mc": {
+                            "state": "ready",
+                            "id": "PM_TEST_GOLDEN_1_MC",
+                            "verificationStatus": "valid",
+                            "mid": "0000000001"
+                        }
+                    },
+                    "errors": [],
+                    "checkedAt": "2026-11-08T23:31:38.260Z",
+                    "fromCache": true
+                },
+                "partnerRow": {
+                    "status": "written",
+                    "tenantId": "test-tenant",
+                    "createdAt": "2026-09-30T09:22:30.485Z",
+                    "updatedAt": "2026-11-08T17:27:45.708Z"
+                }
+            }
+        },
+        {
+            "merchantOrgNr": "999999992",
+            "name": "Golden Merchant 2 AS",
+            "email": "merchant2@example.com",
+            "kycUrl": "https://example.test/kyc/golden-2",
+            "storeId": null,
+            "steps": {
+                "merchant": {
+                    "status": "existed",
+                    "clientType": null
+                },
+                "legalEntity": {
+                    "status": "existed",
+                    "id": "LE_TEST_GOLDEN_2"
+                },
+                "kyc": {
+                    "status": "action_required",
+                    "legalEntityId": "LE_TEST_GOLDEN_2",
+                    "verificationStatus": "invalid",
+                    "problems": [
+                        {
+                            "entityType": "LegalEntity",
+                            "entityId": "ENTITY_TEST_GOLDEN_2_0",
+                            "code": "2_8067",
+                            "type": "dataMissing",
+                            "message": "'Signatory' was missing."
+                        },
+                        {
+                            "entityType": "LegalEntity",
+                            "entityId": "ENTITY_TEST_GOLDEN_2_1",
+                            "code": "2_8069",
+                            "type": "dataMissing",
+                            "message": "'organization.type' was missing."
+                        },
+                        {
+                            "entityType": "LegalEntity",
+                            "entityId": "ENTITY_TEST_GOLDEN_2_2",
+                            "code": "2_8036",
+                            "type": "dataMissing",
+                            "message": "'bankAccount' was missing."
+                        }
+                    ]
+                },
+                "balanceAccount": {
+                    "status": "ready",
+                    "id": "BA_TEST_GOLDEN_2"
+                },
+                "store": {
+                    "status": "missing",
+                    "storeId": null,
+                    "merchantAccount": "TestMerchantAccount"
+                },
+                "cardMethods": {
+                    "status": "no_store",
+                    "methods": [],
+                    "errors": []
+                },
+                "partnerRow": {
+                    "status": "written",
+                    "tenantId": "test-tenant",
+                    "createdAt": "2026-11-08T13:03:21.413Z",
+                    "updatedAt": "2026-11-08T13:06:01.685Z"
+                }
+            }
+        },
+        {
+            "merchantOrgNr": "999999993",
+            "name": "Golden Merchant 3 AS",
+            "email": "merchant3@example.com",
+            "kycUrl": "https://example.test/kyc/golden-3",
+            "storeId": null,
+            "steps": {
+                "merchant": {
+                    "status": "existed",
+                    "clientType": null
+                },
+                "legalEntity": {
+                    "status": "existed",
+                    "id": "LE_TEST_GOLDEN_3"
+                },
+                "kyc": {
+                    "status": "approved",
+                    "legalEntityId": "LE_TEST_GOLDEN_3",
+                    "verificationStatus": "valid",
+                    "problems": []
+                },
+                "balanceAccount": {
+                    "status": "ready",
+                    "id": "BA_TEST_GOLDEN_3"
+                },
+                "store": {
+                    "status": "missing",
+                    "storeId": null,
+                    "merchantAccount": "TestMerchantAccount"
+                },
+                "cardMethods": {
+                    "status": "no_store",
+                    "methods": [],
+                    "errors": []
+                },
+                "partnerRow": {
+                    "status": "written",
+                    "tenantId": "test-tenant",
+                    "createdAt": "2026-10-04T14:02:06.170Z",
+                    "updatedAt": "2026-11-06T11:12:30.657Z"
+                }
+            }
+        }
+    ]
+}

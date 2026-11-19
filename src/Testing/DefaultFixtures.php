@@ -47,6 +47,7 @@ final class DefaultFixtures
             $method === 'POST' && str_ends_with($path, '/charge') => self::charge($request),
             $method === 'GET' && str_ends_with($path, '/charges') => self::chargeList($path, $history),
             $method === 'POST' && str_ends_with($path, '/cancel') => self::subscriptionCanceled($path),
+            $method === 'GET' && $path === 'transactions' => self::transactionPage($request),
             $method === 'POST' && str_ends_with($path, '/reactivate') => self::subscription(['subscriptionId' => basename(dirname($path)), 'status' => 'active']),
             default => throw new PloreaException(
                 "No fake response registered for [{$method} {$path}]. Pass a stub to Plorea::fake().",
@@ -270,6 +271,39 @@ final class DefaultFixtures
             'cancelPspReference' => 'FAKECANCEL123',
             'paymentPspReference' => 'FAKEPSP123',
             'environment' => 'test',
+        ];
+    }
+
+    /**
+     * One page with one authorised payment-link row and no next page.
+     *
+     * @return array<string, mixed>
+     */
+    private static function transactionPage(RecordedRequest $request): array
+    {
+        $tenantId = $request->input('tenantId', 'fake-tenant');
+
+        return [
+            'tenantId' => $tenantId,
+            'count' => 1,
+            'nextCursor' => null,
+            'items' => [[
+                'reference' => 'fake-reference',
+                'tenantId' => $tenantId,
+                'platform' => 'fake-platform',
+                'orderId' => 'fake-order',
+                'amount' => 50000,
+                'currency' => 'NOK',
+                'environment' => 'test',
+                'status' => $request->input('status', 'authorised'),
+                'provider' => 'adyen',
+                'pspReference' => 'FAKEPSP123',
+                'paymentLinkId' => 'pl_fake_link',
+                'paymentLinkUrl' => 'https://pay.plorea.no/pl_fake_link',
+                'splitsEnabled' => false,
+                'createdAt' => '2026-01-01T12:00:00.000Z',
+                'updatedAt' => '2026-01-01T12:01:00.000Z',
+            ]],
         ];
     }
 

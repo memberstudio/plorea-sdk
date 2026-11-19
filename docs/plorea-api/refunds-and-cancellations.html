@@ -31,9 +31,9 @@
             <tr><td>Amount</td><td>Always the full authorisation</td><td>Full, or a partial amount you choose</td></tr>
             <tr><td>Customer sees</td><td>The reservation disappears. No debit line.</td><td>A debit and a later credit on the statement.</td></tr>
             <tr><td>Endpoint</td><td><code>POST /payments/cancel</code></td><td><code>POST /payments/refund</code></td></tr>
-            <tr><td>Immediate status</td><td><code>cancel_requested</code></td><td><code>refund_requested</code></td></tr>
-            <tr><td>Final status</td><td><code>cancelled</code> <span class="badge stated">Stated</span></td><td><code>refunded</code> <span class="badge stated">Stated</span></td></tr>
-            <tr><td>Webhook</td><td>None <span class="badge stated">Stated</span></td><td><code>payment.refunded</code> on settlement</td></tr>
+            <tr><td>Immediate status</td><td><code>cancel_requested</code>. An unpaid link reads <code>cancelled</code> at once. A captured payment gets <code>409</code>. <span class="badge verified">Verified 2026-11-09</span></td><td><code>refund_requested</code></td></tr>
+            <tr><td>Final status</td><td><code>cancelled</code> <span class="badge stated">Stated</span></td><td><code>refunded</code> or <code>refund_failed</code> <span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td>Webhook</td><td>None seen. Spec 0.31 lists <code>payment.cancelled</code> and <code>payment.cancel_failed</code>. <span class="badge stated">Spec 0.31</span></td><td><code>payment.refunded</code> on settlement</td></tr>
           </tbody>
         </table>
       </div>
@@ -42,7 +42,7 @@
         <pre class="mermaid">
 flowchart TD
   S[GET /payments/status/reference] --> Q{status}
-  Q -- "created / pending / active" --> N[Nothing to undo. Let the link expire.]
+  Q -- "created / pending / active" --> N[Nothing was taken. Cancel withdraws the link.]
   Q -- "failed" --> F[Nothing was taken. Nothing to undo.]
   Q -- "refund_requested / cancel_requested" --> W[Already in progress. Do not send again with a new reference.]
   Q -- "authorised / paid" --> T{Authorised only minutes ago?}
@@ -55,8 +55,8 @@ flowchart TD
       </figure>
 
       <div class="callout warning">
-        <p class="callout-title">What a late cancel does is unknown</p>
-        <p>A cancel sent nine days after the authorisation was accepted and reads <code>cancel_requested</code>. <span class="badge verified">Verified</span> Whether the provider then turns it into a refund, or rejects it, has not been observed. <span class="badge open">Open question</span> Until Plorea documents this, prefer a refund for any payment that is not brand new.</p>
+        <p class="callout-title">A late cancel is refused</p>
+        <p>Since API 0.31, a cancel on a captured payment gets <code>409</code> "Payment has been captured; use /payments/refund". <span class="badge verified">Verified 2026-11-09 (test)</span> Earlier, a cancel sent nine days after the authorisation was accepted and read <code>cancel_requested</code>. <span class="badge verified">Verified</span> Prefer a refund for any payment that is not brand new. The PHP SDK throws <code>PaymentAlreadyCapturedException</code> on the <code>409</code>.</p>
       </div>
 
       <h2>Refund a payment</h2>
@@ -70,6 +70,7 @@ flowchart TD
             <tr><td><code>amount</code><span class="opt">optional</span></td><td><span class="type">integer</span></td><td>Minor units (øre). Leave it out for a full refund. A flat integer, like on payment links.</td></tr>
             <tr><td><code>reason</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Free text for your records. Echoed later as <code>lastRefundReason</code> on the status.</td></tr>
             <tr><td><code>platform</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>Your integrator name, for reporting.</td></tr>
+            <tr><td><code>tenantId</code><span class="opt">optional</span></td><td><span class="type">string</span></td><td>The tenant that owns the payment. <span class="badge stated">Spec 0.31</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -146,18 +147,30 @@ await db.refunds.insert({ pspReference: refund.refundPspReference, ...refund });
       <h3 id="refund-target">Which payment a refund targets</h3>
       <p><span class="badge verified">Verified 2026-10-17 (test)</span> A refund targets the <code>pspReference</code> that the status shows, and <code>refundedTotal</code> caps refunds per reference at the payment amount. Two cases break this:</p>
       <ul>
-        <li><strong>A second payment on a paid link.</strong> The status keeps the first PSP reference. A second full refund fails with <code>422</code> and "Refund amount exceeds original payment amount". The second payment cannot be refunded through the API.</li>
+        <li><strong>A second payment on a paid link.</strong> The status keeps the first PSP reference. A second full refund fails with "Refund amount exceeds original payment amount". The second payment cannot be refunded through the API. The error was <code>422</code> on 2026-10-17 and is <code>400</code> since 2026-11-09. See <a href="#refund-errors">Refund errors</a>.</li>
         <li><strong>Declined, then paid.</strong> The status keeps the PSP reference of the declined try. The API accepts the refund for that PSP reference and counts the payment as refunded. The payment that took money can no longer be refunded through the API. Nothing signals the miss.</li>
       </ul>
       <p>Before an API refund, check whether the reference ever had a declined attempt or a second successful webhook PSP reference. If so, refund by hand in the Plorea portal. Compare <code>paymentPspReference</code> in the refund response with the PSP reference of the webhook that took money. Plorea was asked on 2026-10-17 to let a refund name a <code>pspReference</code>. Not delivered. See <a href="wishlist.html#paid-link-second-payment-and-refund-target">the wishlist</a>.</p>
 
+      <h3 id="refund-errors">Refund errors</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Case</th><th>Answer</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>The amount is more than the remaining amount</td><td><code>400</code> "Refund amount exceeds original payment amount", with <code>originalAmount</code>, <code>alreadyRefunded</code>, <code>requestedAmount</code>, <code>remainingAmount</code> and <code>currency</code>. The PHP SDK throws <code>RefundAmountExceededException</code>.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span> It was <code>422</code> without amounts on 2026-10-17.</td></tr>
+            <tr><td>Another tenant's reference</td><td><code>404</code> on the status read with <code>?tenantId</code>.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
       <h3>Partial refunds</h3>
-      <p>Send an <code>amount</code> lower than the payment to refund part of it. The request accepts the field, and the response echoes it. A partial refund has not been taken through to settlement in test. <span class="badge open">Open question</span> Two more things are not documented:</p>
+      <p>Send an <code>amount</code> lower than the payment to refund part of it. The request accepts the field, and the response echoes it.</p>
       <ul>
-        <li>Whether a second partial refund on the same payment is accepted, and what the status shows between the two.</li>
-        <li>What the top-level <code>status</code> is after a partial refund settles. <code>refunded</code> would hide the part that is still paid.</li>
+        <li>After a partial refund settles, the status reads <code>status: "refund_requested"</code> with <code>refundStatus: "partially_refunded"</code>. <span class="badge verified">Verified 2026-11-09 (test)</span> Read <code>refundStatus</code>, not <code>status</code>.</li>
+        <li><code>refundable</code> gives the amount that is left. <code>refunds</code> lists each refund with its own <code>status</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></li>
+        <li>A fully refunded payment showed an empty <code>refunds</code> list. <span class="badge verified">Verified 2026-11-09 (test)</span> So the list is not a complete ledger.</li>
       </ul>
-      <p>The status body keeps only the <em>last</em> refund (<code>lastRefund*</code>). Keep your own ledger of every refund you send, keyed on <code>modificationReference</code>.</p>
+      <p>Keep your own ledger of every refund you send, keyed on <code>modificationReference</code>. See <a href="objects.html#payment">Objects</a>.</p>
 
       <h2>Cancel a payment</h2>
       <div class="endpoint"><span class="method post">POST</span><code>/payments/cancel</code></div>
@@ -209,8 +222,22 @@ $cancellation-&gt;cancelPspReference;  // store it</code></pre></div>
 }</code></pre>
       <p>A cancel has no <code>amount</code>. It always releases the full authorisation.</p>
 
+      <h3 id="cancel-outcomes">What a cancel does, by state</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Payment state</th><th>Answer</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Unpaid link</td><td><code>200</code>, <code>status: "cancelled"</code> with <code>paymentLinkId</code>, <code>orderId</code>, <code>amount</code>, <code>currency</code> and <code>cancelledAt</code>. The link is withdrawn. A second cancel adds <code>alreadyCancelled: true</code>.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td>Authorised, not captured</td><td><code>200</code>, <code>status: "cancel_requested"</code>, as above.</td><td><span class="badge verified">Verified</span></td></tr>
+            <tr><td>Captured payment</td><td><code>409</code> "Payment has been captured; use /payments/refund".</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+            <tr><td>Captured subscription charge</td><td><code>409</code> "Charge has been captured; use refund", with <code>subscriptionId</code> and <code>chargeId</code>.</td><td><span class="badge verified">Verified 2026-11-09 (test)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>After a withdrawal, the pay page gives <code>410</code> and a new checkout session gives <code>400</code>. Both say "Payment link was cancelled" and carry <code>cancelledAt</code>. <span class="badge verified">Verified 2026-11-09 (test)</span> The PHP SDK throws <code>PaymentLinkCancelledException</code>. See <a href="objects.html#withdrawn-link">Objects</a>.</p>
+
       <h2>Track the modification</h2>
-      <p>The payment's own <code>status</code> changes immediately to <code>refund_requested</code> or <code>cancel_requested</code>. It stays there until the provider settles. There is no separate status per refund. <span class="badge verified">Verified</span></p>
+      <p>The payment's own <code>status</code> changes immediately to <code>refund_requested</code> or <code>cancel_requested</code>. It stays there until the provider settles. <span class="badge verified">Verified</span> Since API 0.31, each refund also has its own status in <code>refunds</code>. <span class="badge verified">Verified 2026-11-09 (test)</span></p>
       <figure class="diagram">
         <pre class="mermaid">
 stateDiagram-v2
@@ -218,9 +245,10 @@ stateDiagram-v2
   authorised --> refund_requested: POST /payments/refund
   authorised --> cancel_requested: POST /payments/cancel
   refund_requested --> refunded: provider settles (hours)
+  refund_requested --> refund_failed: provider refuses
   cancel_requested --> cancelled: provider settles
         </pre>
-        <figcaption>The final states <code>refunded</code> and <code>cancelled</code> are stated by Plorea. They have not been observed in test.</figcaption>
+        <figcaption><code>refunded</code> and <code>refund_failed</code> were seen in test on 2026-11-09. <code>cancelled</code> after <code>cancel_requested</code> is stated by Plorea. A partly refunded payment stays <code>refund_requested</code>.</figcaption>
       </figure>
 
       <h3>The status body during a modification</h3>
@@ -257,12 +285,12 @@ stateDiagram-v2
       <ul>
         <li><strong>Book on the request.</strong> When the API answers <code>refund_requested</code>, record the refund in your books and tell the customer it is on its way.</li>
         <li><strong>Never time out into "failed".</strong> A job that polls every few minutes and gives up after one hour will report a healthy refund as failed. Do not reverse a refund in your books because time passed.</li>
-        <li><strong>Use the webhook, poll as a backstop.</strong> Listen for <code>payment.refunded</code>. Poll the status a few times a day as a backstop, because a lost webhook is not redelivered. See <a href="webhooks.html">Webhooks</a>.</li>
+        <li><strong>Use the webhook, poll as a backstop.</strong> Listen for <code>payment.refunded</code>, and for <code>payment.refund_failed</code> from spec 0.31. Poll the status a few times a day as a backstop, because a lost webhook is not redelivered. See <a href="webhooks.html">Webhooks</a>.</li>
         <li><strong>Subscription cancels are poll-only.</strong> Plorea sends no webhook for a subscription cancel. <span class="badge stated">Stated by Plorea</span></li>
       </ul>
 
       <h2 id="retry-safely">Retry safely</h2>
-      <p>Retry safety for refund and cancel is not known. <span class="badge open">Open question</span> The <code>modificationReference</code> is your reference for one attempt. Plorea has not confirmed that it deduplicates a repeated reference. Treat it as a reference, not as an idempotency key. Do not retry a refund or a cancel automatically.</p>
+      <p>Retry safety for refund and cancel is not known. <span class="badge open">Open question</span> Spec 0.31 lists an <code>Idempotency-Key</code> header on refund, but test did not honour it on charges. <span class="badge verified">Verified 2026-11-09 (test)</span> See <a href="field-notes.html#idempotency-key-not-honoured">Field notes</a>. The <code>modificationReference</code> is your reference for one attempt. Plorea has not confirmed that it deduplicates a repeated reference. Treat it as a reference, not as an idempotency key. Do not retry a refund or a cancel automatically.</p>
       <ol class="steps">
         <li><strong>Create the modification reference before the call.</strong>Derive it from your own refund record, for example <code>{reference}-refund-{n}</code>. Save it first.</li>
         <li><strong>Send the request.</strong>On a timeout or a <code>5xx</code>, the outcome is unknown, not failed.</li>
@@ -272,7 +300,7 @@ stateDiagram-v2
       <p>Ask Plorea to confirm how it handles a repeated modification reference. Until then, the status check lowers the risk of a double refund. It does not remove the risk.</p>
 
       <h2>Refunds on subscription charges</h2>
-      <p><span class="badge verified">Verified 2026-10-19 (test)</span> A refund on a scheduled charge works. <code>POST /payments/refund</code> on the <code>{subscriptionId}-{chargeId}</code> reference answered <code>refund_requested</code> and settled 34 seconds later. The status resolved, and showed the refund in <code>refunds</code>, <code>refundedTotal</code> and <code>refundStatus</code>, not in <code>lastRefund*</code>. No <code>payment.refunded</code> webhook arrived. A cancel on the charged charge answered <code>cancel_requested</code>, not <code>409</code>. Adyen refused it, but the charge still turned <code>cancelled</code>, and the money stayed charged. Never cancel a charged subscription charge. Refund it. See <a href="field-notes.html#subscription-charge-refund">Field notes</a>. The production record below is from 2026-10-11 and has not been retested.</p>
+      <p><span class="badge verified">Verified 2026-10-19 (test)</span> A refund on a scheduled charge works. <code>POST /payments/refund</code> on the <code>{subscriptionId}-{chargeId}</code> reference answered <code>refund_requested</code> and settled 34 seconds later. The status resolved, and showed the refund in <code>refunds</code>, <code>refundedTotal</code> and <code>refundStatus</code>, not in <code>lastRefund*</code>. No <code>payment.refunded</code> webhook arrived. A cancel on the charged charge answered <code>cancel_requested</code>, not <code>409</code>. Adyen refused it, but the charge still turned <code>cancelled</code>, and the money stayed charged. <span class="badge stated">Superseded 2026-11-09</span> The same cancel now gets <code>409</code> "Charge has been captured; use refund". Never cancel a charged subscription charge. Refund it. See <a href="field-notes.html#subscription-charge-refund">Field notes</a>. The production record below is from 2026-10-11 and has not been retested.</p>
       <p>A manual subscription charge has a reference of the form <code>{subscriptionId}-{chargeId}</code>. That reference resolves on <code>GET /payments/status</code>. <span class="badge verified">Verified</span> A refund on that reference has not been tested. It should work like a refund on any payment, but this is not confirmed. <span class="badge open">Open question</span> A <em>scheduled</em> charge reference does not resolve on the status endpoint. <code>POST /payments/refund</code> did not accept it either: in production, a refund on one scheduled charge answered <code>{"error":"Payment not found"}</code>, both with the charge <code>reference</code> and with its <code>pspReference</code> from <code>GET /subscriptions/{id}/charges</code>. <code>POST /payments/cancel</code> on the same charge, while it was still <code>authorised</code>, also failed. <span class="badge verified">Verified 2026-10-11</span> Refund such a charge in the Plorea portal. Then record the refund in your own system against the original charge, so no other path refunds it again. Whether every scheduled charge behaves this way, and whether Plorea will add an API path, is not known. <span class="badge open">Open question</span> See <a href="subscription-workflows.html">Subscription workflows</a>.</p>
 
       <h2>Errors</h2>
