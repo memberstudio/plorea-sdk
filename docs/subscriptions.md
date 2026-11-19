@@ -80,8 +80,9 @@ own. Name and email are optional and used for KYC communication.
   without a merchant behaves as before.
 - **Check the merchant first (API 0.31):** a live subscription for a merchant
   with approved KYC but no store was never charged (2026-11-06 to
-  2026-11-09). Read `Plorea::merchants()->find($orgNr)->isReadyForPayments()`
-  before you create the subscription. See [Payments](payments.md#kyc-starts-on-the-first-payment).
+  2026-11-09). Read `Plorea::merchants()->status($orgNr)` and check current
+  KYC, `storeId` and the `cardMethods` step before you create the subscription.
+  See [Merchants and KYC](merchants.md).
 - **Not supported:** API 0.31 lists `trialDays`, `billingAnchor` and
   `proration` on create. Test ignored all three (2026-11-09). The SDK does not
   send them.

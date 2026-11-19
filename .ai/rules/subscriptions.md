@@ -93,9 +93,9 @@ Only three fields are accepted as far as anyone knows — do not add `phone` /
 `country` to match `PendingPaymentLink::merchant()`.
 
 Since API 0.31, read a company's KYC and store with
-`Plorea::merchants()->find($orgNr)` before its first charge. A live
+`Plorea::merchants()->status($orgNr)` before its first charge. A live
 subscription whose merchant had no store was never charged (observed
-2026-11-06 to 2026-11-09): check `isReadyForPayments()` first.
+2026-11-06 to 2026-11-09): check current KYC, `storeId` and `cardMethods` first.
 
 **Stated by Plorea 2026-09-21, UNOBSERVED:** every charge inherits the company;
 KYC starts on the first charge; splits apply from that charge; charge webhooks

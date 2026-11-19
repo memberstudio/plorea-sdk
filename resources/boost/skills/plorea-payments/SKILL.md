@@ -35,7 +35,7 @@ $link->expiresAt; // store this — expiry is judged from it, not from status
 
 `merchantOrgNr` is required — `create()` throws `PloreaException` without it, because Plorea accepts the link but cannot route the payout. Name and email are optional but recommended (KYC communication). Never send a store or balance account; Plorea resolves those from the org number. The first payment for a new org number starts KYC automatically — the merchant receives an onboarding email, and the payout is released once KYC is approved (1–5 business days).
 
-A company that another Plorea partner already onboarded: `Plorea::merchants()->onboard()->save()` throws `MemberFlow\Plorea\Exceptions\MerchantOnboardedByAnotherPartnerException` (409, `merchantOrgNr()`) ("Merchant is onboarded by another partner"), and `find()` gives 404. A payment link with that org number is still created and opens. Which balance account receives the money is unobserved, so do not treat the 409 as "ready" or as "unusable"; ask Plorea.
+A company that another Plorea partner already onboarded: `Plorea::merchants()->onboarding($orgNr, $email)->start()` throws `MemberFlow\Plorea\Exceptions\MerchantOnboardedByAnotherPartnerException` (409, `merchantOrgNr()`) ("Merchant is onboarded by another partner"), and `status()` gives 404. A payment link with that org number is still created and opens. Which balance account receives the money is unobserved, so do not treat the 409 as "ready" or as "unusable"; ask Plorea.
 
 The create response does not echo the merchant back; the org number only
 reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
@@ -43,6 +43,14 @@ reappears on the pay page (`Plorea::payByLink()->find($id)->merchantOrgNr`).
 Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on duplicate references. It returns an existing open link as-is, supersedes dead or amount-changed links with a suffixed reference (`-1`, `-2`, ...), and throws `MemberFlow\Plorea\Exceptions\PaymentAlreadyPaidException` when the reference is already paid — catch it, never create a fresh link for a settled invoice. The check-then-create is not atomic; wrap in `Cache::lock()` per reference if double submits are possible. The lookup walks the whole suffix chain before reusing anything — a superseded base reference stays `created` forever, so an open link is only returned once no later suffix is found paid. Budget one extra status request per call, and read `$e->status->reference` on the exception: it may name a suffixed reference rather than the one you passed in.
 
 Capture is automatic (AmendoPOS, minutes after authorization) and there is **no capture API** — `authorised` is the terminal success state, so never build a pending-capture wait or expose a `capture()` method. `platform` is added to every request when `plorea.platform` (`PLOREA_PLATFORM`) is set — in the body on writes, in the query string on reads, so reads carry `?platform=...`. It is Plorea's internal reporting only and nothing is sent when unset.
+
+## Merchant listing, KYC and onboarding
+
+`Plorea::merchants()->list(tenantId: ..., limit: 25, cursor: ...)` returns `MerchantPage`; follow `nextCursor` until null. `status($orgNr, tenantId: ...)` returns `Merchant`. Both GET endpoints are read-only and live-only in OpenAPI 0.39.0. Tenant defaults to configuration; a tenant key can omit it when unconfigured. A shared key requires it for listing and onboarding.
+
+Read `$merchant->kyc->status` / `isApproved()` from `steps.kyc`, not the stale stored `kycStatus`. `deferred` means the list skipped that lookup; read it again. Branch on problem `code` or `type`, not operator-facing `message`; `pendingStatus` / `1_77` is ordinary processing. A status `404` does not distinguish unknown from another partner's merchant or a test key.
+
+`onboarding($orgNr, $email)` only builds a request. After explicit approval for that merchant, `->start()` sends a real onboarding POST and requires live configuration. It can start verification, email the merchant and order card methods. Repeats can order missing methods but cannot change email, phone or country. `200`/`201` may be partial success; inspect `steps` and poll with GET. Another partner's merchant returns `409`. Use `Plorea::fake()` before resolving resources in tests; the live configuration guard still applies to `start()`.
 
 ## Status
 

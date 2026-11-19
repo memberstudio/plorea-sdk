@@ -63,38 +63,16 @@ reappears only on the pay page:
 Plorea::payByLink()->find($link->id)->merchantOrgNr;
 ```
 
-### KYC starts on the first payment
+### KYC can start with payment or explicit onboarding
 
 The first payment for a new `merchantOrgNr` starts merchant onboarding
 automatically. The merchant receives an onboarding email (at `merchantEmail`
 when you supplied one). The link is payable throughout — the payout is simply
 held until KYC is approved, typically 1–5 business days.
 
-Since API 0.31 you can read the onboarding (live only):
-
-```php
-$merchant = Plorea::merchants()->find('999999999');
-
-$merchant->isReadyForPayments(); // KYC approved, a store, card methods ready
-$merchant->needsKycAction();     // the merchant must fix something
-$merchant->kycProblems();        // what, as the provider lists it
-$merchant->kycUrl;               // where the merchant fixes it
-```
-
-Check `isReadyForPayments()` before you route money to a merchant. A live
-subscription for a merchant with approved KYC but no store was never charged
-(2026-11-06 to 2026-11-09). `Plorea::merchants()->all()` lists every merchant.
-
-`Plorea::merchants()->onboard($orgNr, $email)->save()` starts onboarding ahead
-of the first payment. Plorea states how it works; a successful call has not
-been seen yet. A test key gets `400`: the partner routes are live only.
-
-A company that another Plorea partner already onboarded answers `409`
-"Merchant is onboarded by another partner" (`MerchantOnboardedByAnotherPartnerException`, status 409).
-Nothing is created. `find()` answers `404` for that company. The 409 does not
-block payment links: a live link with the same org number was created, and
-its pay page opened (2026-11-09). Which balance account receives the money
-has not been observed. Ask Plorea before you sell for such a merchant.
+To read current KYC without starting it, use `Plorea::merchants()->status($orgNr)`.
+Explicit onboarding is also available before the first payment; it sends a
+real verification email and requires approval. See [Merchants and KYC](merchants.md).
 
 ## Reuse or create (`firstOrCreate`)
 

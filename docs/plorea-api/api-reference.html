@@ -2007,15 +2007,20 @@ foreach (Plorea::transactions()-&gt;all(status: 'authorised') as $transaction) {
         <div class="tab" data-label="cURL"><pre><code class="lang-bash">curl "https://payments.plorea.no/partners/merchants/999999999" \
   -H "Authorization: Bearer $PLOREA_API_KEY" \
   -H "X-Environment: live"</code></pre></div>
-        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$merchant = Plorea::merchants()-&gt;find('999999999');
+        <div class="tab" data-label="PHP SDK"><pre><code class="lang-php">$merchant = Plorea::merchants()-&gt;status('999999999');
 
-$merchant-&gt;isReadyForPayments();   // store and card methods ready
-$merchant-&gt;needsKycAction();       // send $merchant-&gt;kycUrl to the merchant
-$merchant-&gt;kycProblems();
+$merchant-&gt;kyc-&gt;isApproved();  // current steps.kyc, not stored kycStatus
+$merchant-&gt;kyc-&gt;problems;
+$merchant-&gt;storeId;            // also inspect steps['cardMethods']
 
-foreach (Plorea::merchants()-&gt;all() as $merchant) {
-    // ...
-}</code></pre></div>
+$cursor = null;
+do {
+    $page = Plorea::merchants()-&gt;list(limit: 25, cursor: $cursor);
+    foreach ($page-&gt;items as $merchant) {
+        // ...
+    }
+    $cursor = $page-&gt;nextCursor;
+} while ($cursor !== null);</code></pre></div>
       </div>
       <pre data-title="200 OK (excerpt)"><code class="lang-json">{
     "merchantOrgNr": "999999999",
@@ -2037,7 +2042,7 @@ foreach (Plorea::merchants()-&gt;all() as $merchant) {
       </ul>
 
       <h4>Start an onboarding</h4>
-      <p><span class="badge stated">Stated by Plorea</span> A successful call has not been seen. Plorea creates what is missing and emails the KYC link to <code>email</code>. A second call with the same org number is safe: it returns the merchant with <code>created: false</code>. It does not create a store for a merchant that exists without one.</p>
+      <p><span class="badge stated">OpenAPI 0.39.0</span> A successful call has not been seen. Plorea creates what is missing and can email the merchant and order card methods. Obtain approval for that merchant first. A repeat can order missing card methods and does not update contact details. Poll with GET, not POST. See <a href="going-live.html#onboarding-is-a-real-write">the onboarding warning</a>.</p>
       <p><span class="badge verified">Verified 2026-11-09 (production)</span> A company that another Plorea partner already onboarded answers <code>409</code> <code>{"error": "Merchant is onboarded by another partner", "merchantOrgNr": "…"}</code>. Nothing is created. <code>GET /partners/merchants/{merchantOrgNr}</code> answers <code>404</code> for the same company. See <a href="field-notes.html#kyc-has-an-api">Field notes</a>.</p>
       <div class="table-wrap"><table class="params">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
@@ -2051,12 +2056,14 @@ foreach (Plorea::merchants()-&gt;all() as $merchant) {
           <tr><td><code>cardDescriptor</code><span class="opt">optional</span></td><td class="type">string</td><td>The text on the cardholder's statement. At most 22 characters: letters a–z, digits, space and <code>.,'_-?+*</code>. No æ, ø or å.</td></tr>
         </tbody>
       </table></div>
-      <pre data-title="PHP SDK"><code class="lang-php">$merchant = Plorea::merchants()
-    -&gt;onboard('999999999', 'billing@example.com')
+      <pre data-title="PHP SDK"><code class="lang-php">$pending = Plorea::merchants()
+    -&gt;onboarding('999999999', 'billing@example.com')
     -&gt;name('Acme Gym AS')
-    -&gt;cardDescriptor('ACME GYM')
-    -&gt;save();</code></pre>
-      <p><strong>Retry safety:</strong> reads are safe. The <code>POST</code> is idempotent on the org number. <span class="badge stated">Stated by Plorea</span></p>
+    -&gt;cardDescriptor('ACME GYM'); // nothing sent yet
+
+// Only after approval for this merchant; requires live configuration.
+$merchant = $pending-&gt;start();</code></pre>
+      <p><strong>Retry safety:</strong> reads do not start onboarding. A repeat <code>POST</code> can order missing card methods; it is not a read-only status check. <span class="badge stated">OpenAPI 0.39.0</span></p>
 
       <p class="site-foot">Community draft. Response shapes captured from the Plorea test environment between August and November 2026 and anonymised. The <code>past_due</code> read and the partner merchant reads are from production.</p>
     </article>

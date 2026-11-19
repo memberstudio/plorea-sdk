@@ -164,15 +164,15 @@
         "title": "Onboarding a company another partner owns is a 409",
         "triggers": ["MerchantOnboardedByAnotherPartnerException", "409", "onboard", "another partner", "Merchant is onboarded by another partner", "partners/merchants"],
         "evidence": "VERIFIED 2026-11-09 (live), one company; payout destination UNOBSERVED",
-        "note": "merchants()->onboard()->save() for a company that another Plorea partner already onboarded answers 409 with merchantOrgNr. Nothing is created and no KYC e-mail is sent. The SDK throws MerchantOnboardedByAnotherPartnerException. merchants()->find() answers 404 for the same company, so a 404 does not mean the company is free. A payment link with that org number is still created and its pay page opens. Which balance account receives the money is not observed: ask Plorea before you sell for such a merchant.",
+        "note": "merchants()->onboarding()->start() for a company that another Plorea partner already onboarded answers 409 with merchantOrgNr. Nothing is created and no KYC e-mail is sent. The SDK throws MerchantOnboardedByAnotherPartnerException. merchants()->status() answers 404 for the same company, so a 404 does not mean the company is free. A payment link with that org number is still created and its pay page opens. Which balance account receives the money is not observed: ask Plorea before you sell for such a merchant.",
         "source": {"file": "docs/api-behaviour.md", "heading": "✅ Merchant onboarding state: `partners/merchants` — 2026-11-09 (live)"}
     },
     {
         "id": "merchant-not-ready",
         "title": "A merchant without a store is never charged",
-        "triggers": ["merchants", "partners/merchants", "KYC", "store", "storeId", "isReadyForPayments", "cardMethods", "no_store", "action_required"],
+        "triggers": ["merchants", "partners/merchants", "KYC", "store", "storeId", "cardMethods", "no_store", "action_required"],
         "evidence": "Observed in live 2026-11-06 to 2026-11-09; partners endpoint VERIFIED 2026-11-09 (live read)",
-        "note": "A live subscription for a merchant org number with approved KYC but no store was never charged: the scheduler moved nextChargeAt once and stopped. Read Plorea::merchants()->find($orgNr) first. isReadyForPayments() needs KYC approved, a storeId and ready card methods. needsKycAction() and kycProblems() say what the merchant must fix. The endpoint answers in live only.",
+        "note": "A live subscription for a merchant org number with approved KYC but no store was never charged: the scheduler moved nextChargeAt once and stopped. Read Plorea::merchants()->status($orgNr) first. Check current KYC through kyc->isApproved(), storeId and the cardMethods step; KYC alone does not prove readiness. Read kyc->problems for the provider's problem codes. Current KYC comes only from steps.kyc, never stored kycStatus. The endpoint answers in live only.",
         "source": {"file": "docs/api-behaviour.md", "heading": "✅ Merchant onboarding state: `partners/merchants` — 2026-11-09 (live)"}
     }
 ]

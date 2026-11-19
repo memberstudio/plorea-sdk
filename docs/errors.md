@@ -14,7 +14,7 @@ Every exception extends `MemberFlow\Plorea\Exceptions\PloreaException`, so one
 | `NotFoundException` | 404 — unknown reference or id |
 | `NextChargeInPaidPeriodException` | 409 with `paidUntil` on a subscription update — the new `nextChargeAt` is inside a paid period; `paidUntil()` returns the period end. Send `allowEarlyCharge()` to charge anyway. Stated by Plorea 2026-10-14. A 409 without `paidUntil` is not this exception; one that fits none of the typed 409s is a plain `RequestException` |
 | `PaymentAlreadyCapturedException` | 409 on `cancel()` — the payment or charge is captured; refund it. `paymentStatus()` returns the status in the body |
-| `MerchantOnboardedByAnotherPartnerException` | 409 on `merchants()->onboard()->save()` — another Plorea partner already onboarded the company; nothing is created. `merchantOrgNr()`. Captured live 2026-11-09 |
+| `MerchantOnboardedByAnotherPartnerException` | 409 on `merchants()->onboarding()->start()` — another Plorea partner already onboarded the company; nothing is created. `merchantOrgNr()`. Captured live 2026-11-09 |
 | `ServerException` | 5xx — Plorea-side error |
 | `ConnectionException` | The API could not be reached |
 | `PaymentAlreadyPaidException` | `firstOrCreate()` found the reference already paid |

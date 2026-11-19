@@ -664,10 +664,13 @@ A stored payment method is tied to the shopper reference, not to a company:
 the same method can be charged for different organisation numbers under one
 tenant.
 
-There is no API for starting or reading KYC. To onboard a company ahead of its
-first real charge, Plorea suggests creating a payment link that carries its
-organisation number and sending it to yourself; that starts KYC the ordinary
-way.
+The earlier advice to onboard through a self-paid payment link is superseded
+by **OpenAPI 0.39.0, checked 2026-11-19**: `GET /partners/merchants` lists
+merchants, `GET /partners/merchants/{merchantOrgNr}` reads current status, and
+`POST /partners/merchants` starts onboarding. Both reads are read-only and
+live-only. Use `steps.kyc`, not the stale stored `kycStatus`. POST can email
+the merchant; repeats can order missing card methods. These are documented
+contracts, not live verification in this SDK. See [Merchants and KYC](merchants.md).
 
 **Changed in API 0.31 (2026-11-09):** the onboarding can now be read, and
 started, through `partners/merchants`. See the next entry.
@@ -677,7 +680,7 @@ started, through `partners/merchants`. See the next entry.
 `GET partners/merchants` and `GET partners/merchants/{merchantOrgNr}` return
 each merchant with its onboarding steps: `merchant`, `legalEntity`, `kyc`,
 `balanceAccount`, `store`, `cardMethods` and `partnerRow`. The SDK reads them
-with `Plorea::merchants()->list()`, `all()` and `find()`.
+with `Plorea::merchants()->list()` (follow `nextCursor`) and `status()`.
 
 - The routes are live only. A test key gets `400` "Partner merchants are live
   only" on the list and `404` on a single merchant.
@@ -689,9 +692,10 @@ with `Plorea::merchants()->list()`, `all()` and `find()`.
   The page counts these in `kycDeferred`. Ask again.
 - A merchant can read `approved` with no store. A live subscription for such
   a merchant was never charged (2026-11-06 to 2026-11-09). Check
-  `isReadyForPayments()` before you route money to a merchant.
+  `$merchant->kyc->isApproved()`, `$merchant->storeId` and
+  `$merchant->steps['cardMethods']['status']` before you route money to a merchant.
 
-**📋 Not observed:** a successful `POST partners/merchants` (`onboard()`).
+**📋 Not observed:** a successful `POST partners/merchants` (`onboarding()->start()`).
 Plorea states that it creates what is missing and e-mails the KYC link.
 
 **✅ Observed 2026-11-09 (live):** a company that another Plorea partner
@@ -707,8 +711,8 @@ payments/status` then read a store id and `splitsEnabled: true`, with
 `balanceAccountId` still `null`. The pay page opened and showed the payment.
 
 **📋 Not observed:** a paid link for such a company, which balance account
-receives the money, and whether the partner split applies. `find()` answers
-`404`, so `isReadyForPayments()` cannot be read for it. Asked Plorea on
+receives the money, and whether the partner split applies. `status()` answers
+`404`, so current KYC and store readiness cannot be read for it. Asked Plorea on
 2026-11-09.
 
 Fixture: `partner-merchants-page.json`, `partner-merchant.json` (anonymised).

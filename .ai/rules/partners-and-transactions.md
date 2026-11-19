@@ -12,8 +12,8 @@ Both endpoints arrived with API 0.31. Read through `Plorea::merchants()` and
   [security.md](security.md)).
 - `limit` is 1–100. `101` gets `400`. A cursor from another endpoint gets `400`.
 - The step names, in order: `merchant`, `legalEntity`, `kyc`,
-  `balanceAccount`, `store`, `cardMethods`, `partnerRow`
-  (`PartnerMerchant::STEPS`). Statuses seen live: `existed`, `approved`,
+  `balanceAccount`, `store`, `cardMethods`, `partnerRow`.
+  Statuses seen live: `existed`, `approved`,
   `action_required`, `ready`, `no_store`. Model only what was seen.
 - `kyc` can read `deferred`: the list ran out of time before it read KYC. The
   page counts these in `kycDeferred`. It is not a verification status. Ask
@@ -24,10 +24,10 @@ Both endpoints arrived with API 0.31. Read through `Plorea::merchants()` and
 ## A merchant without a store is never charged — OBSERVED live 2026-11-06 to 2026-11-09
 
 A live subscription for a merchant with approved KYC but no store was never
-charged. `isReadyForPayments()` needs KYC `approved`, a `storeId` and `ready`
-card methods. Do not loosen it to KYC alone.
+charged. Read `merchants()->status($orgNr)` and check `kyc->isApproved()`,
+`storeId` and the `cardMethods` step. Do not infer readiness from KYC alone.
 
-## `onboard()` success is stated, not seen — UNOBSERVED
+## `onboarding()->start()` success is stated, not seen — UNOBSERVED
 
 `POST partners/merchants` is built from the 0.31 spec. Plorea states that it
 creates what is missing, e-mails the KYC link, and answers `created: false` on
@@ -35,6 +35,13 @@ a repeat. **No successful call has been seen.** It is live only, so a test
 means a real merchant: **do not send it without the user's explicit OK.**
 After the first successful call, capture and anonymise the answer as a
 fixture.
+
+The released v0.7.0 API uses `list(tenantId, limit, cursor)`, `status()` and
+`onboarding()->start()`. Keep its `Merchant`, `MerchantPage`, `MerchantKyc`
+and `MerchantKycProblem` DTOs. Current KYC comes only from `steps.kyc`, never
+stored `kycStatus`. Building onboarding sends nothing; `start()` refuses
+non-live configuration, even with a fake. Repeats can order missing card
+methods and do not update contact details. Poll with `status()`, not POST.
 
 **VERIFIED 2026-11-09 (live), with the user's OK:** a company that another
 Plorea partner already onboarded answers `409`
@@ -44,7 +51,7 @@ Nothing is created and no KYC e-mail is sent. The SDK throws
 string `merchantOrgNr` and the message contains "another partner". A 409 that
 fits none of the typed 409 bodies (`paidUntil`, captured, another partner)
 stays a plain `RequestException`. The spec does not list this 409. A `GET` of
-the same org number answered `404` first, so `find()` cannot tell you that
+the same org number answered `404` first, so `status()` cannot tell you that
 another partner owns the company.
 
 **The 409 does not block payment links — VERIFIED 2026-11-09 (live), with the
@@ -54,7 +61,7 @@ then read a store id and `splitsEnabled: true`; `balanceAccountId` stayed
 `null`. The pay page opened and showed the payment. **UNOBSERVED:** a paid
 link, which balance account receives the money, and whether our split applies.
 So do not treat the 409 as "merchant unusable", and do not treat it as
-"merchant ready" either: `find()` gives `404`, so `isReadyForPayments()` cannot
+"merchant ready" either: `status()` gives `404`, so current KYC and store readiness cannot
 be read for such a merchant. Asked Plorea 2026-11-09. Never commit the store
 id or the org number.
 
@@ -62,11 +69,11 @@ Send the legal entity (hovedenhet), not a sub-unit (underenhet, `BEDR`): KYC
 verifies a legal entity.
 
 Spec bug: the POST schema gives `country` `default: false` and `example: false`.
-It is an ISO 3166-1 alpha-2 string. `PendingMerchantOnboarding` sends it
-upper-cased and only when set.
+It is an ISO 3166-1 alpha-2 string. Pass an upper-case code such as `NO`;
+`PendingMerchantOnboarding` sends it unchanged and only when set.
 
-`cardDescriptor` is checked before the request: 1–22 characters from a-z, A-Z,
-0-9, space and `.,'_-?+*` (spec pattern). `&` is refused.
+The API's `cardDescriptor` pattern allows 1–22 characters from a-z, A-Z,
+0-9, space and `.,'_-?+*`. The SDK passes the value through without validation.
 
 ## Transactions — VERIFIED 2026-11-09 (test)
 

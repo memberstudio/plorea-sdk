@@ -10,7 +10,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Collection;
 use LogicException;
 use MemberFlow\Plorea\Contracts\Client;
-use MemberFlow\Plorea\Resources\PartnerMerchantResource;
+use MemberFlow\Plorea\Resources\MerchantResource;
 use MemberFlow\Plorea\Resources\PayByLinkResource;
 use MemberFlow\Plorea\Resources\PaymentMethodResource;
 use MemberFlow\Plorea\Resources\PaymentResource;
@@ -58,11 +58,11 @@ class PloreaManager
     }
 
     /**
-     * The partner's merchants and their onboarding. Live only.
+     * Merchant listing, current KYC status and explicit onboarding.
      */
-    public function merchants(): PartnerMerchantResource
+    public function merchants(): MerchantResource
     {
-        return new PartnerMerchantResource($this->client(), $this->config());
+        return new MerchantResource($this->client(), $this->config());
     }
 
     /**

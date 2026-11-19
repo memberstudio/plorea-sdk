@@ -46,7 +46,7 @@ Two rules keep those answers honest:
 
 The fake also answers `GET transactions`, `GET partners/merchants`,
 `GET partners/merchants/{orgNr}` and `POST partners/merchants` (since API
-0.31). The merchant answers are ready for payments. The real partner routes
+0.31). The merchant defaults have pending KYC, not payment readiness. The real partner routes
 are live only, so the fake is the only way to exercise them in a test suite.
 
 ## Gotchas

@@ -19,6 +19,7 @@ environment, and what has not.
 | [Embedded and native checkout](checkout.md) | Drop-in on your own domain and in native apps, the client key, return URLs, trusting the result |
 | [Going live](going-live.md) | The production checklist: credentials, webhooks, merchants, monitoring |
 | [Subscriptions](subscriptions.md) | Create, trials, update, cancel, reactivate, manual charges, charge history |
+| [Merchants and KYC](merchants.md) | Read-only listing and status, cursor paging, explicit onboarding |
 | [Webhooks](webhooks.md) | Route, signature verification, the event catalogue, listener patterns, what is poll-only |
 | [Testing](testing.md) | `Plorea::fake()`, stubs, assertions, the default fixtures |
 | [Error handling](errors.md) | The exception hierarchy, HTTP status mapping, retry and idempotency |

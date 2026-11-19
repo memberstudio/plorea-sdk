@@ -8,25 +8,19 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use MemberFlow\Plorea\Data\Concerns\ParsesResponseData;
 
-/**
- * One page of a partner's merchants, newest first.
- *
- * Read from live on 2026-11-09. `kycDeferred` counts the merchants on this
- * page whose KYC was not read in time; when it is above zero, ask again.
- */
-final readonly class PartnerMerchantPage
+final readonly class MerchantPage
 {
     use ParsesResponseData;
 
     /**
-     * @param  Collection<int, PartnerMerchant>  $items
+     * @param  Collection<int, Merchant>  $items
      * @param  array<string, mixed>  $raw
      */
     public function __construct(
         public ?string $tenantId,
-        public int $count,
+        public ?int $count,
         public ?string $nextCursor,
-        public int $kycDeferred,
+        public ?int $kycDeferred,
         public ?CarbonImmutable $checkedAt,
         public Collection $items,
         public array $raw = [],
@@ -41,23 +35,15 @@ final readonly class PartnerMerchantPage
 
         return new self(
             tenantId: self::string($data['tenantId'] ?? null),
-            count: self::int($data['count'] ?? null) ?? count($items),
+            count: self::int($data['count'] ?? null),
             nextCursor: self::string($data['nextCursor'] ?? null),
-            kycDeferred: self::int($data['kycDeferred'] ?? null) ?? 0,
+            kycDeferred: self::int($data['kycDeferred'] ?? null),
             checkedAt: self::date($data['checkedAt'] ?? null),
             items: new Collection($items)
                 ->filter(fn (mixed $item): bool => is_array($item))
-                ->map(fn (array $item): PartnerMerchant => PartnerMerchant::fromArray($item))
+                ->map(fn (array $item): Merchant => Merchant::fromArray($item))
                 ->values(),
             raw: $data,
         );
-    }
-
-    /**
-     * Whether there is a page after this one.
-     */
-    public function hasMore(): bool
-    {
-        return $this->nextCursor !== null && $this->nextCursor !== '';
     }
 }
