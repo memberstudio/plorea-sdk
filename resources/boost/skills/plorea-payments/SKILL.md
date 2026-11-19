@@ -42,6 +42,14 @@ Prefer `->firstOrCreate()` over `->create()`: Plorea has no idempotency on dupli
 
 Capture is automatic (AmendoPOS, minutes after authorization) and there is **no capture API** — `authorised` is the terminal success state, so never build a pending-capture wait or expose a `capture()` method. `platform` is added to every request when `plorea.platform` (`PLOREA_PLATFORM`) is set — in the body on writes, in the query string on reads, so reads carry `?platform=...`. It is Plorea's internal reporting only and nothing is sent when unset.
 
+## Merchant listing, KYC and onboarding
+
+`Plorea::merchants()->list(tenantId: ..., limit: 25, cursor: ...)` returns `MerchantPage`; follow `nextCursor` until null. `status($orgNr, tenantId: ...)` returns `Merchant`. Both GET endpoints are read-only and live-only in OpenAPI 0.39.0. Tenant defaults to configuration; a tenant key can omit it when unconfigured. A shared key requires it for listing and onboarding.
+
+Read `$merchant->kyc->status` / `isApproved()` from `steps.kyc`, not the stale stored `kycStatus`. `deferred` means the list skipped that lookup; read it again. Branch on problem `code` or `type`, not operator-facing `message`; `pendingStatus` / `1_77` is ordinary processing. A status `404` does not distinguish unknown from another partner's merchant or a test key.
+
+`onboarding($orgNr, $email)` only builds a request. After explicit approval for that merchant, `->start()` sends a real onboarding POST and requires live configuration. It can start verification, email the merchant and order card methods. Repeats can order missing methods but cannot change email, phone or country. `200`/`201` may be partial success; inspect `steps` and poll with GET. Another partner's merchant returns `409`. Use `Plorea::fake()` before resolving resources in tests; the live configuration guard still applies to `start()`.
+
 ## Status
 
 ```php

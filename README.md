@@ -54,6 +54,7 @@ Full documentation lives in [`docs/`](docs/README.md).
 | [Embedded and native checkout](docs/checkout.md) | Drop-in on your domain or in an iOS / Android app |
 | [Going live](docs/going-live.md) | The production checklist |
 | [Subscriptions](docs/subscriptions.md) | Create, trials, update, pause/resume, cancel, reactivate, charges, dunning |
+| [Merchants and KYC](docs/merchants.md) | Read-only listing and current KYC, cursor paging, explicit onboarding |
 | [Webhooks](docs/webhooks.md) | Signature verification, the event catalogue, what is poll-only |
 | [Testing](docs/testing.md) | `Plorea::fake()`, stubs, assertions |
 | [Error handling](docs/errors.md) | Exceptions, status mapping, retries and idempotency |
@@ -135,8 +136,10 @@ the box. → [Testing](docs/testing.md)
 
 ## Verified against the live API
 
-The claims in these docs are not read off Plorea's API documentation. Anonymised
-captures of **real** responses live in `tests/Fixtures/` and are run through the
+Observed behaviour is distinguished from the documented API contract. Merchant
+listing, KYC status and onboarding follow OpenAPI 0.39.0 and have only been
+tested with fake responses. No merchant onboarding was started to verify them.
+Anonymised captures of **real** responses live in `tests/Fixtures/` and are run through the
 SDK's DTOs by `tests/Feature/GoldenFixturesTest.php`, so a shape change breaks
 the build.
 

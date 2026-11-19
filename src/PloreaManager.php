@@ -10,6 +10,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Collection;
 use LogicException;
 use MemberFlow\Plorea\Contracts\Client;
+use MemberFlow\Plorea\Resources\MerchantResource;
 use MemberFlow\Plorea\Resources\PayByLinkResource;
 use MemberFlow\Plorea\Resources\PaymentMethodResource;
 use MemberFlow\Plorea\Resources\PaymentResource;
@@ -45,6 +46,14 @@ class PloreaManager
     public function subscriptions(): SubscriptionResource
     {
         return new SubscriptionResource($this->client(), $this->config());
+    }
+
+    /**
+     * Merchant listing, current KYC status and explicit onboarding.
+     */
+    public function merchants(): MerchantResource
+    {
+        return new MerchantResource($this->client(), $this->config());
     }
 
     /**
