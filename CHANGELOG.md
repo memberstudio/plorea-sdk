@@ -4,8 +4,21 @@ All notable changes to `memberflow/plorea` will be documented in this file.
 
 ## Unreleased
 
+## v0.7.0 - 2026-11-19
+
 ### Added
 
+- `Plorea::merchants()` for partner merchant listing with tenant and cursor
+  paging, read-only current KYC status, and explicit onboarding through
+  `onboarding($merchantOrgNr, $email)->start()`. Building a request sends
+  nothing; `start()` requires explicit live configuration and can start real
+  verification, send email and order card methods. Poll with `status()`, not
+  repeated POSTs.
+- Typed `Merchant`, `MerchantPage`, `MerchantKyc` and `MerchantKycProblem`
+  responses, plus fake defaults. KYC reads only `steps.kyc`, never stale
+  stored `kycStatus`. Partial onboarding steps, deferred KYC and unknown
+  provider codes are preserved. Based on OpenAPI 0.39.0 and verified with
+  fake responses only; no live onboarding was started for this release.
 - A read-only MCP server for coding agents: `php artisan mcp:start plorea`.
   It needs `laravel/mcp` (now under `suggest`) and stays off until
   `PLOREA_MCP_ENABLED=true`. Two tools: `check-setup` checks the configuration
@@ -22,6 +35,21 @@ All notable changes to `memberflow/plorea` will be documented in this file.
   webhook route inside PHP, so the real signature check and the app's
   listeners run. Nothing goes over the network. It refuses in production and
   in live.
+
+### Fixed
+
+- `subscriptions()->forExternalId()` now retains only exact `externalId`
+  matches, including when `tenantId` is supplied. This also prevents
+  `needingAttention()` from returning another customer's subscriptions when
+  the API ignores the external-ID filter.
+
+### Documentation
+
+- Replace obsolete advice that no KYC API exists with read-only merchant
+  status and explicit onboarding guidance, including live-only access,
+  ambiguous `404` responses, ownership conflicts and repeat-POST effects.
+- Record billing-day changes and `payment_failed` recovery findings already
+  merged since v0.6.1.
 
 ## v0.6.1 - 2026-10-20
 
