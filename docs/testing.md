@@ -73,6 +73,9 @@ With no stub, the fake answers these routes:
 
 | Route | Default |
 | --- | --- |
+| `GET partners/merchants` | One merchant with pending KYC, no next cursor |
+| `GET partners/merchants/{orgNr}` | Current steps with pending KYC |
+| `POST partners/merchants` | `created: true`, KYC still pending |
 | `POST payments/link` | A created link echoing your reference, tenant and amount |
 | `POST payments/session` | A payment session |
 | `GET pay/{id}` | A pay page, `expired: false` |
@@ -92,6 +95,12 @@ With no stub, the fake answers these routes:
 
 Anything else throws `PloreaException` naming the route, so a typo or a new
 endpoint fails loudly instead of silently returning nothing.
+
+Merchant defaults are synthetic OpenAPI 0.39.0 examples, not live captures.
+They do not persist onboarding, change contact details or simulate paging.
+Use stubs for those flows and for `404`/`409`. The onboarding guard still
+requires `config(['plorea.environment' => 'live'])` in fake tests; call
+`Plorea::fake()` before resolving the resource so no real request can leave.
 
 Defaults echo what you asked for rather than a fixed body: a subscription with
 a future `trialEndsAt` comes back `trialing`, a filtered subscription list

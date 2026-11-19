@@ -344,7 +344,7 @@ $membership-&gt;update(['merchant_org_nr' =&gt; $subscription-&gt;merchantOrgNr]
         <li>A value that is not nine digits returns <code>400</code> "Invalid merchantOrgNr — must be 9 digits". <span class="badge verified">Verified</span></li>
         <li>Use the client company's number, never your platform's own number.</li>
         <li>KYC for a new company starts on its first charge. Settlement splits apply from that charge. Charge webhooks carry the organisation number. <span class="badge stated">Stated by Plorea</span></li>
-        <li>There is no API to start or read KYC. To onboard a company before its first real charge, create a payment link with its organisation number and pay it yourself. <span class="badge stated">Stated by Plorea</span></li>
+        <li><code>GET /partners/merchants</code> lists merchants; <code>GET /partners/merchants/{merchantOrgNr}</code> reads current <code>steps.kyc</code>. Both are read-only and live-only. <code>POST /partners/merchants</code> starts real onboarding, including verification email and card-method ordering; obtain approval first. Poll with GET, not POST. <span class="badge stated">OpenAPI 0.39.0</span> See <a href="going-live.html#onboarding-is-a-real-write">the onboarding warning</a>.</li>
       </ul>
 
       <h2>Read a subscription</h2>

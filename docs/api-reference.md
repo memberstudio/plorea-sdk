@@ -14,6 +14,7 @@ All classes live under `MemberFlow\Plorea\`.
 | `payments()` | `Resources\PaymentResource` |
 | `paymentMethods()` | `Resources\PaymentMethodResource` |
 | `subscriptions()` | `Resources\SubscriptionResource` |
+| `merchants()` | `Resources\MerchantResource` |
 | `payByLink()` | `Resources\PayByLinkResource` |
 | `client()` | `Contracts\Client` |
 | `fake(array $stubs = [])` | `Testing\FakeClient` |
@@ -71,6 +72,18 @@ works, and a refund on an `authorised` payment stays a refund (verified
 been observed to paginate, and neither sends paging parameters; see
 [the open question](api-behaviour.md#-neither-list-endpoint-has-been-seen-to-paginate).
 
+### `MerchantResource` — `Plorea::merchants()`
+
+| Method | Returns |
+| --- | --- |
+| `list(?string $tenantId = null, int $limit = 25, ?string $cursor = null)` | `Data\MerchantPage` |
+| `status(string $merchantOrgNr, ?string $tenantId = null)` | `Data\Merchant` |
+| `onboarding(string $merchantOrgNr, string $email)` | `PendingMerchantOnboarding` — sends nothing until `start()` |
+
+Both GETs are read-only. The API is live-only. Tenant defaults to configuration
+and is omitted when unconfigured. `limit` is 1–100; pass `nextCursor` unchanged
+until null. See [Merchants and KYC](merchants.md) for freshness and error semantics.
+
 ### `PayByLinkResource` — `Plorea::payByLink()`
 
 | Method | Returns |
@@ -84,6 +97,21 @@ been observed to paginate, and neither sends paging parameters; see
 
 Builder methods mutate the builder and return `$this` for chaining. Nothing is
 sent until the terminal method.
+
+### `PendingMerchantOnboarding`
+
+| Method | Notes |
+| --- | --- |
+| `tenant(string $tenantId)` | Overrides the configured tenant |
+| `name(string $name)` | Legal name |
+| `phone(string $phone)` | Contact phone |
+| `country(string $country)` | Two-letter country; API defaults to `NO` |
+| `cardDescriptor(string $cardDescriptor)` | At most 22 provider-supported characters |
+| `toPayload()` | `array`; sends nothing |
+| **`start()`** | → `Data\Merchant`; real onboarding and email, requires explicit live configuration |
+
+A repeat POST can order missing card methods; it does not update contact details.
+Use `status()` to poll. `200`/`201` may represent partial success, not approved KYC.
 
 ### `PendingPaymentLink`
 
@@ -327,6 +355,33 @@ not authorised yet — read it back from `charges()`.
 ### `SubscriptionCancellation`
 
 `$subscriptionId`, `$status`, `$canceledAt`, `$accessEndsAt`, `$reason`, `$raw`.
+
+### `Merchant`
+
+`$merchantOrgNr` (string), `$tenantId`, `$name`, `$email`, `$kycUrl`, `$storeId`
+(nullable strings), `$created` (nullable bool), `$checkedAt` (nullable date),
+`$kyc` (`MerchantKyc`), `$steps` (all steps as an array), `$raw`.
+One DTO covers list items, status and onboarding; fields absent from that
+endpoint stay null. `created` is only in onboarding; list timestamps and tenant
+are on the page, not copied onto each item. `kyc` reads only `steps.kyc`.
+
+### `MerchantPage`
+
+`$tenantId` (nullable string), `$count` (nullable int, this page only),
+`$nextCursor` (nullable string), `$kycDeferred` (nullable int), `$checkedAt`
+(nullable date), `$items` (`Collection<Merchant>`), `$raw`.
+
+### `MerchantKyc`
+
+`$status`, `$legalEntityId`, `$verificationStatus` (nullable strings),
+`$problems` (`list<MerchantKycProblem>`), `$raw`.
+Helpers: `is(string $status)`, `isApproved()`. Unknown strings pass through;
+missing data never implies approval. `deferred` is a skipped lookup, not a KYC outcome.
+
+### `MerchantKycProblem`
+
+`$entityType`, `$entityId`, `$code`, `$type`, `$message` (nullable strings), `$raw`.
+Branch on `code` or `type`, not `message`. `pendingStatus` / `1_77` is ordinary processing.
 
 ---
 

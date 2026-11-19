@@ -25,7 +25,9 @@ Walk this list and report each item as done, missing, or not applicable. Most it
 ## Merchants
 - `merchantOrgNr` is always the invoice issuer's, never your own.
 - The first live payment for a new org number starts KYC; payout is held until approval (1–5 business days). Tell merchants.
-- Subscriptions for a client company carry `->merchant()` too; KYC then starts on the first charge. There is no KYC API — to onboard a company before launch, Plorea suggests a payment link carrying its org number, sent to yourself.
+- Subscriptions for a client company carry `->merchant()` too; KYC then starts on the first charge.
+- OpenAPI 0.39.0 documents live-only, read-only merchant listing and status: `Plorea::merchants()->list()` returns a page with `nextCursor`; `status($orgNr)->kyc` reads `steps.kyc`, never the stale stored `kycStatus`. A status `404` can also mean another partner's merchant or a test key. Read deferred list entries again; do not infer failure or start onboarding.
+- To onboard before payment, obtain explicit approval for that merchant, then use `merchants()->onboarding($orgNr, $email)->start()`. Only `start()` sends the POST; it requires live configuration and can start real verification, email the merchant and order card methods. Repeated POSTs do not update contact details and can order missing card methods. Poll with `status()`, not POST. Test with `Plorea::fake()` only.
 
 ## Money-handling code
 - `PLOREA_RETRY_TIMES=0` unless every retried write is idempotent — retried link creation or charges double-bill.

@@ -82,6 +82,7 @@ use MemberFlow\Plorea\Facades\Plorea;
 Plorea::payments();        // payment links, status, refunds, cancellations
 Plorea::paymentMethods();  // stored cards
 Plorea::subscriptions();   // recurring billing
+Plorea::merchants();       // listing, current KYC and explicit onboarding (live-only API)
 Plorea::payByLink();       // the customer-facing pay page and its Drop-in session
 Plorea::client();          // the underlying HTTP client, if you need a raw call
 ```

@@ -591,10 +591,13 @@ A stored payment method is tied to the shopper reference, not to a company:
 the same method can be charged for different organisation numbers under one
 tenant.
 
-There is no API for starting or reading KYC. To onboard a company ahead of its
-first real charge, Plorea suggests creating a payment link that carries its
-organisation number and sending it to yourself; that starts KYC the ordinary
-way.
+The earlier advice to onboard through a self-paid payment link is superseded
+by **OpenAPI 0.39.0, checked 2026-11-19**: `GET /partners/merchants` lists
+merchants, `GET /partners/merchants/{merchantOrgNr}` reads current status, and
+`POST /partners/merchants` starts onboarding. Both reads are read-only and
+live-only. Use `steps.kyc`, not the stale stored `kycStatus`. POST can email
+the merchant; repeats can order missing card methods. These are documented
+contracts, not live verification in this SDK. See [Merchants and KYC](merchants.md).
 
 ### ✅ Charge shapes — 2026-09-04
 

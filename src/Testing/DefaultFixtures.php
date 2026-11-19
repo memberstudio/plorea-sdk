@@ -24,6 +24,9 @@ final class DefaultFixtures
         $path = $request->path;
 
         return match (true) {
+            $method === 'GET' && $path === 'partners/merchants' => self::merchantList($request),
+            $method === 'GET' && preg_match('#^partners/merchants/[^/]+$#', $path) === 1 => self::merchantStatus($request),
+            $method === 'POST' && $path === 'partners/merchants' => self::merchantOnboarding($request),
             $method === 'POST' && $path === 'payments/link' => self::paymentLinkCreated($request),
             $method === 'POST' && $path === 'payments/session' => self::paymentSession($request),
             $method === 'GET' && str_starts_with($path, 'pay/') => self::paymentLink($path),
@@ -49,6 +52,103 @@ final class DefaultFixtures
                 "No fake response registered for [{$method} {$path}]. Pass a stub to Plorea::fake().",
             ),
         };
+    }
+
+    /**
+     * Synthetic OpenAPI 0.39.0 examples, not live captures. These defaults do
+     * not persist onboarding or simulate paging; use stubs for those flows.
+     *
+     * @return array<string, mixed>
+     */
+    private static function merchantList(RecordedRequest $request): array
+    {
+        return [
+            'tenantId' => $request->input('tenantId', 'fake-tenant'),
+            'count' => 1,
+            'nextCursor' => null,
+            'kycDeferred' => 0,
+            'checkedAt' => '2026-11-19T12:00:00Z',
+            'items' => [[
+                'merchantOrgNr' => '999999999',
+                'name' => 'Fake Merchant AS',
+                'email' => 'merchant@example.test',
+                'kycUrl' => 'https://example.test/kyc/fake',
+                'storeId' => 'ST_FAKE_MERCHANT',
+                'steps' => self::merchantSteps($request),
+            ]],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function merchantStatus(RecordedRequest $request): array
+    {
+        return [
+            'merchantOrgNr' => rawurldecode(basename($request->path)),
+            'tenantId' => $request->input('tenantId', 'fake-tenant'),
+            'name' => 'Fake Merchant AS',
+            'kycUrl' => 'https://example.test/kyc/fake',
+            'storeId' => 'ST_FAKE_MERCHANT',
+            'steps' => self::merchantSteps($request),
+            'checkedAt' => '2026-11-19T12:00:00Z',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function merchantOnboarding(RecordedRequest $request): array
+    {
+        return [
+            'merchantOrgNr' => $request->input('merchantOrgNr'),
+            'tenantId' => $request->input('tenantId', 'fake-tenant'),
+            'created' => true,
+            'kycUrl' => 'https://example.test/kyc/fake',
+            'storeId' => 'ST_FAKE_MERCHANT',
+            'steps' => self::merchantSteps($request),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function merchantSteps(RecordedRequest $request): array
+    {
+        $created = $request->method === 'post';
+
+        return [
+            'merchant' => ['status' => $created ? 'created' : 'existed', 'clientType' => null],
+            'legalEntity' => ['status' => $created ? 'created' : 'existed', 'id' => 'LE_FAKE_MERCHANT'],
+            'kyc' => [
+                'status' => 'pending',
+                'legalEntityId' => 'LE_FAKE_MERCHANT',
+                'verificationStatus' => 'pending',
+                'problems' => [],
+            ],
+            'balanceAccount' => ['status' => 'ready', 'id' => 'BA_FAKE_MERCHANT'],
+            'store' => [
+                'status' => $created ? 'created' : 'existed',
+                'storeId' => 'ST_FAKE_MERCHANT',
+                'merchantAccount' => 'FakeMerchant',
+            ],
+            'cardMethods' => [
+                'status' => 'pending',
+                'businessLineId' => null,
+                'descriptor' => 'Fake Merchant',
+                'methods' => [
+                    'visa' => ['state' => 'pending', 'id' => null, 'verificationStatus' => null, 'mid' => null],
+                    'mc' => ['state' => 'pending', 'id' => null, 'verificationStatus' => null, 'mid' => null],
+                ],
+                'errors' => [],
+            ],
+            'partnerRow' => [
+                'status' => 'written',
+                'tenantId' => $request->input('tenantId', 'fake-tenant'),
+                'createdAt' => '2026-11-19T12:00:00Z',
+                'updatedAt' => '2026-11-19T12:00:00Z',
+            ],
+        ];
     }
 
     /**

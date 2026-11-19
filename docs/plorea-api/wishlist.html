@@ -297,7 +297,7 @@ Idempotent-Replayed: true</code></pre>
         <li><strong>Consistent metadata.</strong> An empty <code>metadata</code> returns <code>[]</code>, not <code>{}</code>. Return an object.</li>
         <li><strong>Environment default.</strong> <span class="badge stated">Delivered 2026-10-13</span> The API key now sets the environment. A missing header uses the key's environment, and a header that does not match the key returns <code>403</code>.</li>
         <li><strong>Native 3-D Secure.</strong> <span class="badge stated">Promised by Plorea</span> Request native 3DS2 on iOS and Android sessions.</li>
-        <li><strong>KYC visibility.</strong> An endpoint to start or read KYC for an organisation number, instead of a self-paid payment link.</li>
+        <li><strong>KYC visibility.</strong> <span class="badge stated">Documented in OpenAPI 0.39.0</span> <code>GET /partners/merchants</code> lists merchants and <code>GET /partners/merchants/{merchantOrgNr}</code> reads current KYC. Both are read-only and live-only. <code>POST /partners/merchants</code> starts onboarding. See <a href="going-live.html#onboarding-is-a-real-write">the onboarding warning</a>; no self-paid link is needed to initiate KYC.</li>
       </ul>
       <h3 id="external-id-filter-with-tenant-id">23. <code>externalId</code> filter with <code>tenantId</code></h3>
       <p><span class="badge verified">Verified 2026-10-20</span> <code>GET /subscriptions?externalId=…&amp;tenantId=…</code> returned the whole tenant: 120 rows, 2 a match. Without <code>tenantId</code>, the filter worked.</p>

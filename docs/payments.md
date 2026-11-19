@@ -63,12 +63,16 @@ reappears only on the pay page:
 Plorea::payByLink()->find($link->id)->merchantOrgNr;
 ```
 
-### KYC is implicit
+### KYC can start with payment or explicit onboarding
 
 The first payment for a new `merchantOrgNr` starts merchant onboarding
 automatically. The merchant receives an onboarding email (at `merchantEmail`
 when you supplied one). The link is payable throughout — the payout is simply
 held until KYC is approved, typically 1–5 business days.
+
+To read current KYC without starting it, use `Plorea::merchants()->status($orgNr)`.
+Explicit onboarding is also available before the first payment; it sends a
+real verification email and requires approval. See [Merchants and KYC](merchants.md).
 
 ## Reuse or create (`firstOrCreate`)
 
